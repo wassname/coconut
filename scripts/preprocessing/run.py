@@ -17,7 +17,7 @@ from transformers.models.llama.modeling_llama import LlamaDecoderLayer
 from transformers.models.gpt2.modeling_gpt2 import GPT2Block
 
 from coconut import Coconut
-from dataset import (
+from coconut.dataset import (
     get_dataset,
     get_question_latent_dataset,
     get_cot_latent_dataset,
@@ -33,7 +33,7 @@ import json
 import gc
 import argparse
 import functools
-from utils import Config, set_seed
+from coconut.utils import Config, set_seed
 
 
 def main():
