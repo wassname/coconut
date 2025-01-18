@@ -12,10 +12,9 @@ cd coconut
 ```
 
 Setup environment:
-```
-conda create --name coconut python=3.12
-conda activate coconut
-pip install -r requirements.txt
+```bash
+uv sync
+. ./.venv/bin/activate
 ```
 
 The code relies on [wandb](https://wandb.ai/site/) for logging. Please log in your wandb account following this [document](https://docs.wandb.ai/ref/cli/wandb-login/) before running any experiments.
@@ -40,7 +39,7 @@ The file should contain a list of data points. Each data point is composed of a 
 For example, you can download and process the [GSM8K](https://arxiv.org/abs/2110.14168) dataset (with [augmented training and validation sets](https://github.com/da03/Internalize_CoT_Step_by_Step/tree/e06a32ee5e4cd117171daeb4755d2a97ece62761/data/gsm8k)) by running:
 
 ```bash
-bash preprocessing/gsm_icot.bash
+bash scripts/preprocessing/gsm_icot.bash
 ```
 
 ## Arguments
@@ -88,7 +87,7 @@ The configuration of a run should be specified in a yaml file (an example can be
 Run the following commands (replacing `N_GPUS` and `PATH_TO_ARGS`):
 
 ```
-torchrun --nnodes 1 --nproc_per_node N_GPUS run.py PATH_TO_ARGS
+torchrun --nnodes 1 --nproc_per_node N_GPUS scripts/run.py PATH_TO_ARGS
 ```
 
 ## Reproducing Experiments

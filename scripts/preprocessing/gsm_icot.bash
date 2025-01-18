@@ -12,6 +12,6 @@ wget https://raw.githubusercontent.com/da03/Internalize_CoT_Step_by_Step/e06a32e
 wget https://raw.githubusercontent.com/da03/Internalize_CoT_Step_by_Step/e06a32ee5e4cd117171daeb4755d2a97ece62761/data/gsm8k/test.txt -O data/gsm_test.txt
 
 for split in train valid test; do
-  python preprocessing/gsm_icot.py ${split}
+  python scripts/preprocessing/gsm_icot.py ${split}
   rm data/gsm_${split}.txt
 done
