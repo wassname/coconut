@@ -12,7 +12,6 @@ MAX_N_LATENT = 8
 
 
 class Coconut(nn.Module):
-
     def __init__(
         self,
         base_causallm,
@@ -21,7 +20,6 @@ class Coconut(nn.Module):
         end_latent_id,
         eos_token_id,
     ):
-
         super(Coconut, self).__init__()
         self.gen_forward_cnt = 0
         self.base_causallm = base_causallm
@@ -37,7 +35,6 @@ class Coconut(nn.Module):
             self.embedding = self.base_causallm.get_input_embeddings()
 
     def forward(self, input_ids, attention_mask, labels, position_ids, **kwargs):
-
         logits = []
 
         latent_indices = (
@@ -61,7 +58,6 @@ class Coconut(nn.Module):
         kv_cache = None
 
         for pass_idx in range(max_n_latents):
-
             if kv_cache == None:
                 # first forward pass
                 outputs = self.base_causallm(
@@ -205,9 +201,8 @@ class Coconut(nn.Module):
         max_new_tokens=16,
         output_embedding=False,
         synced_gpus=False,
-        **kwargs
+        **kwargs,
     ):
-
         self.gen_forward_cnt = 0
 
         assert input_ids.shape[0] == 1, "only support batch_size == 1 now"

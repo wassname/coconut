@@ -15,9 +15,7 @@ from transformers.data.data_collator import pad_without_fast_tokenizer_warning
 
 
 def get_dataset(path, tokenizer, max_size=1000000000):
-
     def tokenize_sample(sample):
-
         question_tokenized = tokenizer.encode(
             sample["question"] + "\n", add_special_tokens=True
         )
@@ -77,14 +75,12 @@ def get_dataset(path, tokenizer, max_size=1000000000):
 
 
 @dataclass
-class MyCollator:
-
+class CoconutCollator:
     tokenizer: PreTrainedTokenizerBase
     latent_id: Optional[int] = None
     label_pad_token_id: Optional[int] = -100
 
     def __call__(self, features, return_tensors=None):
-
         assert self.tokenizer.padding_side == "right"
 
         """
@@ -194,9 +190,7 @@ def get_question_latent_dataset(
     end_id,
     no_special_marker=False,
 ):
-
     def process_dataset(sample):
-
         if configs.pad_latent_to_max:
             max_latent_stage = configs.max_latent_stage
         else:
@@ -237,11 +231,9 @@ def get_cot_latent_dataset(
     no_special_marker=False,
     shuffle=False,
 ):
-
     n_additional_tokens = 0 if no_special_marker else 2
 
     def process_dataset(sample):
-
         if (
             random.random() < configs.uniform_prob
         ):  # with some prob, randomly sample stage

@@ -1,7 +1,8 @@
 
 # exclude data from source control by default
 /data/
-/outputs/
+outputs/
+wandb/
 
 # DotEnv configuration
 .env

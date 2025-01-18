@@ -1,24 +1,24 @@
+import argparse
+import gc
+import json
+import os
+import sys
+from copy import copy
+
 import torch
 import torch.optim as optim
+import yaml
+from tqdm import tqdm
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 import wandb
-
 from coconut.coconut import Coconut
 from coconut.dataset import (
+    CoconutCollator,
+    get_cot_latent_dataset,
     get_dataset,
     get_question_latent_dataset,
-    get_cot_latent_dataset,
-    MyCollator,
 )
-
-from tqdm import tqdm
-from copy import copy
-import os, sys
-import yaml
-import json
-import gc
-import argparse
 from coconut.utils import Config, set_seed
 
 
@@ -122,7 +122,7 @@ def main():
     if configs.load_model_path != "None" and not loaded:
         print(model.load_state_dict(saved_weights, strict=False))
 
-    model = model.to('cuda')
+    model = model.to("cuda")
 
     if configs.bf16:
         model.to(torch.bfloat16)
@@ -168,7 +168,7 @@ def main():
 
     best_acc = 0
 
-    collator = MyCollator(tokenizer, latent_id=latent_id, label_pad_token_id=-100)
+    collator = CoconutCollator(tokenizer, latent_id=latent_id, label_pad_token_id=-100)
 
     for epoch in range(configs.resume, configs.num_epochs):
         scheduled_stage = (
@@ -245,7 +245,7 @@ def main():
             total_length = len(train_dataloader) // configs.gradient_accumulation_steps
             pbar = tqdm(
                 colour="blue",
-                desc=f"Training Epoch: {epoch+1}",
+                desc=f"Training Epoch: {epoch + 1}",
                 total=total_length,
                 dynamic_ncols=True,
             )
@@ -273,7 +273,7 @@ def main():
 
                 total_train_steps += 1
                 batch = {
-                    key: batch[key].to('cuda') for key in batch.keys() if key != "idx"
+                    key: batch[key].to("cuda") for key in batch.keys() if key != "idx"
                 }
 
                 outputs = model(**batch)
@@ -298,7 +298,7 @@ def main():
                     wandb_run.log(log_dict)
 
                 pbar.set_description(
-                    f"Training Epoch: {epoch+1}/{configs.num_epochs}, batch {step}/{len(train_dataloader)} "
+                    f"Training Epoch: {epoch + 1}/{configs.num_epochs}, batch {step}/{len(train_dataloader)} "
                     f"completed (loss: {round(float(loss.detach().float() * configs.gradient_accumulation_steps), 4)}"
                 )
             pbar.close()
@@ -309,7 +309,10 @@ def main():
             ):
                 states = model.state_dict()
                 f = os.path.join(save_dir, f"checkpoint_{epoch + 1}")
-                torch.save(f, states,)
+                torch.save(
+                    f,
+                    states,
+                )
                 print(f"saving model {f}.")
 
                 del states
@@ -323,7 +326,9 @@ def main():
                 model.eval()
                 for step, batch in enumerate(valid_loss_dataloader):
                     batch = {
-                        key: batch[key].to('cuda') for key in batch.keys() if key != "idx"
+                        key: batch[key].to("cuda")
+                        for key in batch.keys()
+                        if key != "idx"
                     }
 
                     outputs = model(**batch)
@@ -349,7 +354,7 @@ def main():
                 test_idx = batch["idx"][0]
 
                 batch = {
-                    k: v.to('cuda')
+                    k: v.to("cuda")
                     for k, v in batch.items()
                     if v != None and k not in ["idx", "position_ids"]
                 }
@@ -382,15 +387,15 @@ def main():
                 cor_cot += cot_output == answer_cot
 
                 pbar.update(1)
-                pbar.set_description(
-                    f"Test accuracy: {round(float(cor / total), 2)}"
-                )
+                pbar.set_description(f"Test accuracy: {round(float(cor / total), 2)}")
 
             pbar.close()
             print(f"Cor={cor}, CoT={cor_cot}, Total={total}")
 
-            print(f"Accuracy on validation set: {cor} / {total} = {cor/total}")
-            print(f"CoT match on validation set: {cor_cot} / {total} = {cor_cot/total}")
+            print(f"Accuracy on validation set: {cor} / {total} = {cor / total}")
+            print(
+                f"CoT match on validation set: {cor_cot} / {total} = {cor_cot / total}"
+            )
         sys.stdout.flush()
 
         if wandb_run:
