@@ -60,3 +60,31 @@ coconut.Forward...
 - next_compute_range keep track
 - they just do one token at a time, so they can use kv cache. except for the final non latent forward
 - they modify kv cache if needed, just getting up to the start of the range! using it as just tuples
+- oh we can use debug to make it fast
+
+Example output format, ah so it expect `\n## A`
+
+
+    Question 2: Answer = '1400' CoT = '<<30/100*2000=600>>
+    <<2000-600=1400>>'
+    Full output: 'Travis wants to fly to Australia. The regular tickets cost about $2000. As Travis is a student, he will get a 30% discount on this price. How much does he need to pay for his ticket?
+    <<2000*0.3=600>>
+    <<2000-600=1400>>
+    ### 1400<|endoftext|>'
+    Extracted Output: '1400'
+    Test accuracy: 0.33:   1%|▊                                                                                                                                        | 3/500 [00:01<02:49,  2.93it/s]Setting `pad_token_id` to `eos_token_id`:None for open-end generation.
+    Question 3: Answer = '15' CoT = '<<21/7=3>>
+    <<5*3=15>>'
+    Full output: 'A set of 7 spoons costs $21. If each spoon would be sold separately, how much would 5 spoons cost?
+    <<21*5=105>>
+    <<105*7=525>>
+    ### 525<|endoftext|>'
+    Extracted Output: '525'
+    Test accuracy: 0.25:   1%|█                                                                                                                                        | 4/500 [00:01<02:49,  2.93it/s]Setting `pad_token_id` to `eos_token_id`:None for open-end generation.
+    Question 4: Answer = '240' CoT = '<<200*3=600>>
+    <<600*.4=240>>'
+    Full output: 'Tom bought his games for $200.  They tripled in value and he then sold 40% of them.  How much did he sell the games for?
+    <<200*3=600>>
+    <<600*40/100=240>>
+    <<600+240=720>>
+    ### 720<|endoftext|>'

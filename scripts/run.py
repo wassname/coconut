@@ -20,7 +20,17 @@ from coconut.dataset import (
     get_question_latent_dataset,
 )
 from coconut.utils import Config, set_seed
+from pathlib import Path
 
+
+def clear_memory():
+    gc.collect()
+    torch.cuda.empty_cache()
+
+def save_model(model, f):
+    states = model.state_dict()
+    torch.save(states, f)
+    print(f"saving model. {f}")
 
 def main():
     parser = argparse.ArgumentParser(description="coconut")
@@ -35,26 +45,27 @@ def main():
 
     configs = Config(config_dict)
     set_seed(configs.seed)
-    save_dir = os.path.join(configs.save_path, configs.name)
+    save_dir = Path(configs.save_path) / configs.name
+    save_dir.mkdir(parents=True, exist_ok=True)
 
-    if not os.path.exists(save_dir):
-        os.makedirs(save_dir)
+    checkpoints = [f.name for f in save_dir.glob("checkpoint_*")]
+    checkpoints = sorted(checkpoints, key=lambda x: int(x.stem.split("_")[1]))
 
-    cur_ckpts = os.listdir(save_dir)
+    # cur_ckpts = os.listdir(save_dir)
 
     # check if the job is preempted and resumed.
-    if len(cur_ckpts) > 0 and not configs.only_eval:
+    if len(checkpoints) > 0 and not configs.only_eval:
         print(
             f"Warning: found previous run and gonna resume from that. the inputted `resume` argument is ignored!"
         )
 
-        checkpoints = [f for f in cur_ckpts if f.startswith("checkpoint_")]
-        checkpoints.sort(key=lambda x: int(x.split("_")[1]))
+        # checkpoints = [f for f in cur_ckpts if f.startswith("checkpoint_")]
+        # checkpoints.sort(key=lambda x: int(x.split("_")[1]))
 
         # Get the last item in the sorted list
         latest_checkpoint = checkpoints[-1] if checkpoints else None
         configs.resume = int(latest_checkpoint.split("_")[1])
-        load_dir = os.path.join(configs.save_path, configs.name, latest_checkpoint)
+        load_dir = save_dir / latest_checkpoint
 
         configs.load_model_path = load_dir
         print(f"Loading from previous run epoch_{configs.resume}!")
@@ -68,9 +79,11 @@ def main():
             f"Loading from {configs.load_model_path} and skip the first {configs.resume} epochs"
         )
 
+    # load base model
     model = AutoModelForCausalLM.from_pretrained(configs.model_id)
     tokenizer = AutoTokenizer.from_pretrained(configs.model_id)
     tokenizer.pad_token = tokenizer.eos_token
+    tokenizer.pad_token_id = tokenizer.eos_token_id
     tokenizer.add_tokens("<|start-latent|>")
     tokenizer.add_tokens("<|end-latent|>")
     tokenizer.add_tokens("<|latent|>")
@@ -160,6 +173,7 @@ def main():
     if configs.reset_optimizer:
         optimizer = None
     else:
+        # adam = bnb.optim.Adam8bit(model.parameters(), lr=0.001, betas=(0.9, 0.995)) # add bnb optimizer
         optimizer = optim.AdamW(
             model.parameters(),
             lr=configs.lr,
@@ -275,6 +289,8 @@ def main():
                 batch = {
                     key: batch[key].to("cuda") for key in batch.keys() if key != "idx"
                 }
+                if configs.bf16:
+                    batch = {key: batch[key].bfloat16() for key in batch.keys()}
 
                 outputs = model(**batch)
 
@@ -307,17 +323,10 @@ def main():
                 and not configs.debug
                 and not configs.only_eval
             ):
-                states = model.state_dict()
                 f = os.path.join(save_dir, f"checkpoint_{epoch + 1}")
-                torch.save(
-                    f,
-                    states,
-                )
-                print(f"saving model {f}.")
+                save_model(model, f)
 
-                del states
-                gc.collect()
-                torch.cuda.empty_cache()
+                clear_memory()
 
             # val loss
             total_loss = 0
@@ -410,16 +419,11 @@ def main():
             and not configs.debug
             and not configs.only_eval
         ):
-            states = model.state_dict()
             f = os.path.join(save_dir, f"checkpoint_{epoch + 1}")
-            torch.save(states, f)
-            print(f"saving model. {f}")
+            save_model(model, f)
 
             best_acc = cor / total
-
-            del states
-            gc.collect()
-            torch.cuda.empty_cache()
+            clear_memory()
 
 
 if __name__ == "__main__":

@@ -5,11 +5,20 @@ import torch
 import torch.nn as nn
 from torch.nn import CrossEntropyLoss
 from collections import namedtuple
+
+from einops import rearrange, reduce, repeat
+from jaxtyping import Float, Int
+from typing import Tuple, List, Union, Optional, Dict
+from torch import Tensor
+
+
 from transformers.models.gpt2 import GPT2LMHeadModel
 
 Outputs = namedtuple("Outputs", ["loss", "inputs_embeds", "logits"])
 MAX_N_LATENT = 8
 
+HiddenState = Float[Tensor, 'b t h']
+HiddenStates = Tuple[Float[Tensor, 'b t h']]
 
 class Coconut(nn.Module):
     def __init__(
@@ -112,9 +121,7 @@ class Coconut(nn.Module):
                 ),
             )
 
-            hidden_states = outputs.hidden_states[
-                -1
-            ]  # Get the last layer hidden states
+            hidden_states = outputs.hidden_states
             kv_cache = outputs.past_key_values
 
             # feedback the continuous thoughts to the input_embeds
@@ -136,12 +143,39 @@ class Coconut(nn.Module):
                 for batch_idx in range(inputs_embeds.shape[0])
             ]
 
+
+            def hs2ie(hidden_states: HiddenStates, inputs_embeds: HiddenState) -> HiddenState:
+                """hidden states to inputs_embeds"""
+
+                # use last hidden layer
+                return hidden_states[-1]
+            
+                # or second to last, to keep supressed tokens
+                # return hidden_states[-2]
+            
+                # or use supressed tokens [-1]
+                """
+                Novel experiment: Here we define a transform to isolate supressed activations, where we hypothesis that style/concepts/scratchpads and other internal only representations must be stored.
+
+                See the following references for more information:
+                - https://arxiv.org/html/2406.19384v1
+                    - > Previous work suggests that networks contain ensembles of “prediction" neurons, which act as probability promoters [66, 24, 32] and work in tandem with suppression neurons (Section 5.4). 
+
+                - https://arxiv.org/pdf/2401.12181
+                    > We find a striking pattern which is remarkably consistent across the different seeds: after about the halfway point in the model, prediction neurons become increasingly prevalent until the very end of the network where there is a sudden shift towards a much larger number of suppression neurons.
+                """
+                supressed_act = -rearrange(list(hidden_states), 'l b 1 h -> l b h').diff(dim=0).clamp(min=None, max=0)
+                hs = supressed_act[-1][:, None] # last layer, add dummy sequence dim
+                # we need to make it more like the original hidden states, so prev input embedding plus the supressed tokens
+                return inputs_embeds + hs
+
             # replace some of them with continuous thoughts
             for idx_pair in filling_indices:
                 batch_idx, token_idx = idx_pair
 
+                # TODO experiment with transformers here, we are replacing. 
                 # replace it with the preceding last hidden states
-                tensor_list[batch_idx][token_idx] = hidden_states[
+                tensor_list[batch_idx][token_idx] = hs2ie(hidden_states, inputs_embeds)[
                     batch_idx, token_idx - 1 - hidden_states_offset, :
                 ]
 
