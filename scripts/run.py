@@ -4,8 +4,7 @@ import json
 import os
 import sys
 from copy import copy
-
-from loguru import logger
+import pandas as pd
 import torch
 import torch.optim as optim
 import yaml
@@ -23,13 +22,19 @@ from coconut.dataset import (
 from coconut.utils import Config, set_seed
 from pathlib import Path
 
+from loguru import logger
+logger.remove()
+def sink(msg):
+    return tqdm.write(msg, end="")
+logger.add(sink, colorize=True)
+
 def print_cuda_devices():
     if torch.cuda.is_available():
         for i in range(torch.cuda.device_count()): 
             torch.cuda.get_device_name(i)
             logger.info(f"Device {i}: {torch.cuda.get_device_name(i)}")
-            print(torch.cuda.get_device_capability(i))
-            print(torch.cuda.get_device_properties(i))
+            logger.info(torch.cuda.get_device_capability(i))
+            logger.info(torch.cuda.get_device_properties(i))
     else:
         logger.warning("CUDA is not available")
 
@@ -41,7 +46,7 @@ def clear_memory():
 def save_model(model, f):
     states = model.state_dict()
     torch.save(states, f)
-    print(f"saving model. {f}")
+    logger.info(f"saving model. {f}")
 
 def main():
     parser = argparse.ArgumentParser(description="coconut")
@@ -77,7 +82,7 @@ def main():
         load_dir = save_dir / latest_checkpoint
 
         configs.load_model_path = load_dir
-        print(f"Loading from previous run epoch_{configs.resume}!")
+        logger.info(f"Loading from previous run epoch_{configs.resume}!")
 
     elif configs.resume != 0:
         if configs.load_model_path == "None":
@@ -91,7 +96,7 @@ def main():
     tokenizer = AutoTokenizer.from_pretrained(configs.model_id)
     tokenizer.pad_token = tokenizer.eos_token
     tokenizer.pad_token_id = tokenizer.eos_token_id
-    model.generation_config.pad_token_id = tokenizer.pad_token_id
+    # model.generation_config.pad_token_id = tokenizer.pad_token_id
     tokenizer.add_tokens("<|start-latent|>")
     tokenizer.add_tokens("<|end-latent|>")
     tokenizer.add_tokens("<|latent|>")
@@ -107,7 +112,7 @@ def main():
             [k.startswith("base_causallm") for k in saved_weights.keys()]
         ):
             loaded = True
-            print(model.load_state_dict(saved_weights, strict=False))
+            logger.info(model.load_state_dict(saved_weights, strict=False))
 
         elif not configs.coconut and any(
             [k.startswith("base_causallm") for k in saved_weights.keys()]
@@ -121,7 +126,7 @@ def main():
 
         else:
             loaded = True
-            print(model.load_state_dict(saved_weights, strict=False))
+            logger.info(model.load_state_dict(saved_weights, strict=False))
 
     if not (configs.cot or configs.no_thoughts or configs.no_cot):
         model.resize_token_embeddings(len(tokenizer))
@@ -141,21 +146,19 @@ def main():
         model = Coconut(model, latent_id, start_id, end_id, tokenizer.eos_token_id)
 
     if configs.load_model_path != "None" and not loaded:
-        print(model.load_state_dict(saved_weights, strict=False))
+        logger.info(model.load_state_dict(saved_weights, strict=False))
 
+    # set devices
     print_cuda_devices()
     device = "cuda" if torch.cuda.is_available() else "cpu"
     dtype = torch.bfloat16 if configs.bf16 else torch.float32
     logger.info(f"Using device: {device}, dtype: {dtype}")
     use_amp = configs.bf16
-
-    # torch.set_default_device(device)
     model = model.to(device)
+    # torch.set_default_device(device)
 
-    # if configs.bf16:
-    #     model.to(torch.bfloat16)
-
-    print(model)
+    # setup eval
+    logger.info(model)
     question_val = [d["question"] for d in json.load(open(configs.val_path))]
     answers_val = [
         d["answer"].replace(",", "").strip() for d in json.load(open(configs.val_path))
@@ -178,6 +181,7 @@ def main():
 
     total_train_steps = 0
 
+    # wandb
     if not configs.debug and not configs.only_eval:
         wandb_run = wandb.init(project=configs.project, name=configs.name)
         wandb_run.config.update(configs, allow_val_change=True)
@@ -185,6 +189,7 @@ def main():
     else:
         wandb_run = None
 
+    # optimizer
     if configs.reset_optimizer:
         optimizer = None
     else:
@@ -196,10 +201,11 @@ def main():
         )
     scaler = torch.amp.GradScaler(enabled=use_amp)
 
-    best_acc = 0
-
     collator = CoconutCollator(tokenizer, latent_id=latent_id, label_pad_token_id=-100)
 
+    # training loop
+    best_acc = 0
+    metrics = [] 
     for epoch in range(configs.resume, configs.num_epochs):
         scheduled_stage = (
             0 if (configs.cot or configs.no_cot) else epoch // configs.epochs_per_stage
@@ -282,7 +288,7 @@ def main():
 
             for step, batch in enumerate(train_dataloader):
                 if step == 0 and wandb_run:
-                    print("logging training data")
+                    logger.info("logging training data")
                     cur_bs = len(batch["input_ids"])
                     text_str = ""
                     for data_idx in range(cur_bs):
@@ -367,7 +373,7 @@ def main():
                         "eval/loss": total_loss / len(valid_loss_dataloader),
                     }
                     wandb_run.log(log_dict)
-                    print("eval loss", total_loss / len(valid_loss_dataloader))
+                    logger.info("eval loss", total_loss / len(valid_loss_dataloader))
 
         # val generation accuracy
         total_length = len(valid_gen_dataloader)
@@ -399,32 +405,35 @@ def main():
                     pad_token_id=tokenizer.eos_token_id,
                 )
 
-                text_output = tokenizer.decode(outputs[0], skip_special_tokens=True)
-                answer_output = text_output.split("#")[-1].replace(",", "").strip()
-                cot_output = (
-                    ("\n".join(text_output.split("\n")[1:])).split("#")[0].strip()
+                def indent(s):
+                    return s.replace("\n", "\n\t")
+
+                llm_text_output = tokenizer.decode(outputs[0], skip_special_tokens=True)
+                llm_answer_output = llm_text_output.split("#")[-1].replace(",", "").strip()
+                llm_cot_output = (
+                    ("\n".join(llm_text_output.split("\n")[1:])).split("#")[0].strip()
                 )
 
                 if idx < 5:
-                    print(
-                        f"Question {test_idx}: Answer = '{answer}' CoT = '{answer_cot}'"
+                    logger.info(
+                        f"Question {test_idx}: Answer = '{answer}' CoT = '{indent(answer_cot)}'"
                     )
-                    print(f"Full output: '{tokenizer.decode(outputs[0])}'")
-                    print(f"Extracted Output: '{answer_output}'")
+                    logger.info(f"Full llm output: '{indent(tokenizer.decode(outputs[0]))}'")
+                    logger.info(f"Extracted llm Output: '{llm_answer_output}' (=? {answer})\n")
 
-                cor += answer_output == answer
-                cor_cot += cot_output == answer_cot
+                cor += llm_answer_output == answer
+                cor_cot += llm_cot_output == answer_cot
 
                 pbar.update(1)
                 pbar.set_description(f"Test accuracy: {round(float(cor / total), 2)}")
 
             pbar.close()
-            print(f"Cor={cor}, CoT={cor_cot}, Total={total}")
-
-            print(f"Accuracy on validation set: {cor} / {total} = {cor / total}")
-            print(
+            logger.info(f"Cor={cor}, CoT={cor_cot}, Total={total} epoch={epoch + 1}")
+            logger.info(f"Accuracy on validation set:  {cor} / {total} = {cor / total}")
+            logger.info(
                 f"CoT match on validation set: {cor_cot} / {total} = {cor_cot / total}"
             )
+            metrics.append({"acc": cor / total, "cot_em": cor_cot / total, epoch: epoch + 1, "total": total})
         sys.stdout.flush()
 
         if wandb_run:
@@ -444,6 +453,8 @@ def main():
 
             best_acc = cor / total
             clear_memory()
+
+    print(pd.DataFrame(metrics))
 
 
 if __name__ == "__main__":

@@ -42,7 +42,8 @@ def get_dataset(path, tokenizer, max_size=1000000000):
     dataset = Dataset.from_dict({k: [d[k] for d in data] for k in keys})
 
     dataset = dataset.map(
-        tokenize_sample, remove_columns=list(dataset.features), num_proc=32
+        tokenize_sample, remove_columns=list(dataset.features), num_proc=32, 
+        desc=path
     )
 
     # verify
@@ -71,7 +72,7 @@ class CoconutCollator:
         assert self.tokenizer.padding_side == "right"
 
         """
-        Pad the batch like this to maximize the reuse of kv cache.
+        Pad the batch like this to maximize the reuse of kv cache. This is because out coconut forward is more effecient when doing a batch of tokens so we want to line up the <latent> tokens
         E.g.,
         
         xxxxxxxxxx<latent><latent>xxxxx--
@@ -109,8 +110,6 @@ class CoconutCollator:
                     ]
                 feature["attention_mask"] = [0] * n_tok_pad + feature["attention_mask"]
 
-        return_tensors = "pt"
-
         label_name = "label" if "label" in features[0].keys() else "labels"
 
         non_label_position_features = [
@@ -128,7 +127,7 @@ class CoconutCollator:
             non_label_position_features,
             padding=True,
             pad_to_multiple_of=None,
-            return_tensors=return_tensors,
+            return_tensors="pt",
         )
 
         labels = (
@@ -204,7 +203,8 @@ def get_question_latent_dataset(
         }
 
     return base_dataset_valid.map(
-        process_dataset, remove_columns=list(base_dataset_valid.features), num_proc=32
+        process_dataset, remove_columns=list(base_dataset_valid.features), num_proc=32,
+         desc=f"q_latent_{scheduled_stage}"
     )
 
 
@@ -281,7 +281,8 @@ def get_cot_latent_dataset(
         }
 
     processed_dataset = base_dataset.map(
-        process_dataset, remove_columns=list(base_dataset.features), num_proc=32
+        process_dataset, remove_columns=list(base_dataset.features), num_proc=32,
+        desc=f"cot_latent_{scheduled_stage}"
     )
     if shuffle:
         processed_dataset = processed_dataset.shuffle()

@@ -123,3 +123,12 @@ wandb: 🚀 View run gsm-cot at: https://wandb.ai/wassname/coconut/runs/xxi8rd6h
 So they both got higher slowly, I can see why 25 epochs
 
 TODO get rid of 
+
+After moving to Qwen (slower) and amp (faster) my speed is this
+
+    Training Epoch: 4/5, batch 312/313 completed (loss: 0.1889: 100%|██████████████████████████████| 313/313 [02:52<00:00,  1.81it/s]
+
+so it's 3.7x slower than gpt2, but it's 3.7x bigger. So amp didn't seem to help
+
+
+oh waitn ot it's ~3.5 it/s, so only half as slow
