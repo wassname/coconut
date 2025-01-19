@@ -1,8 +1,7 @@
 ```bash
 uv sync
 . ./.venv/bin/activate
-bash scripts/preprocessing/gsm_icot.bash
-# torchrun --nnodes 1 --nproc_per_node 1 scripts/run.py args/gsm_coconut.yaml
+bash scripts/preprocessing/gsm_icot.bashCUDA_DEVICE_ORDER=1 CUDA_VISIBLE_DEVICES=1
 python scripts/run.py args/gsm_coconut.yaml
 ```
 
@@ -88,3 +87,39 @@ Example output format, ah so it expect `\n## A`
     <<600*40/100=240>>
     <<600+240=720>>
     ### 720<|endoftext|>'
+
+
+Could also try proper amp accel
+
+# 2025-01-19 09:00:56
+
+
+GPT2
+
+Cor=71, CoT=27, Total=500
+Accuracy on validation set: 71 / 500 = 0.142
+CoT match on validation set: 27 / 500 = 0.054
+saving model. outputs/gsm-cot/checkpoint_1
+
+Cor=89, CoT=33, Total=500
+Accuracy on validation set: 89 / 500 = 0.178
+CoT match on validation set: 33 / 500 = 0.066
+
+Accuracy on validation set: 99 / 500 = 0.198
+CoT match on validation set: 32 / 500 = 0.064
+saving model. outputs/gsm-cot/checkpoint_3
+
+Accuracy on validation set: 112 / 500 = 0.224
+CoT match on validation set: 40 / 500 = 0.08
+saving model. outputs/gsm-cot/checkpoint_4
+
+Test accuracy: 0.23: 100%|███████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 500/500 [01:21<00:00,  6.11it/s]
+Cor=115, CoT=42, Total=500
+Accuracy on validation set: 115 / 500 = 0.23
+CoT match on validation set: 42 / 500 = 0.084
+saving model. outputs/gsm-cot/checkpoint_5
+wandb: 🚀 View run gsm-cot at: https://wandb.ai/wassname/coconut/runs/xxi8rd6h
+
+So they both got higher slowly, I can see why 25 epochs
+
+TODO get rid of 

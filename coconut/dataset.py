@@ -41,22 +41,9 @@ def get_dataset(path, tokenizer, max_size=1000000000):
     keys = data[0].keys()
     dataset = Dataset.from_dict({k: [d[k] for d in data] for k in keys})
 
-    if torch.cuda.device_count() > 1:
-        if dist.get_rank() == 0:
-            processed_dataset = [
-                dataset.map(
-                    tokenize_sample, remove_columns=list(dataset.features), num_proc=32
-                )
-            ]
-        else:
-            processed_dataset = [None]
-        dist.broadcast_object_list(processed_dataset, src=0)
-        dataset = processed_dataset[0]
-
-    else:
-        dataset = dataset.map(
-            tokenize_sample, remove_columns=list(dataset.features), num_proc=32
-        )
+    dataset = dataset.map(
+        tokenize_sample, remove_columns=list(dataset.features), num_proc=32
+    )
 
     # verify
     d = data[0]
@@ -293,25 +280,11 @@ def get_cot_latent_dataset(
             "position_ids": list(range(len(tokens))),
         }
 
-    if torch.cuda.device_count() > 1:
-        if dist.get_rank() == 0:
-            processed_dataset = base_dataset.map(
-                process_dataset, remove_columns=list(base_dataset.features), num_proc=32
-            )
-            if shuffle:
-                processed_dataset = processed_dataset.shuffle()
-            processed_dataset = [processed_dataset]
-        else:
-            processed_dataset = [None]
-        dist.broadcast_object_list(processed_dataset, src=0)
-        dataset = processed_dataset[0]
-
-    else:
-        processed_dataset = base_dataset.map(
-            process_dataset, remove_columns=list(base_dataset.features), num_proc=32
-        )
-        if shuffle:
-            processed_dataset = processed_dataset.shuffle()
-        dataset = processed_dataset
+    processed_dataset = base_dataset.map(
+        process_dataset, remove_columns=list(base_dataset.features), num_proc=32
+    )
+    if shuffle:
+        processed_dataset = processed_dataset.shuffle()
+    dataset = processed_dataset
 
     return dataset

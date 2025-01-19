@@ -5,6 +5,7 @@ import os
 import sys
 from copy import copy
 
+from loguru import logger
 import torch
 import torch.optim as optim
 import yaml
@@ -21,6 +22,16 @@ from coconut.dataset import (
 )
 from coconut.utils import Config, set_seed
 from pathlib import Path
+
+def print_cuda_devices():
+    if torch.cuda.is_available():
+        for i in range(torch.cuda.device_count()): 
+            torch.cuda.get_device_name(i)
+            logger.info(f"Device {i}: {torch.cuda.get_device_name(i)}")
+            print(torch.cuda.get_device_capability(i))
+            print(torch.cuda.get_device_properties(i))
+    else:
+        logger.warning("CUDA is not available")
 
 
 def clear_memory():
@@ -41,9 +52,14 @@ def main():
     with open(args.config_file) as f:
         config_dict = yaml.safe_load(f)
 
-        print("Config:", config_dict)
+        logger.info(f"Config: {config_dict}")
 
     configs = Config(config_dict)
+
+    if os.environ['DEBUG']:
+        configs.debug = True
+        logger.warning("Debug mode is on")
+
     set_seed(configs.seed)
     save_dir = Path(configs.save_path) / configs.name
     save_dir.mkdir(parents=True, exist_ok=True)
@@ -51,16 +67,9 @@ def main():
     checkpoints = [f.name for f in save_dir.glob("checkpoint_*")]
     checkpoints = sorted(checkpoints, key=lambda x: int(x.stem.split("_")[1]))
 
-    # cur_ckpts = os.listdir(save_dir)
 
     # check if the job is preempted and resumed.
     if len(checkpoints) > 0 and not configs.only_eval:
-        print(
-            f"Warning: found previous run and gonna resume from that. the inputted `resume` argument is ignored!"
-        )
-
-        # checkpoints = [f for f in cur_ckpts if f.startswith("checkpoint_")]
-        # checkpoints.sort(key=lambda x: int(x.split("_")[1]))
 
         # Get the last item in the sorted list
         latest_checkpoint = checkpoints[-1] if checkpoints else None
@@ -72,18 +81,17 @@ def main():
 
     elif configs.resume != 0:
         if configs.load_model_path == "None":
-            print(
-                f"Warning: you want to skip the first {configs.resume} but you are not loading any existing checkpoint!"
+            logger.warning(
+                f"You want to skip the first {configs.resume} epochs but you are not loading existing checkpoint!"
             )
-        print(
-            f"Loading from {configs.load_model_path} and skip the first {configs.resume} epochs"
-        )
+        logger.info(f"Loading from {configs.load_model_path}. Skipping the first {configs.resume} epochs")
 
     # load base model
     model = AutoModelForCausalLM.from_pretrained(configs.model_id)
     tokenizer = AutoTokenizer.from_pretrained(configs.model_id)
     tokenizer.pad_token = tokenizer.eos_token
     tokenizer.pad_token_id = tokenizer.eos_token_id
+    model.generation_config.pad_token_id = tokenizer.pad_token_id
     tokenizer.add_tokens("<|start-latent|>")
     tokenizer.add_tokens("<|end-latent|>")
     tokenizer.add_tokens("<|latent|>")
@@ -135,10 +143,17 @@ def main():
     if configs.load_model_path != "None" and not loaded:
         print(model.load_state_dict(saved_weights, strict=False))
 
-    model = model.to("cuda")
+    print_cuda_devices()
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    dtype = torch.bfloat16 if configs.bf16 else torch.float32
+    logger.info(f"Using device: {device}, dtype: {dtype}")
+    use_amp = configs.bf16
 
-    if configs.bf16:
-        model.to(torch.bfloat16)
+    # torch.set_default_device(device)
+    model = model.to(device)
+
+    # if configs.bf16:
+    #     model.to(torch.bfloat16)
 
     print(model)
     question_val = [d["question"] for d in json.load(open(configs.val_path))]
@@ -179,6 +194,7 @@ def main():
             lr=configs.lr,
             weight_decay=configs.weight_decay,
         )
+    scaler = torch.amp.GradScaler(enabled=use_amp)
 
     best_acc = 0
 
@@ -287,20 +303,23 @@ def main():
 
                 total_train_steps += 1
                 batch = {
-                    key: batch[key].to("cuda") for key in batch.keys() if key != "idx"
+                    key: batch[key].to(device) for key in batch.keys() if key != "idx"
                 }
-                if configs.bf16:
-                    batch = {key: batch[key].bfloat16() for key in batch.keys()}
 
-                outputs = model(**batch)
+                with torch.autocast(device_type=device, dtype=dtype, enabled=use_amp):
+                    outputs = model(**batch)
 
-                loss = outputs.loss / configs.gradient_accumulation_steps
-                loss.backward()
+                    loss = outputs.loss / configs.gradient_accumulation_steps
+                
+                scaler.scale(loss).backward()
+                # loss.backward()
 
                 if (step + 1) % configs.gradient_accumulation_steps == 0 or step == len(
                     train_dataloader
                 ) - 1:
-                    optimizer.step()
+                    # optimizer.step()
+                    scaler.step(optimizer)
+                    scaler.update()
                     optimizer.zero_grad()
                     pbar.update(1)
 
@@ -335,7 +354,7 @@ def main():
                 model.eval()
                 for step, batch in enumerate(valid_loss_dataloader):
                     batch = {
-                        key: batch[key].to("cuda")
+                        key: batch[key].to(device)
                         for key in batch.keys()
                         if key != "idx"
                     }
@@ -363,7 +382,7 @@ def main():
                 test_idx = batch["idx"][0]
 
                 batch = {
-                    k: v.to("cuda")
+                    k: v.to(device)
                     for k, v in batch.items()
                     if v != None and k not in ["idx", "position_ids"]
                 }
@@ -377,6 +396,7 @@ def main():
                 outputs = model.generate(
                     **batch,
                     max_new_tokens=max_new_tokens,
+                    pad_token_id=tokenizer.eos_token_id,
                 )
 
                 text_output = tokenizer.decode(outputs[0], skip_special_tokens=True)
