@@ -200,13 +200,7 @@ def main():
     else:
         wandb_run = None
 
-
-
-    # optimizer
-    if configs.reset_optimizer:
-        optimizer = None
-    else:
-        optimizer = create_optimizer(model, configs)
+    optimizer = create_optimizer(model, configs)
     scaler = torch.amp.GradScaler(enabled=use_amp)
 
     collator = CoconutCollator(tokenizer, latent_id=latent_id, label_pad_token_id=-100)
@@ -215,6 +209,7 @@ def main():
     best_acc = 0
     metrics = [] 
     for epoch in range(configs.resume, configs.num_epochs):
+        clear_memory()
         scheduled_stage = (
             0 if (configs.cot or configs.no_cot) else epoch // configs.epochs_per_stage
         )
@@ -275,10 +270,6 @@ def main():
                 batch_size=configs.batch_size_training,
                 collate_fn=collator,
             )
-
-            if configs.reset_optimizer:
-                del optimizer
-                optimizer = create_optimizer(model, configs)
                 
 
             model.train()
@@ -347,6 +338,9 @@ def main():
                     f"Training Epoch: {epoch + 1}/{configs.num_epochs}, batch {step}/{len(train_dataloader)} "
                     f"completed (loss: {round(float(loss.detach().float() * configs.gradient_accumulation_steps), 4)}"
                 )
+
+                if (step % 100) == 0:
+                    clear_memory()
             pbar.close()
             if (
                 not configs.save_only_improve

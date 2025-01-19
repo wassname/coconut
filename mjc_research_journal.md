@@ -137,3 +137,11 @@ oh waitn ot it's ~3.5 it/s, so only half as slow... oh but it slow down in later
 
 
 I tried bnb 8 bit adam... it doesn't seem to help with mem. Maybe speed?
+
+
+# 2025-01-19 13:56:50
+
+So it's now 3h per epoch, 5 epochs.... hmmm. This just seems slow.
+
+I wonder if converting to huggingface train would make it faster? It also seems good to do the runs in order so I can leave it overnight, rather than having to manually trigger each step
+
