@@ -1,7 +1,9 @@
 ```bash
 uv sync
 . ./.venv/bin/activate
-bash scripts/preprocessing/gsm_icot.bashCUDA_DEVICE_ORDER=1 CUDA_VISIBLE_DEVICES=1
+bash scripts/preprocessing/gsm_icot.bash
+export CUDA_DEVICE_ORDER=PCI_BUS_ID
+export CUDA_VISIBLE_DEVICES=1
 python scripts/run.py args/gsm_coconut.yaml
 ```
 

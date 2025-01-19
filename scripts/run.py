@@ -72,7 +72,7 @@ def main():
 
     configs = Config(config_dict)
 
-    if os.environ['DEBUG']:
+    if os.environ.get('DEBUG', False):
         configs.debug = True
         logger.warning("Debug mode is on")
 
