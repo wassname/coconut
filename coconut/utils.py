@@ -10,6 +10,9 @@ class Config:
     def __init__(self, dictionary):
         self.__dict__ = dictionary
 
+    def __getitem__(self, key):
+        return self.__dict__[key]
+
 
 def set_seed(seed_value):
     random.seed(seed_value)

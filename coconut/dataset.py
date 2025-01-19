@@ -14,7 +14,7 @@ from transformers import PreTrainedTokenizerBase
 from transformers.data.data_collator import pad_without_fast_tokenizer_warning
 
 
-def get_dataset(path, tokenizer, max_size=1000000000):
+def get_dataset(path, tokenizer, max_size=1000000000, drop_unused=True):
     def tokenize_sample(sample):
         question_tokenized = tokenizer.encode(
             sample["question"] + "\n", add_special_tokens=True
@@ -41,8 +41,8 @@ def get_dataset(path, tokenizer, max_size=1000000000):
     keys = data[0].keys()
     dataset = Dataset.from_dict({k: [d[k] for d in data] for k in keys})
 
-    dataset = dataset.map(
-        tokenize_sample, remove_columns=list(dataset.features), num_proc=32, 
+    dataset_tok = dataset.map(
+        tokenize_sample, remove_columns=list(dataset.features) if drop_unused else None, num_proc=32, 
         desc=path
     )
 
@@ -54,12 +54,14 @@ def get_dataset(path, tokenizer, max_size=1000000000):
     ]
     assert (
         complete_tokenized
-        == dataset[0]["question_tokenized"]
-        + list(itertools.chain.from_iterable(dataset[0]["steps_tokenized"]))
-        + dataset[0]["answer_tokenized"]
+        == dataset_tok[0]["question_tokenized"]
+        + list(itertools.chain.from_iterable(dataset_tok[0]["steps_tokenized"]))
+        + dataset_tok[0]["answer_tokenized"]
     )
 
-    return dataset
+
+
+    return dataset, dataset_tok
 
 
 @dataclass
@@ -175,6 +177,7 @@ def get_question_latent_dataset(
     latent_id,
     end_id,
     no_special_marker=False,
+    drop_unused=True,
 ):
     def process_dataset(sample):
         if configs.pad_latent_to_max:
@@ -203,7 +206,7 @@ def get_question_latent_dataset(
         }
 
     return base_dataset_valid.map(
-        process_dataset, remove_columns=list(base_dataset_valid.features), num_proc=32,
+        process_dataset, remove_columns=list(base_dataset_valid.features) if drop_unused else None, num_proc=32,
          desc=f"q_latent_{scheduled_stage}"
     )
 
@@ -217,6 +220,7 @@ def get_cot_latent_dataset(
     end_id,
     no_special_marker=False,
     shuffle=False,
+    drop_unused=True,
 ):
     n_additional_tokens = 0 if no_special_marker else 2
 
@@ -281,7 +285,7 @@ def get_cot_latent_dataset(
         }
 
     processed_dataset = base_dataset.map(
-        process_dataset, remove_columns=list(base_dataset.features), num_proc=32,
+        process_dataset, remove_columns=list(base_dataset.features) if drop_unused else None, num_proc=32,
         desc=f"cot_latent_{scheduled_stage}"
     )
     if shuffle:
