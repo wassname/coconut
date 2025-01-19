@@ -2,9 +2,9 @@
 
 project: coconut
 save_path: outputs/
-name: gsm-coconut-eval
+name: gsm-coconut-qwen
 
-only_eval: True
+only_eval: False
 
 coconut: True
 cot: False
@@ -18,15 +18,15 @@ pad_latent_to_max: True
 
 save_only_improve: False
 uniform_prob: 0.0
-model_id: openai-community/gpt2
-load_model_path: outputs/gsm-cot
+model_id: Qwen/Qwen2.5-0.5B
+load_model_path: outputs/gsm-cot-qwen
 seed: 0
-resume: 15
+resume: 3
 bf16: True
 train_path: data/gsm_train.json
-val_path: data/gsm_test.json
+val_path: data/gsm_valid.json
 reset_optimizer: True
-batch_size_training: 32
+batch_size_training: 16
 debug: False
 gradient_accumulation_steps: 1
 num_epochs: 5

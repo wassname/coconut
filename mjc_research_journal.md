@@ -131,4 +131,7 @@ After moving to Qwen (slower) and amp (faster) my speed is this
 so it's 3.7x slower than gpt2, but it's 3.7x bigger. So amp didn't seem to help
 
 
-oh waitn ot it's ~3.5 it/s, so only half as slow
+oh waitn ot it's ~3.5 it/s, so only half as slow... oh but it slow down in later epochs, why is that?
+
+
+I tried bnb 8 bit adam... it doesn't seem to help with mem. Maybe speed?

@@ -1,3 +1,27 @@
+Forked to replicate and experiment and understand
+
+- [x] made single GPU for simplicity (no torch run, easier debug)
+- [x] refactored and added comment in places
+  - [x] use uv
+  - [x] make package
+- [x] changed to qwen2.5-0.5B for half the speed but ~8x capacity
+- [x] vscode debugging
+- [ ] replicate
+- **experiments**
+  - What if we don't just pass the last hidden state but
+    - [ ] the supressed neurons?
+    - [ ] the second to last hidden state (containing supressed neurons)?
+    - [ ] a projection of the last hidden state? Normalised
+
+
+```bash
+uv sync
+. ./.venv/bin/activate
+bash scripts/preprocessing/gsm_icot.bash
+python scripts/run.py args/gsm_coconut_qwen.yaml
+```
+----
+
 # Coconut
 
 The code base is the official implementation of [Training Large Language Models to Reason in a Continuous Latent Space](https://arxiv.org/abs/2412.06769).

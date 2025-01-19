@@ -48,6 +48,17 @@ def save_model(model, f):
     torch.save(states, f)
     logger.info(f"saving model. {f}")
 
+def create_optimizer(model, configs):
+    # import bitsandbytes as bnb
+    # return bnb.optim.AdamW(model.parameters(), lr=configs.lr, weight_decay=configs.weight_decay,
+    #                       optim_bits=32)
+    return optim.AdamW(
+        model.parameters(),
+        lr=configs.lr,
+        weight_decay=configs.weight_decay,
+    )
+        
+
 def main():
     parser = argparse.ArgumentParser(description="coconut")
     parser.add_argument("config_file")
@@ -189,16 +200,13 @@ def main():
     else:
         wandb_run = None
 
+
+
     # optimizer
     if configs.reset_optimizer:
         optimizer = None
     else:
-        # adam = bnb.optim.Adam8bit(model.parameters(), lr=0.001, betas=(0.9, 0.995)) # add bnb optimizer
-        optimizer = optim.AdamW(
-            model.parameters(),
-            lr=configs.lr,
-            weight_decay=configs.weight_decay,
-        )
+        optimizer = create_optimizer(model, configs)
     scaler = torch.amp.GradScaler(enabled=use_amp)
 
     collator = CoconutCollator(tokenizer, latent_id=latent_id, label_pad_token_id=-100)
@@ -270,11 +278,8 @@ def main():
 
             if configs.reset_optimizer:
                 del optimizer
-                optimizer = optim.AdamW(
-                    model.parameters(),
-                    lr=configs.lr,
-                    weight_decay=configs.weight_decay,
-                )
+                optimizer = create_optimizer(model, configs)
+                
 
             model.train()
 
@@ -379,7 +384,7 @@ def main():
         total_length = len(valid_gen_dataloader)
 
         pbar = tqdm(
-            colour="blue", desc=f"Test Accuracy", total=total_length, dynamic_ncols=True
+            colour="green", desc="Test Accuracy", total=total_length, dynamic_ncols=True
         )
         cor, cor_cot, total = 0, 0, 0
         with torch.no_grad():
@@ -415,11 +420,13 @@ def main():
                 )
 
                 if idx < 5:
+                    correct = '✅' if llm_answer_output==answer else '❌'
                     logger.info(
-                        f"Question {test_idx}: Answer = '{answer}' CoT = '{indent(answer_cot)}'"
-                    )
-                    logger.info(f"Full llm output: '{indent(tokenizer.decode(outputs[0]))}'")
-                    logger.info(f"Extracted llm Output: '{llm_answer_output}' (=? {answer})\n")
+                        f"""Question {test_idx}: Answer = '{answer}' CoT = '{indent(answer_cot)}'
+Extracted llm Output: '{llm_answer_output}' (=? {answer}) {correct}.
+Full llm output: '{indent(tokenizer.decode(outputs[0]))}'. 
+""")
+                    
 
                 cor += llm_answer_output == answer
                 cor_cot += llm_cot_output == answer_cot
@@ -433,7 +440,7 @@ def main():
             logger.info(
                 f"CoT match on validation set: {cor_cot} / {total} = {cor_cot / total}"
             )
-            metrics.append({"acc": cor / total, "cot_em": cor_cot / total, epoch: epoch + 1, "total": total})
+            metrics.append({"acc": cor / total, "cot_em": cor_cot / total, "total": total})
         sys.stdout.flush()
 
         if wandb_run:
@@ -454,7 +461,9 @@ def main():
             best_acc = cor / total
             clear_memory()
 
-    print(pd.DataFrame(metrics))
+    df_res = pd.DataFrame(metrics)
+    df_res.index.name = "epoch"
+    print(df_res)
 
 
 if __name__ == "__main__":
