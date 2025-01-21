@@ -18,7 +18,7 @@ pad_latent_to_max: True
 
 save_only_improve: True
 uniform_prob: 0.0
-model_id: plaguss/Qwen2.5-0.5B-Math-Shepherd-PRM-0.2
+model_id: Qwen/Qwen2.5-Math-1.5B
 load_model_path: None
 seed: 0
 resume: 0
@@ -26,9 +26,10 @@ bf16: True
 train_path: data/gsm_train.json
 val_path: data/gsm_valid.json
 reset_optimizer: False
-batch_size_training: 12
+batch_size_training: 4
 debug: False
 gradient_accumulation_steps: 1
 num_epochs: 5
 lr: !!float "2e-4"
 weight_decay: 0.01
+# https://qwen.readthedocs.io/en/latest/training/SFT/llama_factory.html

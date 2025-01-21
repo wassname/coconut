@@ -17,7 +17,7 @@ from coconut.dataset import (
     CoconutCollator,
     get_cot_latent_dataset,
     get_dataset,
-    get_question_latent_dataset,
+    get_question_only_latent_dataset,
 )
 from coconut.utils import Config, set_seed
 from pathlib import Path
@@ -33,6 +33,7 @@ def sink(msg):
 logger.add(sink, colorize=True)
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
+# setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.
 os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 
 def print_cuda_devices():
@@ -76,10 +77,8 @@ def main():
     save_dir = Path(configs.save_path) / configs.name
     save_dir.mkdir(parents=True, exist_ok=True)
 
-    checkpoints = [f.name for f in save_dir.glob("checkpoint_*")]
-    checkpoints = sorted(checkpoints, key=lambda x: int(x.stem.split("_")[1]))
-
-
+    # checkpoints = [f.name for f in save_dir.glob("checkpoint_*")]
+    # checkpoints = sorted(checkpoints, key=lambda x: int(x.stem.split("_")[1]))
 
     # load base model
     model = AutoModelForCausalLM.from_pretrained(configs.model_id)
@@ -91,52 +90,18 @@ def main():
     tokenizer.add_tokens("<|end-latent|>")
     tokenizer.add_tokens("<|latent|>")
     latent_id = tokenizer.convert_tokens_to_ids("<|latent|>")
-    start_id = tokenizer.convert_tokens_to_ids("<|start-latent|>")
-    end_id = tokenizer.convert_tokens_to_ids("<|end-latent|>")
+    bot_id = tokenizer.convert_tokens_to_ids("<|start-latent|>")
+    eot_id = tokenizer.convert_tokens_to_ids("<|end-latent|>")
 
-    loaded = False
-
-    if configs.load_model_path != "None":
-        saved_weights = torch.load(configs.load_model_path)
-        if configs.coconut and not any(
-            [k.startswith("base_causallm") for k in saved_weights.keys()]
-        ):
-            loaded = True
-            logger.info(model.load_state_dict(saved_weights, strict=False))
-
-        elif not configs.coconut and any(
-            [k.startswith("base_causallm") for k in saved_weights.keys()]
-        ):
-            raise ValueError("Cannot load coconut model weights into a causallm model")
-
-        elif configs.coconut and any(
-            [k.startswith("base_causallm") for k in saved_weights.keys()]
-        ):
-            pass
-
-        else:
-            loaded = True
-            logger.info(model.load_state_dict(saved_weights, strict=False))
-
-    if not (configs.cot or configs.no_thoughts or configs.no_cot):
-        model.resize_token_embeddings(len(tokenizer))
-        embeddings = model.get_input_embeddings()
-        target_id = tokenizer.convert_tokens_to_ids("<<")
-        for token_id in [latent_id, start_id, end_id]:
-            target_embedding = embeddings.weight.data[token_id]
-            embeddings.weight.data[token_id] = target_embedding
-            lm_head = model.lm_head
-            lm_head.weight.data[token_id] = lm_head.weight.data[target_id]
-
-    if configs.no_thoughts:
-        configs.c_thought = 0
-        configs.coconut = False
-
-    if configs.coconut:
-        model = Coconut(model, latent_id, start_id, end_id, tokenizer.eos_token_id)
-
-    if configs.load_model_path != "None" and not loaded:
-        logger.info(model.load_state_dict(saved_weights, strict=False))
+    model.resize_token_embeddings(len(tokenizer))
+    embeddings = model.get_input_embeddings()
+    target_id = tokenizer.convert_tokens_to_ids("<<")
+    for token_id in [latent_id, bot_id, eot_id]:
+        # tie embeddings for special tokens
+        target_embedding = embeddings.weight.data[token_id]
+        embeddings.weight.data[token_id] = target_embedding.clone()
+        lm_head = model.lm_head
+        lm_head.weight.data[token_id] = lm_head.weight.data[target_id].clone()
 
     # set devices
     print_cuda_devices()
@@ -144,6 +109,8 @@ def main():
     dtype = torch.bfloat16 if configs.bf16 else torch.float32
     logger.info(f"Using device: {device}, dtype: {dtype}")
     model = model.to(device)
+
+    model = Coconut(model, latent_id, bot_id, eot_id, tokenizer.eos_token_id)
 
     # setup eval
     logger.info(model)
@@ -161,17 +128,18 @@ def main():
     if not configs.debug and not configs.only_eval:
         wandb_run = wandb.init(project=configs.project, name=configs.name)
         wandb_run.config.update(configs, allow_val_change=True)
-        # text_table = wandb.Table(columns=["step", "text"])
     else:
+        os.environ["WANDB_MODE"] = "drdisabledyrun"
         wandb_run = None
 
     collator = CoconutCollator(tokenizer, latent_id=latent_id, label_pad_token_id=-100)
 
     # Set up training arguments
     training_args = TrainingArguments(
+        run_name=configs.name,
         output_dir=save_dir,
         per_device_train_batch_size=configs['batch_size_training'],
-        gradient_accumulation_steps=1,
+        gradient_accumulation_steps=configs.gradient_accumulation_steps,
         learning_rate=configs['lr'],
         warmup_ratio=0.1,
         # max_steps=configs['samples_per_epoch']//configs['batch_size_training']*configs['num_epochs'],
@@ -180,81 +148,108 @@ def main():
         bf16=configs.bf16,
         bf16_full_eval=configs.bf16,
         optim="adamw_torch", # save memory: adamw_bnb_8bit
-        num_train_epochs=configs['epochs_per_stage'],
+        num_train_epochs=1,#configs['epochs_per_stage'],
+        torch_empty_cache_steps=100,
+        save_safetensors=False,
+        report_to="wandb" if wandb_run else None,
+        lr_scheduler_type="cosine",# cosine cosine_with_restarts
+        
+        # save_strategy="no",
     )
 
+    for phase in range(2):
+        for epoch in range(configs.num_epochs if (phase>0) else 1):
+            if phase==0:
+                scheduled_stage = 0
+                configs.c_thought=0
+                configs.max_latent_stage = 0
+                configs.cot = True
+                configs.coconut = False
+            else:
+                scheduled_stage = epoch // configs['epochs_per_stage']
+                configs.c_thought = 2
+                configs.max_latent_stage = 3
+                configs.cot = False
+                configs.coconut = True
 
-    for scheduled_stage in range(0, 1, 2):
+            no_bot_eot=(scheduled_stage == 0)
 
-        dataset_loss_val = get_cot_latent_dataset(
-            scheduled_stage,
-            base_dataset_valid,
-            configs,
-            start_id,
-            latent_id,
-            end_id,
-            no_special_marker=configs.cot or configs.no_cot or configs.no_thoughts,
-        )
 
-        if not configs.only_eval:
-            dataset_train = get_cot_latent_dataset(
+            # initial eval
+            dataset_gen_val = get_question_only_latent_dataset(
                 scheduled_stage,
-                base_dataset_train,
+                base_dataset_valid,
                 configs,
-                start_id,
+                bot_id,
                 latent_id,
-                end_id,
-                no_special_marker=configs.cot or configs.no_cot or configs.no_thoughts,
-                shuffle=True,
+                eot_id,
+                no_bot_eot=no_bot_eot,
+                # drop_unused=False,
+            )
+            valid_gen_dataloader = torch.utils.data.DataLoader(
+                dataset_gen_val,
+                num_workers=1,
+                pin_memory=True,
+                batch_size=1,
+                collate_fn=collator,
+            )
+            if "gsm" in configs.val_path:
+                max_new_tokens = 64
+            else:
+                max_new_tokens = 128
+            if epoch==0:
+                r = evaluate(valid_gen_dataloader, model, tokenizer, base_dataset_valid, max_new_tokens=max_new_tokens, name=f"eval_{phase}_{epoch}_start")
+                if wandb_run:
+                    wandb_run.log(r)
+
+            logger.info(f"Training stage {scheduled_stage}, phase {phase}")
+
+            dataset_loss_val = get_cot_latent_dataset(
+                scheduled_stage,
+                base_dataset_valid,
+                configs,
+                bot_id,
+                latent_id,
+                eot_id,
+                no_bot_eot=no_bot_eot,
             )
 
-        
-        if not configs.only_eval: 
-            trainer = Trainer(
-                model=model,
-                args=training_args,
-                train_dataset=dataset_train,
-                eval_dataset=dataset_loss_val,
-                dataset_collator=collator,
-            )
+            if not configs.only_eval:
+                dataset_train = get_cot_latent_dataset(
+                    scheduled_stage,
+                    base_dataset_train,
+                    configs,
+                    bot_id,
+                    latent_id,
+                    eot_id,
+                    no_bot_eot=no_bot_eot,
+                    shuffle=True,
+                )
+
+                trainer = Trainer(
+                    model=model if scheduled_stage > 0 else model.base_causallm,
+                    args=training_args,
+                    train_dataset=dataset_train,
+                    eval_dataset=dataset_loss_val,
+                    data_collator=collator,
+                )
+                # TODO we don't need to shuffle train as it's done during load
+                clear_memory()
+                trainer.train()
+
+
             clear_memory()
-            trainer.train()
+            r = evaluate(valid_gen_dataloader, model, tokenizer, base_dataset_valid, max_new_tokens=max_new_tokens, name=f"eval_{phase}_{epoch}")
+            clear_memory()
+            if wandb_run:
+                wandb_run.log(r)
 
-
-        # eval
-        dataset_gen_val = get_question_latent_dataset(
-            scheduled_stage,
-            base_dataset_valid,
-            configs,
-            start_id,
-            latent_id,
-            end_id,
-            no_special_marker=configs.cot or configs.no_cot or configs.no_thoughts,
-            drop_unused=False,
-        )
-
-        valid_gen_dataloader = torch.utils.data.DataLoader(
-            dataset_gen_val,
-            num_workers=1,
-            pin_memory=True,
-            batch_size=1,
-            collate_fn=collator,
-        )
-        if "gsm" in configs.val_path:
-            max_new_tokens = 64
-        else:
-            max_new_tokens = 128
-        r = evaluate(valid_gen_dataloader, model, tokenizer, max_new_tokens=max_new_tokens)
-        if wandb_run:
-            wandb_run.log(r)
-
-        save_model(model, save_dir / f"checkpoint_{scheduled_stage}")
+            save_model(model, save_dir / f"checkpoint_{phase}_{epoch}.pt")
         
 
 
-def evaluate(dataloader, model, tokenizer, max_new_tokens=64, device='cuda'):
+def evaluate(dataloader, model, tokenizer, ds, max_new_tokens=64, device='cuda', name=""):
 
-    ds = dataloader.dataset
 
     # get original answer
     question_val = ds["question"]
@@ -269,6 +264,7 @@ def evaluate(dataloader, model, tokenizer, max_new_tokens=64, device='cuda'):
     pbar = tqdm(
         colour="green", desc="Test Accuracy", total=total_length, dynamic_ncols=True
     )
+    logger.info(f"Starting evaluation {name}")
     cor, cor_cot, total = 0, 0, 0
     with torch.no_grad():
         model.eval()

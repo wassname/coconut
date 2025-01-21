@@ -61,7 +61,7 @@ def get_dataset(path, tokenizer, max_size=1000000000, drop_unused=True):
 
 
 
-    return dataset, dataset_tok
+    return dataset_tok
 
 
 @dataclass
@@ -166,36 +166,53 @@ class CoconutCollator:
                 batch["position_ids"], dtype=torch.int64
             )
 
+        whitelist = ["input_ids", "attention_mask", "labels", "position_ids", "question_tokenized", "steps_tokenized", "answer_tokenized", "idx", "position_ids"]
+        for k in batch.keys():
+            if k not in whitelist:
+                del batch[k]
+
         return batch
 
 
-def get_question_latent_dataset(
+def get_question_only_latent_dataset(
     scheduled_stage,
     base_dataset_valid,
     configs,
-    start_id,
+    bot_id,
     latent_id,
-    end_id,
-    no_special_marker=False,
+    eot_id,
+    no_bot_eot=False,
     drop_unused=True,
 ):
+    """    
+    for testing, with no reasoning or ans
+
+    format: question, latent
+
+    args:
+    - no_special_marker: if True, don't include thought tokens 
+    """
     def process_dataset(sample):
+
         if configs.pad_latent_to_max:
             max_latent_stage = configs.max_latent_stage
         else:
+            # max on thought per reasoning step
             max_latent_stage = min(
                 configs.max_latent_stage, len(sample["steps_tokenized"])
             )
 
+        # we increase the amount of thought steps as we progress throught the coconut epochs
         k = min(max_latent_stage, scheduled_stage)
 
+        
         k *= configs.c_thought
 
         tokens = (
             sample["question_tokenized"]
-            + ([] if no_special_marker else [start_id])
+            + ([] if no_bot_eot else [bot_id])
             + [latent_id] * k
-            + ([] if no_special_marker else [end_id])
+            + ([] if no_bot_eot else [eot_id])
         )
 
         return {
@@ -215,14 +232,18 @@ def get_cot_latent_dataset(
     scheduled_stage,
     base_dataset,
     configs,
-    start_id,
+    bot_id,
     latent_id,
-    end_id,
-    no_special_marker=False,
+    eot_id,
+    no_bot_eot=False,
     shuffle=False,
     drop_unused=True,
 ):
-    n_additional_tokens = 0 if no_special_marker else 2
+    """chain of thought latent dataset for training
+    
+    format: question, latent, reasoning, answer
+    """
+    n_additional_tokens = 0 if no_bot_eot else 2
 
     def process_dataset(sample):
         if (
@@ -234,32 +255,34 @@ def get_cot_latent_dataset(
         else:
             scheduled_stage_to_train = scheduled_stage
 
-        if scheduled_stage_to_train > configs.max_latent_stage:
-            n_skip_steps = 10000  # skip all
+        # progressivly replace reasoning steps with latent tokens
+        # n_skip_steps: number of reasoning steps to skip, replace with `c_thought` latent tokens
+        if scheduled_stage_to_train <= configs.max_latent_stage:
+             n_skip_steps, n_latent_tokens = (
+                scheduled_stage_to_train,
+                scheduled_stage_to_train,
+            )
+        else:
+            n_skip_steps = 10000  # skip all verbal reasoning steps
             if configs.pad_latent_to_max:
                 n_latent_tokens = configs.max_latent_stage
             else:
                 n_latent_tokens = min(
                     len(sample["steps_tokenized"]), configs.max_latent_stage
                 )
-
-        else:
-            n_skip_steps, n_latent_tokens = (
-                scheduled_stage_to_train,
-                scheduled_stage_to_train,
-            )
-
+        
         if configs.no_cot:
             n_skip_steps = 100  # skip all step
             n_latent_tokens = 0
 
+        # for each reasoning step we use X tokens
         n_latent_tokens *= configs.c_thought
 
         tokens = (
             sample["question_tokenized"]
-            + ([] if no_special_marker else [start_id])
+            + ([] if no_bot_eot else [bot_id])
             + [latent_id] * n_latent_tokens
-            + ([] if no_special_marker else [end_id])
+            + ([] if no_bot_eot else [eot_id])
             + list(
                 itertools.chain.from_iterable(sample["steps_tokenized"][n_skip_steps:])
             )

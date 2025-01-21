@@ -37,11 +37,14 @@ class Coconut(nn.Module):
         self.start_latent_id = start_latent_id
         self.end_latent_id = end_latent_id
 
+
+    @property
+    def embedding(self):
         # tested with GPT2 and Llama3
         if isinstance(self.base_causallm, GPT2LMHeadModel):
-            self.embedding = self.base_causallm.transformer.get_input_embeddings()
+            return self.base_causallm.transformer.get_input_embeddings()
         else:
-            self.embedding = self.base_causallm.get_input_embeddings()
+            return self.base_causallm.get_input_embeddings()
 
     def forward(self, input_ids, attention_mask, labels, position_ids, **kwargs):
         logits = []
