@@ -11,7 +11,7 @@ from jaxtyping import Float, Int
 from typing import Tuple, List, Union, Optional, Dict
 from torch import Tensor
 
-
+from transformers import DynamicCache
 from transformers.models.gpt2 import GPT2LMHeadModel
 
 Outputs = namedtuple("Outputs", ["loss", "inputs_embeds", "logits"])
@@ -19,6 +19,34 @@ MAX_N_LATENT = 8
 
 HiddenState = Float[Tensor, 'b t h']
 HiddenStates = Tuple[Float[Tensor, 'b t h']]
+
+
+
+def hs2ie(hidden_states: HiddenStates, inputs_embeds: HiddenState) -> HiddenState:
+    """hidden states to inputs_embeds"""
+
+    # use last hidden layer
+    return hidden_states[-1]
+
+    # or second to last, to keep supressed tokens
+    # return hidden_states[-2]
+
+    # or use supressed tokens [-1]
+    """
+    Novel experiment: Here we define a transform to isolate supressed activations, where we hypothesis that style/concepts/scratchpads and other internal only representations must be stored.
+
+    See the following references for more information:
+    - https://arxiv.org/html/2406.19384v1
+        - > Previous work suggests that networks contain ensembles of “prediction" neurons, which act as probability promoters [66, 24, 32] and work in tandem with suppression neurons (Section 5.4). 
+
+    - https://arxiv.org/pdf/2401.12181
+        > We find a striking pattern which is remarkably consistent across the different seeds: after about the halfway point in the model, prediction neurons become increasingly prevalent until the very end of the network where there is a sudden shift towards a much larger number of suppression neurons.
+    """
+    supressed_act = -rearrange(list(hidden_states), 'l b 1 h -> l b h').diff(dim=0).clamp(min=None, max=0)
+    hs = supressed_act[-1][:, None] # last layer, add dummy sequence dim
+    # we need to make it more like the original hidden states, so prev input embedding plus the supressed tokens
+    return inputs_embeds + hs
+
 
 class Coconut(nn.Module):
     def __init__(
@@ -71,6 +99,7 @@ class Coconut(nn.Module):
 
         for pass_idx in range(max_n_latents):
             if kv_cache == None:
+                # past_key_values = DynamicCache2()
                 # first forward pass
                 outputs = self.base_causallm(
                     inputs_embeds=inputs_embeds[
@@ -96,6 +125,9 @@ class Coconut(nn.Module):
                     )
                     for k, v in kv_cache
                 ]
+
+                # Qwen needs this
+                past_key_values= DynamicCache.from_legacy_cache(past_key_values)
 
                 outputs = self.base_causallm(
                     inputs_embeds=inputs_embeds[
@@ -128,6 +160,8 @@ class Coconut(nn.Module):
 
             hidden_states = outputs.hidden_states
             kv_cache = outputs.past_key_values
+            if isinstance(kv_cache, DynamicCache):
+                kv_cache = kv_cache.to_legacy_cache()
             assert kv_cache is not None
 
             # feedback the continuous thoughts to the input_embeds
@@ -148,42 +182,27 @@ class Coconut(nn.Module):
                 ]
                 for batch_idx in range(inputs_embeds.shape[0])
             ]
+            # tensor_shape = torch.stack([torch.stack([xx for xx in x]) for x in tensor_list]).shape
+            # # tensor_shapes = [[tuple(xx.shape) for xx in x] for x in tensor_list]
+            # print({'pass_idx':pass_idx, 
+            #        'inputs_embeds': inputs_embeds.shape, 
+            #        'tensor_shape': tensor_shape, 
+            #        'hidden_states_offset': hidden_states_offset})
 
-
-            def hs2ie(hidden_states: HiddenStates, inputs_embeds: HiddenState) -> HiddenState:
-                """hidden states to inputs_embeds"""
-
-                # use last hidden layer
-                return hidden_states[-1]
-            
-                # or second to last, to keep supressed tokens
-                # return hidden_states[-2]
-            
-                # or use supressed tokens [-1]
-                """
-                Novel experiment: Here we define a transform to isolate supressed activations, where we hypothesis that style/concepts/scratchpads and other internal only representations must be stored.
-
-                See the following references for more information:
-                - https://arxiv.org/html/2406.19384v1
-                    - > Previous work suggests that networks contain ensembles of “prediction" neurons, which act as probability promoters [66, 24, 32] and work in tandem with suppression neurons (Section 5.4). 
-
-                - https://arxiv.org/pdf/2401.12181
-                    > We find a striking pattern which is remarkably consistent across the different seeds: after about the halfway point in the model, prediction neurons become increasingly prevalent until the very end of the network where there is a sudden shift towards a much larger number of suppression neurons.
-                """
-                supressed_act = -rearrange(list(hidden_states), 'l b 1 h -> l b h').diff(dim=0).clamp(min=None, max=0)
-                hs = supressed_act[-1][:, None] # last layer, add dummy sequence dim
-                # we need to make it more like the original hidden states, so prev input embedding plus the supressed tokens
-                return inputs_embeds + hs
 
             # replace some of them with continuous thoughts
+            # FIXME on the second batch I seem to have a 1 seq length, why?
             for idx_pair in filling_indices:
                 batch_idx, token_idx = idx_pair
 
                 # TODO experiment with transformers here, we are replacing. 
                 # replace it with the preceding last hidden states
-                tensor_list[batch_idx][token_idx] = hs2ie(hidden_states, inputs_embeds)[
+                recrv_embeds = hs2ie(hidden_states, inputs_embeds)
+                # print({'hs': torch.stack(hidden_states).shape, 'recrv_embeds': recrv_embeds.shape, 'tensor_list': tensor_list[batch_idx][token_idx].shape})
+                tensor_list[batch_idx][token_idx] = recrv_embeds[
                     batch_idx, token_idx - 1 - hidden_states_offset, :
                 ]
+                # print(tensor_list[batch_idx][token_idx].shape, recrv_embeds.shape, batch_idx, token_idx, token_idx - 1 - hidden_states_offset)
 
             # assemble the new inputs_embeds
             inputs_embeds = torch.stack(
@@ -193,6 +212,19 @@ class Coconut(nn.Module):
                 ]
             )
 
+        past_key_values=(
+                        [
+                            (
+                                k[:, :, : next_compute_range[0], :],
+                                v[:, :, : next_compute_range[0], :],
+                            )
+                            for k, v in kv_cache
+                        ]
+                        if kv_cache
+                        else None
+                    )
+        past_key_values= DynamicCache.from_legacy_cache(past_key_values)
+
         # final pass
         outputs = self.base_causallm(
             inputs_embeds=inputs_embeds[
@@ -200,17 +232,7 @@ class Coconut(nn.Module):
             ],
             attention_mask=attention_mask[:, : next_compute_range[1]],
             position_ids=position_ids[:, next_compute_range[0] : next_compute_range[1]],
-            past_key_values=(
-                [
-                    (
-                        k[:, :, : next_compute_range[0], :],
-                        v[:, :, : next_compute_range[0], :],
-                    )
-                    for k, v in kv_cache
-                ]
-                if kv_cache
-                else None
-            ),
+            past_key_values=past_key_values,
             output_hidden_states=True,
         )
 
