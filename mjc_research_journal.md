@@ -231,3 +231,20 @@ Qwen2.5-Math-1.5B  79.7 -> 83.9 on the MATH benchmark using TIR.
             Let
 
 starts at 
+
+# 2025-01-26 16:55:17
+
+Ah a nice replication of r1-Zero came out. learnings.
+Doesn't matter if you use instruct or not
+the 0.5 model kind of suck, 1.5 is better
+you don't need 40,000 samples, they used 8000 (gsm8k)
+
+
+they used 0.5b, le=1e-6
+
+
+train_batch size = 256 # Reward batch size
+ppo mini batch size 64 # One sample is split into multiple sub-batches with batch_size=ppo_mini_batch_size for PPO updates (grad accum size)
+ppo_micro_batch_size=1  #  Similar to gradient accumulation, the micro_batch_size for one forward pass, trading speed for GPU memory
+log_prob_micro_bathc size 4 (the real size)
+

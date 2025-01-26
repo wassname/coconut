@@ -27,9 +27,9 @@ train_path: data/gsm_train.json
 val_path: data/gsm_valid.json
 reset_optimizer: False
 batch_size_training: 10
-max_size: 20000
+max_size: 10000 # in verl this is enougth https://github.com/volcengine/verl/blob/main/examples/ppo_trainer/verl_getting_started.ipynb
 debug: False
-gradient_accumulation_steps: 1
+gradient_accumulation_steps: 4
 num_epochs: 5
-lr: !!float "2e-4"
+lr: !!float "1e-5"
 weight_decay: 0.01
