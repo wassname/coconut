@@ -83,6 +83,7 @@ class Coconut(nn.Module):
                         :, next_compute_range[0] : next_compute_range[1]
                     ],
                     output_hidden_states=True,
+                    use_cache=True,
                 )
                 hidden_states_offset = 0
 
@@ -106,6 +107,7 @@ class Coconut(nn.Module):
                     ],
                     past_key_values=past_key_values,
                     output_hidden_states=True,
+                    use_cache=True,
                 )
 
                 hidden_states_offset = next_compute_range[0]
@@ -126,6 +128,7 @@ class Coconut(nn.Module):
 
             hidden_states = outputs.hidden_states
             kv_cache = outputs.past_key_values
+            assert kv_cache is not None
 
             # feedback the continuous thoughts to the input_embeds
 
