@@ -114,14 +114,14 @@ def main():
 
     # setup eval
     logger.info(model)
-
+    max_size=32 if configs.debug else (configs.max_size or 100000000)
     base_dataset_valid = get_dataset(
-        configs.val_path, tokenizer, max_size=32 if configs.debug else 100000000, drop_unused=False
+        configs.val_path, tokenizer, max_size=max_size, drop_unused=False
     )
 
     if not configs.only_eval:
         base_dataset_train = get_dataset(
-            configs.train_path, tokenizer, max_size=5000 if configs.debug else 100000000
+            configs.train_path, tokenizer, max_size=max_size
         )
 
     # wandb
@@ -129,7 +129,7 @@ def main():
         wandb_run = wandb.init(project=configs.project, name=configs.name)
         wandb_run.config.update(configs, allow_val_change=True)
     else:
-        os.environ["WANDB_MODE"] = "drdisabledyrun"
+        os.environ["WANDB_MODE"] = "disabled"
         wandb_run = None
 
     collator = CoconutCollator(tokenizer, latent_id=latent_id, label_pad_token_id=-100)
@@ -197,10 +197,10 @@ def main():
                 max_new_tokens = 64
             else:
                 max_new_tokens = 128
-            if epoch==0:
-                r = evaluate(valid_gen_dataloader, model, tokenizer, base_dataset_valid, max_new_tokens=max_new_tokens, name=f"eval_{phase}_{epoch}_start")
-                if wandb_run:
-                    wandb_run.log(r)
+            # if epoch==0:
+            #     r = evaluate(valid_gen_dataloader, model, tokenizer, base_dataset_valid, max_new_tokens=max_new_tokens, name=f"eval_{phase}_{epoch}_start")
+            #     if wandb_run:
+            #         wandb_run.log(r)
 
             logger.info(f"Training stage {scheduled_stage}, phase {phase}")
 
