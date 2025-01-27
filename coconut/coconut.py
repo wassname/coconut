@@ -49,10 +49,11 @@ def hs2ie(hidden_states: HiddenStates, inputs_embeds: HiddenState, method='-1') 
     # and it assumed removal == reduction in positive magnitude, but it could be negative. So I should refactor for all reduction in magnitude
     hs = rearrange(list(hidden_states), 'l b t h -> l b t h')
     diffs = hs[:, :, -1].diff(dim=0)
-    supressed_act = -diffs.clamp(min=None, max=0) # removed positive activations
+    # supressed_act = -diffs.clamp(min=None, max=0) # removed positive activations
     # or all reduction in magnitudes
     mask_was_reduction = (diffs.abs() < hs[:, :, -1][:-1].abs()).float()
     supressed_act = -diffs * mask_was_reduction
+
     if method == 'ie+supressed[-1]':
         # need to make it more like the original hidden states, so prev input embedding plus the supressed tokens
         return inputs_embeds + supressed_act[-1].unsqueeze(1) # last layer, add dummy sequence dim
@@ -266,6 +267,8 @@ class Coconut(nn.Module):
         loss = loss_fct(
             shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1)
         )
+
+        assert torch.isfinite(loss).all(), f"Loss is {loss}"
 
         return Outputs(loss=loss, inputs_embeds=inputs_embeds, logits=logits)
 

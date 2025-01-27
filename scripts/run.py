@@ -6,11 +6,11 @@ import sys
 from copy import copy
 import pandas as pd
 import torch
+from torch import nn
 import torch.optim as optim
 import yaml
 from tqdm import tqdm
 from transformers import AutoModelForCausalLM, AutoTokenizer
-
 import wandb
 from coconut.coconut import Coconut
 from coconut.dataset import (
@@ -117,6 +117,17 @@ def main():
     logger.info(f"Using device: {device}, dtype: {dtype}")
     model = model.to(device)
 
+
+    def convert_to_bfloat16(module):
+        for child in module.children():
+            if isinstance(child, (nn.Linear, nn.Conv2d)):
+                child.to(torch.bfloat16)
+            else:
+                convert_to_bfloat16(child)
+    
+    if configs.bf16:
+        convert_to_bfloat16(model)
+
     model = Coconut(model, latent_id, bot_id, eot_id, tokenizer.eos_token_id, replacement_method=configs.replacement_method)
 
     # setup eval
@@ -133,7 +144,7 @@ def main():
 
     # wandb
     if not configs.debug and not configs.only_eval:
-        wandb_run = wandb.init(project=configs.project, name=configs.name)
+        wandb_run = wandb.init(project=configs.project, name=configs.name, resume="auto")
         wandb_run.config.update(configs, allow_val_change=True)
     else:
         os.environ["WANDB_MODE"] = "disabled"
@@ -154,7 +165,7 @@ def main():
         save_steps=10000,
         bf16=configs.bf16,
         bf16_full_eval=configs.bf16,
-        optim="adamw_torch", # save memory: adamw_bnb_8bit
+        optim="adamw_bnb_8bit", # save memory:adamw_torch  adamw_bnb_8bit or paged_adamw_32bit
         num_train_epochs=1,#configs['epochs_per_stage'],
         torch_empty_cache_steps=100,
         save_safetensors=False,
@@ -198,10 +209,11 @@ def main():
             max_new_tokens = 64
         else:
             max_new_tokens = 128
-        # if epoch==0:
-        #     r = evaluate(valid_gen_dataloader, model, tokenizer, base_dataset_valid, max_new_tokens=max_new_tokens, name=f"eval_{phase}_{epoch}_start")
-        #     if wandb_run:
-        #         wandb_run.log(r)
+        if epoch==0:
+            # quick QC to see how well untouched model does at the task
+            r = evaluate(valid_gen_dataloader, model, tokenizer, base_dataset_valid, max_new_tokens=max_new_tokens, name=f"eval_{epoch}_start", dtype=dtype, device=device, quick=True)
+            if wandb_run:
+                wandb_run.log(r)
 
         logger.info(f"Training stage epoch={epoch} stage={scheduled_stage}")
 
@@ -228,7 +240,7 @@ def main():
             )
 
             trainer = Trainer(
-                model=model if scheduled_stage > 0 else model.base_causallm,
+                model=model,# if scheduled_stage > 0 else model.base_causallm,
                 args=training_args,
                 train_dataset=dataset_train,
                 eval_dataset=dataset_loss_val,
@@ -251,7 +263,7 @@ def main():
         
 
 @torch.no_grad()
-def evaluate(dataloader, model, tokenizer, ds, max_new_tokens=64, device='cuda', name="", dtype=torch.float32):
+def evaluate(dataloader, model, tokenizer, ds, max_new_tokens=64, device='cuda', name="", dtype=torch.float32, quick=False):
 
 
     # get original answer
@@ -272,6 +284,8 @@ def evaluate(dataloader, model, tokenizer, ds, max_new_tokens=64, device='cuda',
     with torch.no_grad():
         model.eval()
         for idx, batch in enumerate(dataloader):
+            if quick and idx > 3:
+                break
             test_idx = batch["idx"][0]
 
             batch = {
@@ -298,6 +312,10 @@ def evaluate(dataloader, model, tokenizer, ds, max_new_tokens=64, device='cuda',
 
             llm_text_output = tokenizer.decode(outputs[0], skip_special_tokens=True)
             llm_answer_output = llm_text_output.split("#")[-1].replace(",", "").strip()
+            def crop(s, max=30):
+                if len(s) > max:
+                    return s[:max] + "..."
+                return s
             llm_cot_output = (
                 ("\n".join(llm_text_output.split("\n")[1:])).split("#")[0].strip()
             )
@@ -306,7 +324,7 @@ def evaluate(dataloader, model, tokenizer, ds, max_new_tokens=64, device='cuda',
                 correct = '✅' if llm_answer_output==answer else '❌'
                 logger.info(
                     f"""Question {test_idx}: Answer = '{answer}' CoT = '{indent(answer_cot)}'
-Extracted llm Output: '{llm_answer_output}' (=? {answer}) {correct}.
+Extracted llm Output: '{crop(llm_answer_output)}' (=? {answer}) {correct}.
 Full llm output: '{indent(tokenizer.decode(outputs[0]))}'. 
 """)
                 
