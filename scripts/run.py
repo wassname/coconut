@@ -319,9 +319,10 @@ def evaluate(dataloader, model, tokenizer, ds, max_new_tokens=64, device='cuda',
             if idx < 3:
                 correct = '✅' if llm_answer_output==answer else '❌'
                 logger.info(
-                    f"""Question {test_idx}: Answer = '{answer}' CoT = '{indent(answer_cot)}'
-Extracted llm Output: '{crop(llm_answer_output)}' (=? {answer}) {correct}.
-Full llm output: '{indent(tokenizer.decode(outputs[0]))}'. 
+                    f"""Q #{test_idx}: Answer = '{answer}' CoT = '{indent(answer_cot)},'.
+Question: `{indent(question)}`.
+Extracted llm Output: `{crop(llm_answer_output)}` (=? {answer}) {correct}.
+Full llm output: `{indent(tokenizer.decode(outputs[0]))}`. 
 """)
                 
 

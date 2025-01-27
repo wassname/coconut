@@ -30,7 +30,7 @@ seed: 0
 bf16: True
 train_path: data/gsm_train.json
 val_path: data/gsm_valid.json
-batch_size_training: 4
+batch_size_training: 6
 max_size: 10000 # in verl this is enougth https://github.com/volcengine/verl/blob/main/examples/ppo_trainer/verl_getting_started.ipynb
 debug: False
 gradient_accumulation_steps: 2
