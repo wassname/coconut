@@ -330,6 +330,7 @@ dependencies = [
     { name = "pandas" },
     { name = "tabulate" },
     { name = "torch" },
+    { name = "torch-optimi" },
     { name = "tqdm" },
     { name = "transformers" },
     { name = "wandb" },
@@ -355,6 +356,7 @@ requires-dist = [
     { name = "pandas", specifier = ">=2.2.3" },
     { name = "tabulate", specifier = ">=0.9.0" },
     { name = "torch", specifier = "==2.5.1" },
+    { name = "torch-optimi", specifier = ">=0.2.1" },
     { name = "tqdm", specifier = "==4.67.0" },
     { name = "transformers", specifier = "==4.46.2" },
     { name = "wandb", specifier = "==0.18.7" },
@@ -2037,6 +2039,19 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/5f/ba/607d013b55b9fd805db2a5c2662ec7551f1910b4eef39653eeaba182c5b2/torch-2.5.1-cp312-cp312-win_amd64.whl", hash = "sha256:73e58e78f7d220917c5dbfad1a40e09df9929d3b95d25e57d9f8558f84c9a11c", size = 203046841 },
     { url = "https://files.pythonhosted.org/packages/57/6c/bf52ff061da33deb9f94f4121fde7ff3058812cb7d2036c97bc167793bd1/torch-2.5.1-cp312-none-macosx_11_0_arm64.whl", hash = "sha256:8c712df61101964eb11910a846514011f0b6f5920c55dbf567bff8a34163d5b1", size = 63858109 },
     { url = "https://files.pythonhosted.org/packages/69/72/20cb30f3b39a9face296491a86adb6ff8f1a47a897e4d14667e6cf89d5c3/torch-2.5.1-cp313-cp313-manylinux1_x86_64.whl", hash = "sha256:9b61edf3b4f6e3b0e0adda8b3960266b9009d02b37555971f4d1c8f7a05afed7", size = 906393265 },
+]
+
+[[package]]
+name = "torch-optimi"
+version = "0.2.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "packaging" },
+    { name = "torch" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/df/75/e1b4d39318abd3c45542d4eed85ef45421f131e1343760e96afd35e6eb71/torch_optimi-0.2.1.tar.gz", hash = "sha256:31bf5f11d4ddd8fd995f3b148411b3a761d1a6e77052e1996a1f97a0dda6dd2b", size = 20145 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/d0/39/7139b48fad1c3abe33978ef47fa9735350197055adf4d51b49a481ea44d3/torch_optimi-0.2.1-py3-none-any.whl", hash = "sha256:d466b76c849290bc06420b3e555dd6ea95c22189217fc800db080aef77d16e6b", size = 37794 },
 ]
 
 [[package]]
