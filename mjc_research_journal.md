@@ -257,3 +257,34 @@ Speed
 so the latent part does slow us down
 
 an alternative method might be to just always do the latent forward, 1 step at a time with cache, but only recurse the loss if the input or output is latent
+
+
+
+# with and without bf16
+
+    2025-01-27 17:15:37.425 | INFO     | __main__:evaluate:325 - Question 0: Answer = '300' CoT = '<<4-2=2>>                                                                                           
+            <<2/.5=4>>
+            <<12/4=3>>
+            <<100*3=300>>'
+    Extracted llm Output: 'John cuts his grass to 2 inche...' (=? 300) ❌.
+    Full llm output: 'John cuts his grass to 2 inches.  It grows .5 inches per month.  When it gets to 4 inches he cuts it back down to 2 inches.  It cost $100 to get his grass cut.  How much does he pay per year?
+            <|start-latent|><|end-latent|><<<
+            To determine how much John pays per year for cutting his grass, we need to follow these steps:
+
+            1. Calculate the number of times John needs to cut his grass in a year.
+            2. Determine the cost per cut.
+            3. Multiply the number of cuts by the cost per cut to get the total annual'. 
+
+with 
+2025-01-27 17:36:39.008 | INFO     | __main__:evaluate:321 - Question 0: Answer = '300' CoT = '<<4-2=2>>                                                                                           
+        <<2/.5=4>>
+        <<12/4=3>>
+        <<100*3=300>>'
+Extracted llm Output: 'John cuts his grass to 2 inche...' (=? 300) ❌.
+Full llm output: 'John cuts his grass to 2 inches.  It grows .5 inches per month.  When it gets to 4 inches he cuts it back down to 2 inches.  It cost $100 to get his grass cut.  How much does he pay per year?
+        <|start-latent|><|end-latent|><<<
+        To determine how much John pays per year for cutting his grass, we need to follow these steps:
+
+        1. Calculate the number of times John needs to cut his grass in a year.
+        2. Determine the cost per cut.
+        3. Multiply the number of cuts by the cost per cut to get the total annual'. 

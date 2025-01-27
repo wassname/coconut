@@ -21,6 +21,8 @@ from coconut.dataset import (
 )
 from pathlib import Path
 
+from coconut.trainer_optimi import TrainerOptimi, convert_to_bfloat16
+
 
 import transformers
 from coconut.utils import Config, set_seed, ProgressCallbackNoPrint, rm_old_prog_cb
@@ -116,17 +118,9 @@ def main():
     dtype = torch.bfloat16 if configs.bf16 else torch.float32
     logger.info(f"Using device: {device}, dtype: {dtype}")
     model = model.to(device)
-
-
-    # def convert_to_bfloat16(module):
-    #     for child in module.children():
-    #         if isinstance(child, (nn.Linear, nn.Conv2d)):
-    #             child.to(torch.bfloat16)
-    #         else:
-    #             convert_to_bfloat16(child)
     
-    # if configs.bf16:
-    #     convert_to_bfloat16(model)
+    if configs.bf16:
+        convert_to_bfloat16(model)
 
     model = Coconut(model, latent_id, bot_id, eot_id, tokenizer.eos_token_id, replacement_method=configs.replacement_method)
 
@@ -240,7 +234,7 @@ def main():
             )
 
 
-            trainer = Trainer(
+            trainer = TrainerOptimi(
                 model=model,# if scheduled_stage > 0 else model.base_causallm,
                 args=training_args,
                 train_dataset=dataset_train,
