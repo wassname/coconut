@@ -19,13 +19,18 @@ from coconut.dataset import (
     get_dataset,
     get_question_only_latent_dataset,
 )
-from coconut.utils import Config, set_seed
 from pathlib import Path
+
+
+import transformers
+from coconut.utils import Config, set_seed, ProgressCallbackNoPrint, rm_old_prog_cb
+transformers.DEFAULT_PROGRESS_CALLBACK = ProgressCallbackNoPrint # monkey patch the default progress callback
 from transformers import (
     Trainer,
     TrainingArguments,
     AutoTokenizer,
 )
+
 from loguru import logger
 logger.remove()
 def sink(msg):
@@ -54,7 +59,9 @@ def clear_memory():
 def save_model(model, f):
     states = model.state_dict()
     torch.save(states, f)
-    logger.info(f"saving model. {f}")        
+    logger.info(f"saving model. {f}")  
+
+
 
 def main():
     parser = argparse.ArgumentParser(description="coconut")
@@ -110,13 +117,13 @@ def main():
     logger.info(f"Using device: {device}, dtype: {dtype}")
     model = model.to(device)
 
-    model = Coconut(model, latent_id, bot_id, eot_id, tokenizer.eos_token_id)
+    model = Coconut(model, latent_id, bot_id, eot_id, tokenizer.eos_token_id, replacement_method=configs.replacement_method)
 
     # setup eval
     logger.info(model)
     max_size=32 if configs.debug else (configs.max_size or 100000000)
     base_dataset_valid = get_dataset(
-        configs.val_path, tokenizer, max_size=max_size, drop_unused=False
+        configs.val_path, tokenizer, max_size=max_size//30+3, drop_unused=False
     )
 
     if not configs.only_eval:
@@ -143,7 +150,7 @@ def main():
         learning_rate=configs['lr'],
         warmup_ratio=0.1,
         # max_steps=configs['samples_per_epoch']//configs['batch_size_training']*configs['num_epochs'],
-        logging_steps=100, # TODO ideally we log to tensorboard every step, but to ui every 100 steps
+        logging_steps=1, # TODO ideally we log to tensorboard every step, but to ui every 100 steps
         save_steps=10000,
         bf16=configs.bf16,
         bf16_full_eval=configs.bf16,
@@ -157,98 +164,94 @@ def main():
         # save_strategy="no",
     )
 
-    for phase in range(2):
-        for epoch in range(configs.num_epochs if (phase>0) else 1):
-            if phase==0:
-                scheduled_stage = 0
-                configs.c_thought=0
-                configs.max_latent_stage = 0
-                configs.cot = True
-                configs.coconut = False
-            else:
-                scheduled_stage = epoch // configs['epochs_per_stage']
-                configs.c_thought = 2
-                configs.max_latent_stage = 3
-                configs.cot = False
-                configs.coconut = True
+    """
+    The stages
+    - phase 0: epoch 0: normal CoT training, with bot and eot tokens, to get it used to the structure with no recusion yet
+    - phase 1+: epoch N: CoT training, with bot and eot tokens, add X more <latent> tokens each stage, until you have X times more than steps in the original dataset
+    """
 
-            no_bot_eot=(scheduled_stage == 0)
+    for epoch in range(configs.num_epochs):
 
+        scheduled_stage = epoch // configs['epochs_per_stage']
+        no_bot_eot=configs.cot or configs.no_cot or configs.no_thoughts
+        logger.info(f"scheduled_stage={scheduled_stage}, no_bot_eot={no_bot_eot}, c_thought={configs.c_thought}, max_latent_stage={configs.max_latent_stage}, cot={configs.cot}, coconut={configs.coconut}")
 
-            # initial eval
-            dataset_gen_val = get_question_only_latent_dataset(
+        # initial eval
+        dataset_gen_val = get_question_only_latent_dataset(
+            scheduled_stage,
+            base_dataset_valid,
+            configs,
+            bot_id,
+            latent_id,
+            eot_id,
+            no_bot_eot=no_bot_eot,
+            # drop_unused=False,
+        )
+        valid_gen_dataloader = torch.utils.data.DataLoader(
+            dataset_gen_val,
+            num_workers=1,
+            pin_memory=True,
+            batch_size=1,
+            collate_fn=collator,
+        )
+        if "gsm" in configs.val_path:
+            max_new_tokens = 64
+        else:
+            max_new_tokens = 128
+        # if epoch==0:
+        #     r = evaluate(valid_gen_dataloader, model, tokenizer, base_dataset_valid, max_new_tokens=max_new_tokens, name=f"eval_{phase}_{epoch}_start")
+        #     if wandb_run:
+        #         wandb_run.log(r)
+
+        logger.info(f"Training stage epoch={epoch} stage={scheduled_stage}")
+
+        dataset_loss_val = get_cot_latent_dataset(
+            scheduled_stage,
+            base_dataset_valid,
+            configs,
+            bot_id,
+            latent_id,
+            eot_id,
+            no_bot_eot=no_bot_eot,
+        )
+
+        if not configs.only_eval:
+            dataset_train = get_cot_latent_dataset(
                 scheduled_stage,
-                base_dataset_valid,
+                base_dataset_train,
                 configs,
                 bot_id,
                 latent_id,
                 eot_id,
                 no_bot_eot=no_bot_eot,
-                # drop_unused=False,
-            )
-            valid_gen_dataloader = torch.utils.data.DataLoader(
-                dataset_gen_val,
-                num_workers=1,
-                pin_memory=True,
-                batch_size=1,
-                collate_fn=collator,
-            )
-            if "gsm" in configs.val_path:
-                max_new_tokens = 64
-            else:
-                max_new_tokens = 128
-            # if epoch==0:
-            #     r = evaluate(valid_gen_dataloader, model, tokenizer, base_dataset_valid, max_new_tokens=max_new_tokens, name=f"eval_{phase}_{epoch}_start")
-            #     if wandb_run:
-            #         wandb_run.log(r)
-
-            logger.info(f"Training stage {scheduled_stage}, phase {phase}")
-
-            dataset_loss_val = get_cot_latent_dataset(
-                scheduled_stage,
-                base_dataset_valid,
-                configs,
-                bot_id,
-                latent_id,
-                eot_id,
-                no_bot_eot=no_bot_eot,
+                shuffle=True,
             )
 
-            if not configs.only_eval:
-                dataset_train = get_cot_latent_dataset(
-                    scheduled_stage,
-                    base_dataset_train,
-                    configs,
-                    bot_id,
-                    latent_id,
-                    eot_id,
-                    no_bot_eot=no_bot_eot,
-                    shuffle=True,
-                )
-
-                trainer = Trainer(
-                    model=model if scheduled_stage > 0 else model.base_causallm,
-                    args=training_args,
-                    train_dataset=dataset_train,
-                    eval_dataset=dataset_loss_val,
-                    data_collator=collator,
-                )
-                # TODO we don't need to shuffle train as it's done during load
-                clear_memory()
-                trainer.train()
-
-
+            trainer = Trainer(
+                model=model if scheduled_stage > 0 else model.base_causallm,
+                args=training_args,
+                train_dataset=dataset_train,
+                eval_dataset=dataset_loss_val,
+                data_collator=collator,
+                callbacks=[ProgressCallbackNoPrint()]
+            )
+            # TODO we don't need to shuffle train as it's done during load
             clear_memory()
-            r = evaluate(valid_gen_dataloader, model, tokenizer, base_dataset_valid, max_new_tokens=max_new_tokens, name=f"eval_{phase}_{epoch}")
-            clear_memory()
-            if wandb_run:
-                wandb_run.log(r)
+            rm_old_prog_cb(trainer)
+            trainer.train()
 
-            save_model(model, save_dir / f"checkpoint_{phase}_{epoch}.pt")
+
+        clear_memory()
+        r = evaluate(valid_gen_dataloader, model, tokenizer, base_dataset_valid, max_new_tokens=max_new_tokens, name=f"eval_{epoch}", dtype=dtype, device=device)
+        clear_memory()
+        if wandb_run:
+            wandb_run.log(r)
+
+        save_model(model, save_dir / f"checkpoint_{epoch}.pt")
         
 
-
-def evaluate(dataloader, model, tokenizer, ds, max_new_tokens=64, device='cuda', name=""):
+@torch.no_grad()
+def evaluate(dataloader, model, tokenizer, ds, max_new_tokens=64, device='cuda', name="", dtype=torch.float32):
 
 
     # get original answer
@@ -262,7 +265,7 @@ def evaluate(dataloader, model, tokenizer, ds, max_new_tokens=64, device='cuda',
     total_length = len(dataloader)
 
     pbar = tqdm(
-        colour="green", desc="Test Accuracy", total=total_length, dynamic_ncols=True
+        colour="green", desc=f"Test Accuracy {name}", total=total_length, dynamic_ncols=True
     )
     logger.info(f"Starting evaluation {name}")
     cor, cor_cot, total = 0, 0, 0
@@ -283,13 +286,12 @@ def evaluate(dataloader, model, tokenizer, ds, max_new_tokens=64, device='cuda',
 
             total += 1
 
-            # TODO use amp?
-
-            outputs = model.generate(
-                **batch,
-                max_new_tokens=max_new_tokens,
-                pad_token_id=tokenizer.eos_token_id,
-            )
+            with torch.autocast(device_type=device, dtype=dtype):
+                outputs = model.generate(
+                    **batch,
+                    max_new_tokens=max_new_tokens,
+                    pad_token_id=tokenizer.eos_token_id,
+                )
 
             def indent(s):
                 return s.replace("\n", "\n\t")
@@ -300,7 +302,7 @@ def evaluate(dataloader, model, tokenizer, ds, max_new_tokens=64, device='cuda',
                 ("\n".join(llm_text_output.split("\n")[1:])).split("#")[0].strip()
             )
 
-            if idx < 5:
+            if idx < 3:
                 correct = '✅' if llm_answer_output==answer else '❌'
                 logger.info(
                     f"""Question {test_idx}: Answer = '{answer}' CoT = '{indent(answer_cot)}'
@@ -313,10 +315,10 @@ Full llm output: '{indent(tokenizer.decode(outputs[0]))}'.
             cor_cot += llm_cot_output == answer_cot
 
             pbar.update(1)
-            pbar.set_description(f"Test accuracy: {round(float(cor / total), 2)}")
+            pbar.set_description(f"Test accuracy: {round(float(cor / total), 2)}. {name}")
 
         pbar.close()
-        logger.info(f"Cor={cor}, CoT={cor_cot}, Total={total}")
+        logger.info(f"Cor={cor}, CoT={cor_cot}, Total={total}. {name}")
         logger.info(f"Accuracy on validation set:  {cor} / {total} = {cor / total}")
         logger.info(
             f"CoT match on validation set: {cor_cot} / {total} = {cor_cot / total}"

@@ -22,16 +22,9 @@ HiddenStates = Tuple[Float[Tensor, 'b t h']]
 
 
 
-def hs2ie(hidden_states: HiddenStates, inputs_embeds: HiddenState) -> HiddenState:
+def hs2ie(hidden_states: HiddenStates, inputs_embeds: HiddenState, method='-1') -> HiddenState:
     """hidden states to inputs_embeds"""
 
-    # use last hidden layer
-    return hidden_states[-1]
-
-    # or second to last, to keep supressed tokens
-    # return hidden_states[-2]
-
-    # or use supressed tokens [-1]
     """
     Novel experiment: Here we define a transform to isolate supressed activations, where we hypothesis that style/concepts/scratchpads and other internal only representations must be stored.
 
@@ -41,11 +34,36 @@ def hs2ie(hidden_states: HiddenStates, inputs_embeds: HiddenState) -> HiddenStat
 
     - https://arxiv.org/pdf/2401.12181
         > We find a striking pattern which is remarkably consistent across the different seeds: after about the halfway point in the model, prediction neurons become increasingly prevalent until the very end of the network where there is a sudden shift towards a much larger number of suppression neurons.
-    """
-    supressed_act = -rearrange(list(hidden_states), 'l b 1 h -> l b h').diff(dim=0).clamp(min=None, max=0)
-    hs = supressed_act[-1][:, None] # last layer, add dummy sequence dim
-    # we need to make it more like the original hidden states, so prev input embedding plus the supressed tokens
-    return inputs_embeds + hs
+    """        
+
+    n = len(hidden_states)
+    i_half = int(n * 0.5)
+    if method == '-1':
+        return hidden_states[-1]
+    elif method == '-2':
+        return hidden_states[-2]
+    elif method == '0.5':
+        return hidden_states[i_half]
+    
+    # FIXME ok so this doesn't account for information being removed then added
+    # and it assumed removal == reduction in positive magnitude, but it could be negative. So I should refactor for all reduction in magnitude
+    hs = rearrange(list(hidden_states), 'l b t h -> l b t h')
+    diffs = hs[:, :, -1].diff(dim=0)
+    supressed_act = -diffs.clamp(min=None, max=0) # removed positive activations
+    # or all reduction in magnitudes
+    mask_was_reduction = (diffs.abs() < hs[:, :, -1][:-1].abs()).float()
+    supressed_act = -diffs * mask_was_reduction
+    if method == 'ie+supressed[-1]':
+        # need to make it more like the original hidden states, so prev input embedding plus the supressed tokens
+        return inputs_embeds + supressed_act[-1].unsqueeze(1) # last layer, add dummy sequence dim
+    elif method == 'ie+supressed[0.5:]':
+        return inputs_embeds + supressed_act[i_half:].sum(dim=0).unsqueeze(1)
+    elif method == 'hs+supressed[0.5:]':
+            return hidden_states[-1] + supressed_act[i_half:].sum(dim=0).unsqueeze(1)
+    elif method == 'supressed[0.5:]':
+        return supressed_act[i_half:].sum(dim=0).unsqueeze(1)
+    
+    ValueError(f"Unknown method {method}")
 
 
 class Coconut(nn.Module):
@@ -56,6 +74,7 @@ class Coconut(nn.Module):
         start_latent_id,
         end_latent_id,
         eos_token_id,
+        replacement_method='-1',
     ):
         super(Coconut, self).__init__()
         self.gen_forward_cnt = 0
@@ -64,6 +83,7 @@ class Coconut(nn.Module):
         self.eos_token_id = eos_token_id
         self.start_latent_id = start_latent_id
         self.end_latent_id = end_latent_id
+        self.replacement_method = replacement_method
 
 
     @property
@@ -191,13 +211,12 @@ class Coconut(nn.Module):
 
 
             # replace some of them with continuous thoughts
-            # FIXME on the second batch I seem to have a 1 seq length, why?
             for idx_pair in filling_indices:
                 batch_idx, token_idx = idx_pair
 
                 # TODO experiment with transformers here, we are replacing. 
                 # replace it with the preceding last hidden states
-                recrv_embeds = hs2ie(hidden_states, inputs_embeds)
+                recrv_embeds = hs2ie(hidden_states, inputs_embeds, method=self.replacement_method)
                 # print({'hs': torch.stack(hidden_states).shape, 'recrv_embeds': recrv_embeds.shape, 'tensor_list': tensor_list[batch_idx][token_idx].shape})
                 tensor_list[batch_idx][token_idx] = recrv_embeds[
                     batch_idx, token_idx - 1 - hidden_states_offset, :

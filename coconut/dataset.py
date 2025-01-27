@@ -190,7 +190,7 @@ def get_question_only_latent_dataset(
     format: question, latent
 
     args:
-    - no_special_marker: if True, don't include thought tokens 
+    - no_bot_eot: if True, don't include thought tokens 
     """
     def process_dataset(sample):
 

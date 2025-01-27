@@ -21,3 +21,33 @@ def set_seed(seed_value):
     os.environ["PYTHONHASHSEED"] = str(seed_value)
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
+
+
+
+from transformers.trainer_callback import ProgressCallback
+class ProgressCallbackNoPrint(ProgressCallback):
+    """ProgressCallback that doesn't print anything
+    
+    Usage: 
+        # at top of file, monkey patch the default progress callback
+        import transformers
+        transformers.DEFAULT_PROGRESS_CALLBACK = ProgressCallbackNoPrint
+
+        # or 
+
+        trainer = Trainer(
+            ..., 
+            logging_steps=1,
+            callbacks=[ProgressCallbackNoPrint()]
+        )
+        rm_old_prog_cb(trainer)
+        trainer.train()
+    """
+    def on_log(self, *args, **kwargs):
+        pass
+
+def rm_old_prog_cb(trainer):
+    for cb in trainer.callback_handler.callbacks:
+        if isinstance(cb, ProgressCallback):
+            if not isinstance(cb, ProgressCallbackNoPrint):
+                trainer.remove_callback(cb)

@@ -2,19 +2,23 @@
 
 project: coconut
 save_path: outputs/
-name: gsm-cot-qwen
+name: gsm-qwen
 
 only_eval: False
 
-coconut: False
-cot: True
+coconut: True
+cot: False
 no_thoughts: False
 no_cot: False
 
-c_thought: 0
+c_thought: 2
 epochs_per_stage: 1
-max_latent_stage: 0
+max_latent_stage: 3
 pad_latent_to_max: True
+# replacement_method: "-1"
+# replacement_method: "ie+supressed[0.5:]"
+replacement_method: "hs+supressed[0.5:]"
+# replacement_method: "supressed[-10:]"
 
 save_only_improve: True
 uniform_prob: 0.0

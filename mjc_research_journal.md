@@ -248,3 +248,12 @@ ppo mini batch size 64 # One sample is split into multiple sub-batches with batc
 ppo_micro_batch_size=1  #  Similar to gradient accumulation, the micro_batch_size for one forward pass, trading speed for GPU memory
 log_prob_micro_bathc size 4 (the real size)
 
+Speed
+- 0_0 5min
+- 1_0 9min for 10k
+- 1_1 12mins for 10k
+- test is always 5mins for 500
+
+so the latent part does slow us down
+
+an alternative method might be to just always do the latent forward, 1 step at a time with cache, but only recurse the loss if the input or output is latent

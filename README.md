@@ -14,16 +14,21 @@ Forked to replicate and experiment and understand
     - [ ] a projection of the last hidden state? Normalised
 
 
+install
 ~~~bash
 uv sync
 
 . ./.venv/bin/activate
 bash scripts/preprocessing/gsm_icot.bash
+~~~
+
+run
+~~~sh
 
 export CUDA_DEVICE_ORDER=PCI_BUS_ID
 export CUDA_VISIBLE_DEVICES=1
 . ./.venv/bin/activate
-python scripts/run.py args/gsm_cot_qwen.yaml
+python scripts/run.py args/gsm_qwen.yaml
 ~~~
 ----
 
