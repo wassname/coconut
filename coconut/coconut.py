@@ -21,20 +21,54 @@ HiddenState = Float[Tensor, 'b t h']
 HiddenStates = Tuple[Float[Tensor, 'b t h']]
 
 
+global _w_out_inv
+_w_out_inv = None
 
-def hs2ie(hidden_states: HiddenStates, inputs_embeds: HiddenState, method='-1') -> HiddenState:
-    """hidden states to inputs_embeds"""
+@torch.no_grad()
+def get_cache_inv(w_out):
+    global _w_out_inv
+    if _w_out_inv is None:
+        _w_out_inv = torch.pinverse(w_out.clone().float())
+    return _w_out_inv
 
+
+
+def get_supressed_activations(hs: Float[Tensor, 'l b t h'], w_out=None) -> Float[Tensor, 'l b t h']:
     """
     Novel experiment: Here we define a transform to isolate supressed activations, where we hypothesis that style/concepts/scratchpads and other internal only representations must be stored.
 
     See the following references for more information:
-    - https://arxiv.org/html/2406.19384v1
+
+    - https://arxiv.org/pdf/2401.12181
+        - > Suppression neurons that are similar, except decrease the probability of a group of related tokens
+
+    - https://arxiv.org/html/2406.19384
         - > Previous work suggests that networks contain ensembles of “prediction" neurons, which act as probability promoters [66, 24, 32] and work in tandem with suppression neurons (Section 5.4). 
 
     - https://arxiv.org/pdf/2401.12181
         > We find a striking pattern which is remarkably consistent across the different seeds: after about the halfway point in the model, prediction neurons become increasingly prevalent until the very end of the network where there is a sudden shift towards a much larger number of suppression neurons.
-    """        
+    """      
+    with torch.no_grad():
+        # here we pass the hs through the last layer, take a diff, and then project it back to find which activation changes lead to supressed 
+        hs2 = rearrange(hs[:, :, -1:], 'l b t h -> (l b t) h')
+        hs_out2 = torch.nn.functional.linear(hs2, w_out)
+        hs_out = rearrange(hs_out2, '(l b t) h -> l b t h', l=hs.shape[0], b=hs.shape[1], t=1)
+        diffs = hs_out[:, :, :].diff(dim=0)
+        diffs2 = rearrange(diffs, 'l b t h -> (l b t) h')
+        W_inv = get_cache_inv(w_out)
+        diffs_inv2 = torch.nn.functional.linear(diffs2, W_inv)
+        diffs_inv = rearrange(diffs_inv2, '(l b t) h -> l b t h', l=hs.shape[0]-1, b=hs.shape[1], t=1).to(w_out.dtype)
+        # TODO just return this?
+        eps = 1.e-1
+        supressed_mask = (diffs_inv < -eps).to(hs.dtype)
+        # supressed_mask = repeat(supressed_mask, 'l b 1 h -> l b t h', t=hs.shape[2])
+    supressed_act = hs[1:] * supressed_mask
+    return supressed_act
+
+
+
+def hs2ie(hidden_states: HiddenStates, inputs_embeds: HiddenState, w_out=None, method='-1') -> HiddenState:
+    """hidden states to inputs_embeds"""
 
     n = len(hidden_states)
     i_half = int(n * 0.5)
@@ -45,24 +79,26 @@ def hs2ie(hidden_states: HiddenStates, inputs_embeds: HiddenState, method='-1') 
     elif method == '0.5':
         return hidden_states[i_half]
     
+
+  
     # FIXME ok so this doesn't account for information being removed then added
     # and it assumed removal == reduction in positive magnitude, but it could be negative. So I should refactor for all reduction in magnitude
     hs = rearrange(list(hidden_states), 'l b t h -> l b t h')
-    diffs = hs[:, :, -1].diff(dim=0)
-    # supressed_act = -diffs.clamp(min=None, max=0) # removed positive activations
-    # or all reduction in magnitudes
-    mask_was_reduction = (diffs.abs() < hs[:, :, -1][:-1].abs()).float()
-    supressed_act = -diffs * mask_was_reduction
+    supressed_act = get_supressed_activations(hs, w_out)
 
     if method == 'ie+supressed[-1]':
         # need to make it more like the original hidden states, so prev input embedding plus the supressed tokens
-        return inputs_embeds + supressed_act[-1].unsqueeze(1) # last layer, add dummy sequence dim
+        return inputs_embeds + supressed_act[-1] # last layer, add dummy sequence dim
     elif method == 'ie+supressed[0.5:]':
-        return inputs_embeds + supressed_act[i_half:].sum(dim=0).unsqueeze(1)
+        return inputs_embeds + supressed_act[i_half:].sum(dim=0)
     elif method == 'hs+supressed[0.5:]':
-            return hidden_states[-1] + supressed_act[i_half:].sum(dim=0).unsqueeze(1)
+        return hidden_states[-1] + supressed_act[i_half:].sum(dim=0)
     elif method == 'supressed[0.5:]':
-        return supressed_act[i_half:].sum(dim=0).unsqueeze(1)
+        # FIXME this need to be repeated along token dim
+        T = inputs_embeds.shape[1]
+        hs = supressed_act[i_half:].sum(dim=0)
+        hs = repeat(hs, 'b 1 h -> b t h', t=T)
+        return hs
     
     ValueError(f"Unknown method {method}")
 
@@ -119,7 +155,7 @@ class Coconut(nn.Module):
         kv_cache = None
 
         for pass_idx in range(max_n_latents):
-            if kv_cache == None:
+            if kv_cache is None:
                 # past_key_values = DynamicCache2()
                 # first forward pass
                 outputs = self.base_causallm(
@@ -180,6 +216,7 @@ class Coconut(nn.Module):
             )
 
             hidden_states = outputs.hidden_states
+            assert hidden_states is not None
             kv_cache = outputs.past_key_values
             if isinstance(kv_cache, DynamicCache):
                 kv_cache = kv_cache.to_legacy_cache()
@@ -217,7 +254,8 @@ class Coconut(nn.Module):
 
                 # TODO experiment with transformers here, we are replacing. 
                 # replace it with the preceding last hidden states
-                recrv_embeds = hs2ie(hidden_states, inputs_embeds, method=self.replacement_method)
+                Wo = self.base_causallm.lm_head.weight
+                recrv_embeds = hs2ie(hidden_states, inputs_embeds, Wo, method=self.replacement_method)
                 # print({'hs': torch.stack(hidden_states).shape, 'recrv_embeds': recrv_embeds.shape, 'tensor_list': tensor_list[batch_idx][token_idx].shape})
                 tensor_list[batch_idx][token_idx] = recrv_embeds[
                     batch_idx, token_idx - 1 - hidden_states_offset, :

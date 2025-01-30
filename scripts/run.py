@@ -78,12 +78,15 @@ def main():
 
     configs = Config(config_dict)
 
+    timestamp = pd.Timestamp.now().strftime("%Y%m%d-%H%M%S")
+    run_name = f"{configs.name}_{timestamp}"
+
     if os.environ.get('DEBUG', False):
         configs.debug = True
         logger.warning("Debug mode is on")
 
     set_seed(configs.seed)
-    save_dir = Path(configs.save_path) / configs.name
+    save_dir = Path(configs.save_path) / run_name
     save_dir.mkdir(parents=True, exist_ok=True)
 
     # checkpoints = [f.name for f in save_dir.glob("checkpoint_*")]
@@ -91,7 +94,9 @@ def main():
 
     # load base model
     model = AutoModelForCausalLM.from_pretrained(configs.model_id)
-    tokenizer = AutoTokenizer.from_pretrained(configs.model_id)
+    tokenizer = AutoTokenizer.from_pretrained(configs.model_id,
+                                              padding_side="right",
+    )
     tokenizer.pad_token = tokenizer.eos_token
     tokenizer.pad_token_id = tokenizer.eos_token_id
     # model.generation_config.pad_token_id = tokenizer.pad_token_id
@@ -119,6 +124,7 @@ def main():
     logger.info(f"Using device: {device}, dtype: {dtype}")
     model = model.to(device)
     
+    # model = model.to(dtype=dtype)
     if configs.bf16:
         convert_to_bfloat16(model)
 
@@ -138,7 +144,10 @@ def main():
 
     # wandb
     if not configs.debug and not configs.only_eval:
-        wandb_run = wandb.init(project=configs.project, name=configs.name, resume="auto")
+        wandb_run = wandb.init(project=configs.project, group=configs.name, 
+                               name=run_name,
+                            #    resume="allow"
+                               )
         wandb_run.config.update(configs, allow_val_change=True)
     else:
         os.environ["WANDB_MODE"] = "disabled"
@@ -148,15 +157,15 @@ def main():
 
     # Set up training arguments
     training_args = TrainingArguments(
-        run_name=configs.name,
+        run_name=run_name,
         output_dir=save_dir,
         per_device_train_batch_size=configs['batch_size_training'],
         gradient_accumulation_steps=configs.gradient_accumulation_steps,
         learning_rate=configs['lr'],
-        warmup_ratio=0.1,
+        warmup_ratio=0.2,
         # max_steps=configs['samples_per_epoch']//configs['batch_size_training']*configs['num_epochs'],
         logging_steps=1, # TODO ideally we log to tensorboard every step, but to ui every 100 steps
-        save_steps=10000,
+        save_steps=100000,
         bf16=configs.bf16,
         bf16_full_eval=configs.bf16,
         optim="adamw_bnb_8bit", # save memory:adamw_torch  adamw_bnb_8bit or paged_adamw_32bit
@@ -164,7 +173,7 @@ def main():
         torch_empty_cache_steps=100,
         save_safetensors=False,
         report_to="wandb" if wandb_run else None,
-        lr_scheduler_type="cosine",# cosine cosine_with_restarts
+        # lr_scheduler_type="cosine",# cosine cosine_with_restarts
         
         # save_strategy="no",
     )
@@ -174,8 +183,16 @@ def main():
     - phase 0: epoch 0: normal CoT training, with bot and eot tokens, to get it used to the structure with no recusion yet
     - phase 1+: epoch N: CoT training, with bot and eot tokens, add X more <latent> tokens each stage, until you have X times more than steps in the original dataset
     """
+    
+
+    res = []
 
     for epoch in range(configs.num_epochs):
+        # FIXME after max_latent_stage, run for multiple epochs? without reseting optim
+        if epoch == configs.max_latent_stage:
+            training_args.num_train_epochs = configs.num_epochs - configs.max_latent_stage
+        elif epoch > configs.max_latent_stage:
+            break
 
         scheduled_stage = epoch // configs['epochs_per_stage']
         no_bot_eot=configs.cot or configs.no_cot or configs.no_thoughts
@@ -251,11 +268,19 @@ def main():
 
         clear_memory()
         r = evaluate(valid_gen_dataloader, model, tokenizer, base_dataset_valid, max_new_tokens=max_new_tokens, name=f"eval_{epoch}", dtype=dtype, device=device)
+        r['epoch'] = epoch
         clear_memory()
         if wandb_run:
             wandb_run.log(r)
 
         save_model(model, save_dir / f"checkpoint_{epoch}.pt")
+        res.append(r)
+
+    print('results')
+    print(configs)
+    df_res = pd.DataFrame([res])
+    df_res.to_csv(save_dir / "results.csv")
+    print(df_res.to_markdown())
         
 
 @torch.no_grad()
@@ -319,7 +344,7 @@ def evaluate(dataloader, model, tokenizer, ds, max_new_tokens=64, device='cuda',
             if idx < 3:
                 correct = '✅' if llm_answer_output==answer else '❌'
                 logger.info(
-                    f"""Q #{test_idx}: Answer = '{answer}' CoT = '{indent(answer_cot)},'.
+                    f"""Q #{test_idx}: Answer = '{answer}' ideal_CoT = '{indent(answer_cot)},'.
 Question: `{indent(question)}`.
 Extracted llm Output: `{crop(llm_answer_output)}` (=? {answer}) {correct}.
 Full llm output: `{indent(tokenizer.decode(outputs[0]))}`. 
@@ -333,7 +358,7 @@ Full llm output: `{indent(tokenizer.decode(outputs[0]))}`.
             pbar.set_description(f"Test accuracy: {round(float(cor / total), 2)}. {name}")
 
         pbar.close()
-        logger.info(f"Cor={cor}, CoT={cor_cot}, Total={total}. {name}")
+        logger.info(f"Correct={cor}, CoT_correct={cor_cot}, Total={total}. {name}")
         logger.info(f"Accuracy on validation set:  {cor} / {total} = {cor / total}")
         logger.info(
             f"CoT match on validation set: {cor_cot} / {total} = {cor_cot / total}"

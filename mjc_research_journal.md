@@ -288,3 +288,58 @@ Full llm output: 'John cuts his grass to 2 inches.  It grows .5 inches per month
         1. Calculate the number of times John needs to cut his grass in a year.
         2. Determine the cost per cut.
         3. Multiply the number of cuts by the cost per cut to get the total annual'. 
+
+
+So right now I'm getting
+
+| epoch | thoughts | acc  | mins | notes        |
+| ----- | -------- | ---- | ---- | ------------ |
+| 0     | 0        | 0.7  | 23   | test is 5min |
+| 1     | 2        | 0.6  | 30   |
+| 2     | 4        | 0.47 | 32   |
+| 3     | 6        | 0.36 | 32   |
+| 4     | 6        | 0.31 | 33   |
+
+
+
+
+
+- 0 thought, 0.7, 23min, test is 5min
+- 2, 0.6, 30min
+- 4, 0.47, 32min
+- 6, 0.36, 30min
+- 6, 0.31, 33
+
+2h total
+
+so it's getting worse with more latent tokens. It seems it having trouble adapting with replacement_method=-1. Maybe I just need more training. 
+
+Also lr might be too high as it spikes the loss at the beginning of epoch?
+
+# 2025-01-28 07:07:16
+
+using 0.5 did eventually start improving after 10k steps
+
+
+39 min but double the data
+
+
+what's the right lr?
+1e-4 d=0.01 only goes to acc 0.5
+what about 1e-5 and 1d=0.001? it gets 0.63 so yeah
+1e-6 wd=0.001 0.43 hmm
+
+
+Hm Ideally I need a better way to work out supressed neurons or hidden states.
+
+Ideally I can use (hs*w_out).diff(), do I need grad?
+
+
+# 2025-01-29 18:59:47
+
+0.64
+0.50
+
+0.71
+0.63
+0.47
