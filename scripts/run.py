@@ -58,11 +58,10 @@ def clear_memory():
     gc.collect()
     torch.cuda.empty_cache()
 
-def save_model(model, f):
-    states = model.state_dict()
-    torch.save(states, f)
-    logger.info(f"saving model. {f}")  
-
+def save_model(model, tokenizer, save_dir: Path):
+    tokenizer.save_pretrained(save_dir)
+    model.save_pretrained(save_dir)
+    logger.info(f"saving model {save_dir}")
 
 
 def main():
@@ -130,6 +129,8 @@ def main():
 
     model = Coconut(model, latent_id, bot_id, eot_id, tokenizer.eos_token_id, replacement_method=configs.replacement_method)
 
+    save_model(model, tokenizer, save_dir / f"checkpoint_{1}")
+
     # setup eval
     logger.info(model)
     max_size=32 if configs.debug else (configs.max_size or 100000000)
@@ -165,13 +166,14 @@ def main():
         warmup_ratio=0.2,
         # max_steps=configs['samples_per_epoch']//configs['batch_size_training']*configs['num_epochs'],
         logging_steps=1, # TODO ideally we log to tensorboard every step, but to ui every 100 steps
-        save_steps=100000,
+        save_steps=10000,
         bf16=configs.bf16,
         bf16_full_eval=configs.bf16,
         optim="adamw_bnb_8bit", # save memory:adamw_torch  adamw_bnb_8bit or paged_adamw_32bit
         num_train_epochs=1,#configs['epochs_per_stage'],
         torch_empty_cache_steps=100,
         save_safetensors=False,
+        save_only_model=True,
         report_to="wandb" if wandb_run else None,
         # lr_scheduler_type="cosine",# cosine cosine_with_restarts
         
@@ -191,6 +193,7 @@ def main():
         # FIXME after max_latent_stage, run for multiple epochs? without reseting optim
         if epoch == configs.max_latent_stage:
             training_args.num_train_epochs = configs.num_epochs - configs.max_latent_stage
+            print("max_latent_stage reached, training in one large run for", training_args.num_train_epochs)
         elif epoch > configs.max_latent_stage:
             break
 
@@ -263,8 +266,11 @@ def main():
             # TODO we don't need to shuffle train as it's done during load
             clear_memory()
             rm_old_prog_cb(trainer)
-            trainer.train()
-
+            try:
+                trainer.train()
+            except KeyboardInterrupt:
+                logger.info("Interrupted")
+                break
 
         clear_memory()
         r = evaluate(valid_gen_dataloader, model, tokenizer, base_dataset_valid, max_new_tokens=max_new_tokens, name=f"eval_{epoch}", dtype=dtype, device=device)

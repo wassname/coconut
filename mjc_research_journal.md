@@ -343,3 +343,10 @@ Ideally I can use (hs*w_out).diff(), do I need grad?
 0.71
 0.63
 0.47
+
+ok don't reset opt seems proimsing
+
+need to get save working
+do I need to make coconut a subclass of transformer
+and config it a subclass or model or modelconfig?
+yeah seems good
