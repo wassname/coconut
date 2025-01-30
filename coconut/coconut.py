@@ -102,40 +102,36 @@ def hs2ie(hidden_states: HiddenStates, inputs_embeds: HiddenState, w_out=None, m
     
     ValueError(f"Unknown method {method}")
 
+from transformers import (
+    Qwen2ForCausalLM,
+    DynamicCache,
+    PreTrainedTokenizer,
+    Qwen2Config,
+)
 
-class Coconut(nn.Module):
+
+class CoconutConfig(Qwen2Config):
+    def __init__(self, **kwargs):
+        self.replacement_method = kwargs.pop("replacement_method", "-1")
+        self.latent_token_id = kwargs.pop("latent_token_id", None)
+        self.eos_token_id = kwargs.pop("eos_token_id", None)
+        super().__init__(**kwargs)
+
+
+class CoconutQwen2ForCausalLM(Qwen2ForCausalLM):
     def __init__(
         self,
-        base_causallm,
-        latent_token_id,
-        start_latent_id,
-        end_latent_id,
-        eos_token_id,
-        replacement_method='-1',
+        config
     ):
-        super(Coconut, self).__init__()
+        super().__init__(config)
         self.gen_forward_cnt = 0
-        self.base_causallm = base_causallm
-        self.latent_token_id = latent_token_id
-        self.eos_token_id = eos_token_id
-        self.start_latent_id = start_latent_id
-        self.end_latent_id = end_latent_id
-        self.replacement_method = replacement_method
 
-
-    @property
-    def embedding(self):
-        # tested with GPT2 and Llama3
-        if isinstance(self.base_causallm, GPT2LMHeadModel):
-            return self.base_causallm.transformer.get_input_embeddings()
-        else:
-            return self.base_causallm.get_input_embeddings()
 
     def forward(self, input_ids, attention_mask, labels, position_ids, **kwargs):
         logits = []
 
         latent_indices = (
-            input_ids == self.latent_token_id
+            input_ids == self.config.latent_token_id
         ).nonzero()  # (num_latent_tokens_in_the_batch, 2)
 
         latent_lists = [
@@ -146,7 +142,7 @@ class Coconut(nn.Module):
         max_n_latents = max([len(l) for l in latent_lists])
 
         next_compute_range = (0, input_ids.shape[1])
-        inputs_embeds = self.embedding(input_ids)
+        inputs_embeds = self.get_input_embeddings()(input_ids)
 
         if max_n_latents > 0:
             next_compute_range = (0, latent_indices[:, 1].min().item())
@@ -158,7 +154,7 @@ class Coconut(nn.Module):
             if kv_cache is None:
                 # past_key_values = DynamicCache2()
                 # first forward pass
-                outputs = self.base_causallm(
+                outputs = super().forward(
                     inputs_embeds=inputs_embeds[
                         :, next_compute_range[0] : next_compute_range[1], :
                     ],
@@ -186,7 +182,7 @@ class Coconut(nn.Module):
                 # Qwen needs this
                 past_key_values= DynamicCache.from_legacy_cache(past_key_values)
 
-                outputs = self.base_causallm(
+                outputs = super().forward(
                     inputs_embeds=inputs_embeds[
                         :, next_compute_range[0] : next_compute_range[1], :
                     ],
@@ -254,8 +250,8 @@ class Coconut(nn.Module):
 
                 # TODO experiment with transformers here, we are replacing. 
                 # replace it with the preceding last hidden states
-                Wo = self.base_causallm.lm_head.weight
-                recrv_embeds = hs2ie(hidden_states, inputs_embeds, Wo, method=self.replacement_method)
+                Wo = self.get_output_embeddings().weight
+                recrv_embeds = hs2ie(hidden_states, inputs_embeds, Wo, method=self.config.replacement_method)
                 # print({'hs': torch.stack(hidden_states).shape, 'recrv_embeds': recrv_embeds.shape, 'tensor_list': tensor_list[batch_idx][token_idx].shape})
                 tensor_list[batch_idx][token_idx] = recrv_embeds[
                     batch_idx, token_idx - 1 - hidden_states_offset, :
@@ -284,7 +280,7 @@ class Coconut(nn.Module):
         past_key_values= DynamicCache.from_legacy_cache(past_key_values)
 
         # final pass
-        outputs = self.base_causallm(
+        outputs = super().forward(
             inputs_embeds=inputs_embeds[
                 :, next_compute_range[0] : next_compute_range[1], :
             ],
@@ -310,11 +306,6 @@ class Coconut(nn.Module):
 
         return Outputs(loss=loss, inputs_embeds=inputs_embeds, logits=logits)
 
-    def train(self):
-        self.base_causallm.train()
-
-    def eval(self):
-        self.base_causallm.eval()
 
     def generate(
         self,
@@ -345,20 +336,20 @@ class Coconut(nn.Module):
         # get the first token using the current hidden state
         next_token = torch.argmax(outputs.logits[0, -1]).item()
         tokens.append(next_token)
-        new_token_embed = self.embedding(
+        new_token_embed = self.get_input_embeddings()(
             torch.tensor(next_token, device=input_ids.device)
         ).view(1, 1, -1)
         new_inputs_embeds = torch.cat((inputs_embeds, new_token_embed), dim=1)
 
         # get other tokens
         for _ in range(max_new_tokens - 1):
-            outputs = self.base_causallm(inputs_embeds=new_inputs_embeds)
+            outputs = super().forward(inputs_embeds=new_inputs_embeds)
             self.gen_forward_cnt += 1
             next_token = torch.argmax(outputs.logits[0, -1]).item()
-            if next_token == self.eos_token_id:
+            if next_token == self.config.eos_token_id:
                 break
             tokens.append(next_token)
-            new_token_embed = self.embedding(
+            new_token_embed = self.get_input_embeddings()(
                 torch.tensor(next_token, device=input_ids.device)
             ).view(1, 1, -1)
             new_inputs_embeds = torch.cat((new_inputs_embeds, new_token_embed), dim=1)
@@ -369,7 +360,7 @@ class Coconut(nn.Module):
                 self.gen_forward_cnt < max_new_tokens + MAX_N_LATENT
             ):  # leave some room for latent tokens
                 self.gen_forward_cnt += 1
-                _ = self.base_causallm(inputs_embeds=new_inputs_embeds)
+                _ = super().forward(inputs_embeds=new_inputs_embeds)
 
         if output_embedding:
             # for analysis purpose

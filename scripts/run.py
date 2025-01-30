@@ -12,12 +12,15 @@ import yaml
 from tqdm import tqdm
 from transformers import AutoModelForCausalLM, AutoTokenizer
 import wandb
-from coconut.coconut import Coconut
 from coconut.dataset import (
     CoconutCollator,
     get_cot_latent_dataset,
     get_dataset,
     get_question_only_latent_dataset,
+)
+from coconut.coconut import (
+    CoconutConfig,
+    CoconutQwen2ForCausalLM,
 )
 from pathlib import Path
 
@@ -58,9 +61,11 @@ def clear_memory():
     gc.collect()
     torch.cuda.empty_cache()
 
-def save_model(model, tokenizer, save_dir: Path):
+def save_model(model, tokenizer, configs, save_dir: Path):
     tokenizer.save_pretrained(save_dir)
     model.save_pretrained(save_dir)
+    with open(save_dir / "config.yaml", "w") as f:
+        yaml.dump(configs, f)
     logger.info(f"saving model {save_dir}")
 
 
@@ -88,25 +93,47 @@ def main():
     save_dir = Path(configs.save_path) / run_name
     save_dir.mkdir(parents=True, exist_ok=True)
 
-    # checkpoints = [f.name for f in save_dir.glob("checkpoint_*")]
-    # checkpoints = sorted(checkpoints, key=lambda x: int(x.stem.split("_")[1]))
+    # set devices
+    print_cuda_devices()
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    dtype = torch.bfloat16 if configs.bf16 else torch.float32
+    logger.info(f"Using device: {device}, dtype: {dtype}")
 
-    # load base model
-    model = AutoModelForCausalLM.from_pretrained(configs.model_id)
-    tokenizer = AutoTokenizer.from_pretrained(configs.model_id,
-                                              padding_side="right",
-    )
-    tokenizer.pad_token = tokenizer.eos_token
-    tokenizer.pad_token_id = tokenizer.eos_token_id
-    # model.generation_config.pad_token_id = tokenizer.pad_token_id
-    tokenizer.add_tokens("<|start-latent|>")
-    tokenizer.add_tokens("<|end-latent|>")
-    tokenizer.add_tokens("<|latent|>")
+    if configs.load_model_path:
+        f = Path('../' + configs.load_model_path)
+        assert f.exists(), f"Model path {f} does not exist"
+        model = CoconutQwen2ForCausalLM.from_pretrained(configs.load_model_path)
+        tokenizer = AutoTokenizer.from_pretrained(configs.load_model_path)
+        logger.warning(f"Loaded model from {configs.load_model_path}")
+    else:
+        # load tokenizer
+        tokenizer = AutoTokenizer.from_pretrained(configs.model_id,
+                                                padding_side="right",
+        )
+        tokenizer.pad_token = tokenizer.eos_token
+        tokenizer.pad_token_id = tokenizer.eos_token_id
+        if "<|latent|>" not in tokenizer.additional_special_tokens:
+            # model.generation_config.pad_token_id = tokenizer.pad_token_id
+            tokenizer.add_tokens("<|start-latent|>")
+            tokenizer.add_tokens("<|end-latent|>")
+            tokenizer.add_tokens("<|latent|>")
+
+        latent_id = tokenizer.convert_tokens_to_ids("<|latent|>")
+        bot_id = tokenizer.convert_tokens_to_ids("<|start-latent|>")
+        eot_id = tokenizer.convert_tokens_to_ids("<|end-latent|>")
+
+        # load base model
+        model_config = CoconutConfig.from_pretrained(configs.model_id,    latent_token_id=latent_id, 
+            bot_id=bot_id, eot_id=eot_id, eos_token_id=tokenizer.eos_token_id, replacement_method=configs.replacement_method)
+        model = CoconutQwen2ForCausalLM.from_pretrained(configs.model_id, config=model_config,torch_dtype=torch.bfloat16, device_map=device)
+        
+        model.resize_token_embeddings(len(tokenizer))
+
+
     latent_id = tokenizer.convert_tokens_to_ids("<|latent|>")
     bot_id = tokenizer.convert_tokens_to_ids("<|start-latent|>")
     eot_id = tokenizer.convert_tokens_to_ids("<|end-latent|>")
 
-    model.resize_token_embeddings(len(tokenizer))
     embeddings = model.get_input_embeddings()
     target_id = tokenizer.convert_tokens_to_ids("<<")
     for token_id in [latent_id, bot_id, eot_id]:
@@ -116,20 +143,11 @@ def main():
         lm_head = model.lm_head
         lm_head.weight.data[token_id] = lm_head.weight.data[target_id].clone()
 
-    # set devices
-    print_cuda_devices()
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    dtype = torch.bfloat16 if configs.bf16 else torch.float32
-    logger.info(f"Using device: {device}, dtype: {dtype}")
     model = model.to(device)
     
     # model = model.to(dtype=dtype)
     if configs.bf16:
         convert_to_bfloat16(model)
-
-    model = Coconut(model, latent_id, bot_id, eot_id, tokenizer.eos_token_id, replacement_method=configs.replacement_method)
-
-    save_model(model, tokenizer, save_dir / f"checkpoint_{1}")
 
     # setup eval
     logger.info(model)
@@ -189,7 +207,9 @@ def main():
 
     res = []
 
-    for epoch in range(configs.num_epochs):
+    if configs.resume:
+        logger.warning(f"Resuming from epoch {configs.resume}")
+    for epoch in range(configs.resume, configs.num_epochs):
         # FIXME after max_latent_stage, run for multiple epochs? without reseting optim
         if epoch == configs.max_latent_stage:
             training_args.num_train_epochs = configs.num_epochs - configs.max_latent_stage
@@ -279,12 +299,12 @@ def main():
         if wandb_run:
             wandb_run.log(r)
 
-        save_model(model, save_dir / f"checkpoint_{epoch}.pt")
+        save_model(model, tokenizer, configs, save_dir / f"checkpoint_{1}")
         res.append(r)
 
     print('results')
     print(configs)
-    df_res = pd.DataFrame([res])
+    df_res = pd.DataFrame(res)
     df_res.to_csv(save_dir / "results.csv")
     print(df_res.to_markdown())
         
