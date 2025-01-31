@@ -15,9 +15,9 @@ c_thought: 2
 epochs_per_stage: 1
 max_latent_stage: 3
 pad_latent_to_max: True
-# replacement_method: "-1"
+replacement_method: "-1"
 # replacement_method: "-2"
-replacement_method: "0.5"
+# replacement_method: "0.5"
 # replacement_method: "ie+supressed[0.5:]"
 # replacement_method: "hs+supressed[0.5:]"
 # replacement_method: "supressed[0.5:]"
@@ -26,16 +26,18 @@ uniform_prob: 0.0
 model_id: Qwen/Qwen2.5-Math-1.5B
 # model_id: deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B
 
-# load_model_path: outputs/gsm-qwen-1.5b_20250130-193831/checkpoint_1
-# resume: 0
+load_model_path: 
+# load_model_path: outputs/gsm-qwen-1.5b_20250131-120658/checkpoint_1
+resume: 0
 seed: 0
 bf16: True
+bf16_weight: True
 train_path: data/gsm_train.json
 val_path: data/gsm_valid.json
 batch_size_training: 3
 max_size: 6000 # in verl 8k is enougth https://github.com/volcengine/verl/blob/main/examples/ppo_trainer/verl_getting_started.ipynb
 debug: False
 gradient_accumulation_steps: 6
-num_epochs: 20
-lr: !!float "4e-6" # 1e-4 in coconut, but 1e-6 in verl
-weight_decay: 0.001 # 0.01 in coconut, but 0.00 in verl
+num_epochs: 10
+lr: !!float "1e-5" # 1e-4 in coconut, but 1e-6 in verl
+weight_decay: 0.0 # 0.01 in coconut, but 0.00 in verl

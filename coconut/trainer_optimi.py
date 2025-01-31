@@ -25,7 +25,8 @@ class TrainerOptimi(Trainer):
             "foreach",
             "gradient_release",
         }
-        default_kwargs = {"kahan_sum": True}
+        default_kwargs = {}
+        # "kahan_sum": True        }
         optimizer_kwargs = {
             k: v for k, v in optimizer_kwargs.items() if k in allowed_kwargs
         }
@@ -33,18 +34,27 @@ class TrainerOptimi(Trainer):
         return AdamW, optimizer_kwargs
 
 
+# def convert_to_bfloat16(module, verbose=False):
+#     for child in module.children():
+#         # TODO check if float32
+#         if hasattr(child, "dtype") and child.dtype == torch.float32:
+#             child.to(torch.bfloat16)
+#             if verbose:
+#                 print(f"Converted {child} to bfloat16")
+#         elif hasattr(child, "data") and child.data.dtype == torch.float32:
+#             child.to(torch.bfloat16)
+#             if verbose:
+#                 print(f"Converted {child} to bfloat16")
+#         elif isinstance(child, (nn.Linear, nn.Conv2d)):
+#             child.to(torch.bfloat16)
+#             if verbose:
+#                 print(f"Converted {child} to bfloat16")
+#         else:
+#             convert_to_bfloat16(child)
+
 def convert_to_bfloat16(module, verbose=False):
     for child in module.children():
-        # TODO check if float32
-        if hasattr(child, "dtype") and child.dtype == torch.float32:
-            child.to(torch.bfloat16)
-            if verbose:
-                print(f"Converted {child} to bfloat16")
-        elif hasattr(child, "data") and child.data.dtype == torch.float32:
-            child.to(torch.bfloat16)
-            if verbose:
-                print(f"Converted {child} to bfloat16")
-        elif isinstance(child, (nn.Linear, nn.Conv2d)):
+        if isinstance(child, (nn.Linear, nn.Conv2d)):
             child.to(torch.bfloat16)
             if verbose:
                 print(f"Converted {child} to bfloat16")

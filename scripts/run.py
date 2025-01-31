@@ -5,6 +5,7 @@ import os
 import sys
 from copy import copy
 import pandas as pd
+import time
 import torch
 from torch import nn
 import torch.optim as optim
@@ -100,7 +101,7 @@ def main():
     logger.info(f"Using device: {device}, dtype: {dtype}")
 
     if configs.load_model_path:
-        f = Path('../' + configs.load_model_path)
+        f = Path('./' + configs.load_model_path)
         assert f.exists(), f"Model path {f} does not exist"
         model = CoconutQwen2ForCausalLM.from_pretrained(configs.load_model_path)
         tokenizer = AutoTokenizer.from_pretrained(configs.load_model_path)
@@ -125,7 +126,7 @@ def main():
         # load base model
         model_config = CoconutConfig.from_pretrained(configs.model_id,    latent_token_id=latent_id, 
             bot_id=bot_id, eot_id=eot_id, eos_token_id=tokenizer.eos_token_id, replacement_method=configs.replacement_method)
-        model = CoconutQwen2ForCausalLM.from_pretrained(configs.model_id, config=model_config,torch_dtype=torch.bfloat16, device_map=device)
+        model = CoconutQwen2ForCausalLM.from_pretrained(configs.model_id, config=model_config, device_map=device)
         
         model.resize_token_embeddings(len(tokenizer))
 
@@ -145,8 +146,7 @@ def main():
 
     model = model.to(device)
     
-    # model = model.to(dtype=dtype)
-    if configs.bf16:
+    if configs.bf16_weight:
         convert_to_bfloat16(model)
 
     # setup eval
@@ -210,7 +210,7 @@ def main():
     if configs.resume:
         logger.warning(f"Resuming from epoch {configs.resume}")
     for epoch in range(configs.resume, configs.num_epochs):
-        # FIXME after max_latent_stage, run for multiple epochs? without reseting optim
+        start_time = time.time()
         if epoch == configs.max_latent_stage:
             training_args.num_train_epochs = configs.num_epochs - configs.max_latent_stage
             print("max_latent_stage reached, training in one large run for", training_args.num_train_epochs)
@@ -273,8 +273,11 @@ def main():
                 shuffle=True,
             )
 
-
-            trainer = TrainerOptimi(
+            if configs.bf16_weight:
+                TrainerCls = TrainerOptimi
+            else:
+                TrainerCls = Trainer
+            trainer = TrainerCls(
                 model=model,# if scheduled_stage > 0 else model.base_causallm,
                 args=training_args,
                 train_dataset=dataset_train,
@@ -290,20 +293,21 @@ def main():
                 trainer.train()
             except KeyboardInterrupt:
                 logger.info("Interrupted")
-                break
+                pass
 
         clear_memory()
         r = evaluate(valid_gen_dataloader, model, tokenizer, base_dataset_valid, max_new_tokens=max_new_tokens, name=f"eval_{epoch}", dtype=dtype, device=device)
         r['epoch'] = epoch
+        r['minutes'] = (time.time() - start_time) / 60
         clear_memory()
         if wandb_run:
             wandb_run.log(r)
 
-        save_model(model, tokenizer, configs, save_dir / f"checkpoint_{1}")
+        save_model(model, tokenizer, config_dict, save_dir / f"checkpoint_{epoch}")
         res.append(r)
 
     print('results')
-    print(configs)
+    print(config_dict)
     df_res = pd.DataFrame(res)
     df_res.to_csv(save_dir / "results.csv")
     print(df_res.to_markdown())

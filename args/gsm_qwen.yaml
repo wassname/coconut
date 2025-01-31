@@ -15,18 +15,22 @@ c_thought: 2
 epochs_per_stage: 1
 max_latent_stage: 3
 pad_latent_to_max: True
-# replacement_method: "-1"
+
+replacement_method: "-1"
+# replacement_method: "-2"
+# replacement_method: "0.5"
 # replacement_method: "ie+supressed[0.5:]"
-replacement_method: "hs+supressed[0.5:]"
-# replacement_method: "supressed[-10:]"
+# replacement_method: "hs+supressed[0.5:]"
+# replacement_method: "supressed[0.5:]"
 
 save_only_improve: True
 uniform_prob: 0.0
 model_id: plaguss/Qwen2.5-0.5B-Math-Shepherd-PRM-0.2
-load_model_path: None
+load_model_path: 
 seed: 0
 resume: 0
 bf16: True
+bf16_weight: False
 train_path: data/gsm_train.json
 val_path: data/gsm_valid.json
 reset_optimizer: False
@@ -35,5 +39,5 @@ max_size: 10000 # in verl this is enougth https://github.com/volcengine/verl/blo
 debug: False
 gradient_accumulation_steps: 4
 num_epochs: 5
-lr: !!float "1e-5"
+lr: !!float "1e-4"
 weight_decay: 0.01

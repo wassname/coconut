@@ -350,3 +350,36 @@ need to get save working
 do I need to make coconut a subclass of transformer
 and config it a subclass or model or modelconfig?
 yeah seems good
+
+
+# ok I did a long run with 0,5 no good
+
+coconut.utils.Config object at 0x79fe3a95e710>
+|    |   eval/acc |   eval/cot_em |   epoch |
+|---:|-----------:|--------------:|--------:|
+|  0 |   0.719212 |             0 |       0 |
+|  1 |   0.576355 |             0 |       1 |
+|  2 |   0.458128 |             0 |       2 |
+|  3 |   0.251232 |             0 |       3 |
+
+
+TODO better eval (forward one token at a time)
+TODO run eval using transformers
+
+nope can't even replicate wth
+this is with -1
+|    |   eval/acc |   eval/cot_em |   epoch |
+|---:|-----------:|--------------:|--------:|
+|  0 |   0.719212 |             0 |       0 |
+|  1 |   0.561576 |             0 |       1 |
+|  2 |   0.463054 |             0 |       2 |
+|  3 |   0.295567 |             0 |       3 |
+
+
+OK I can't even replciate, probobly 16bit training is the problem!?
+Maybe I should use 0.5b and 32bit
+
+|    |   eval/acc |   eval/cot_em |   epoch |   minutes |
+|---:|-----------:|--------------:|--------:|----------:|
+|  0 |   0.246305 |             0 |       2 |   20.8777 |
+|  1 |   0.142857 |             0 |       3 |  175.502  |
