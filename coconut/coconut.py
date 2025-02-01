@@ -14,7 +14,18 @@ from torch import Tensor
 from transformers import DynamicCache
 from transformers.models.gpt2 import GPT2LMHeadModel
 
-Outputs = namedtuple("Outputs", ["loss", "inputs_embeds", "logits"])
+from loguru import logger
+
+
+from transformers import (
+    Qwen2ForCausalLM,
+    DynamicCache,
+    PreTrainedTokenizer,
+    Qwen2Config,
+)
+
+
+Outputs = namedtuple("Outputs", ["loss", "inputs_embeds", "logits", "past_key_values"])
 MAX_N_LATENT = 8
 
 HiddenState = Float[Tensor, 'b t h']
@@ -26,7 +37,10 @@ _w_out_inv = None
 
 @torch.no_grad()
 def get_cache_inv(w_out):
+
+    # FIXME this will change each update, so we shouldn't cache it for more than a step
     global _w_out_inv
+
     if _w_out_inv is None:
         _w_out_inv = torch.pinverse(w_out.clone().float())
     return _w_out_inv
@@ -43,13 +57,13 @@ def get_supressed_activations(hs: Float[Tensor, 'l b t h'], w_out=None) -> Float
         - > Suppression neurons that are similar, except decrease the probability of a group of related tokens
 
     - https://arxiv.org/html/2406.19384
-        - > Previous work suggests that networks contain ensembles of “prediction" neurons, which act as probability promoters [66, 24, 32] and work in tandem with suppression neurons (Section 5.4). 
+        - > Previous work suggests that networks contain ensembles of “prediction" neurons, which act as probability promoters [66, 24, 32] and work in tandem with suppression neurons (Section 5.4).
 
     - https://arxiv.org/pdf/2401.12181
         > We find a striking pattern which is remarkably consistent across the different seeds: after about the halfway point in the model, prediction neurons become increasingly prevalent until the very end of the network where there is a sudden shift towards a much larger number of suppression neurons.
-    """      
+    """
     with torch.no_grad():
-        # here we pass the hs through the last layer, take a diff, and then project it back to find which activation changes lead to supressed 
+        # here we pass the hs through the last layer, take a diff, and then project it back to find which activation changes lead to supressed
         hs2 = rearrange(hs[:, :, -1:], 'l b t h -> (l b t) h')
         hs_out2 = torch.nn.functional.linear(hs2, w_out)
         hs_out = rearrange(hs_out2, '(l b t) h -> l b t h', l=hs.shape[0], b=hs.shape[1], t=1)
@@ -80,7 +94,7 @@ def hs2ie(hidden_states: HiddenStates, inputs_embeds: HiddenState, w_out=None, m
         return hidden_states[i_half]
     
 
-  
+
     # FIXME ok so this doesn't account for information being removed then added
     # and it assumed removal == reduction in positive magnitude, but it could be negative. So I should refactor for all reduction in magnitude
     hs = rearrange(list(hidden_states), 'l b t h -> l b t h')
@@ -97,17 +111,18 @@ def hs2ie(hidden_states: HiddenStates, inputs_embeds: HiddenState, w_out=None, m
         # FIXME this need to be repeated along token dim
         T = inputs_embeds.shape[1]
         hs = supressed_act[i_half:].sum(dim=0)
+        return inputs_embeds + supressed_act[-1]
+    elif method == 'ie+supressed[0.5:]':
+        return inputs_embeds + supressed_act[i_half:].sum(dim=0)
+    elif method == 'hs+supressed[0.5:]':
+        return hidden_states[-1] + supressed_act[i_half:].sum(dim=0)
+    elif method == 'supressed[0.5:]':
+        T = inputs_embeds.shape[1]
+        hs = supressed_act[i_half:].sum(dim=0)
         hs = repeat(hs, 'b 1 h -> b t h', t=T)
         return hs
     
     ValueError(f"Unknown method {method}")
-
-from transformers import (
-    Qwen2ForCausalLM,
-    DynamicCache,
-    PreTrainedTokenizer,
-    Qwen2Config,
-)
 
 
 class CoconutConfig(Qwen2Config):
@@ -127,7 +142,16 @@ class CoconutQwen2ForCausalLM(Qwen2ForCausalLM):
         self.gen_forward_cnt = 0
 
 
-    def forward(self, input_ids, attention_mask, labels, position_ids, **kwargs):
+    def forward(self, input_ids, attention_mask=None, labels=None, position_ids=None, **kwargs):
+        if attention_mask is None:
+            attention_mask=torch.ones_like(input_ids, device=input_ids.device)
+        if labels is None:
+            labels=input_ids.clone()
+        if position_ids is None:
+            position_ids=torch.arange(
+                0, input_ids.shape[1], dtype=torch.long, device=input_ids.device
+            ).unsqueeze(0)
+
         logits = []
 
         latent_indices = (
@@ -152,7 +176,6 @@ class CoconutQwen2ForCausalLM(Qwen2ForCausalLM):
 
         for pass_idx in range(max_n_latents):
             if kv_cache is None:
-                # past_key_values = DynamicCache2()
                 # first forward pass
                 outputs = super().forward(
                     inputs_embeds=inputs_embeds[
@@ -304,7 +327,7 @@ class CoconutQwen2ForCausalLM(Qwen2ForCausalLM):
 
         assert torch.isfinite(loss).all(), f"Loss is {loss}"
 
-        return Outputs(loss=loss, inputs_embeds=inputs_embeds, logits=logits)
+        return Outputs(loss=loss, inputs_embeds=inputs_embeds, logits=logits, past_key_values=outputs.past_key_values)
 
 
     def generate(
@@ -313,58 +336,46 @@ class CoconutQwen2ForCausalLM(Qwen2ForCausalLM):
         attention_mask,  # attention_mask is not used
         max_new_tokens=16,
         output_embedding=False,
-        synced_gpus=False,
         **kwargs,
     ):
         self.gen_forward_cnt = 0
 
-        assert input_ids.shape[0] == 1, "only support batch_size == 1 now"
+        # assert input_ids.shape[0] == 1, "only support batch_size == 1 now"
+        lyr_embed = self.get_input_embeddings()
 
-        tokens = input_ids[0].detach().tolist()
+        tokens = input_ids.detach()
 
-        labels = input_ids.clone()  # placeholder. not used.
-        outputs = self.forward(
-            input_ids,
-            torch.ones_like(input_ids, device=input_ids.device),
-            labels,
-            torch.arange(
-                0, input_ids.shape[1], dtype=torch.long, device=input_ids.device
-            ).reshape(1, -1),
-        )
+        # reuse the forward pass from training to go through all the inputs before gen this include latent thoughts
+        outputs = self.forward(input_ids)
         inputs_embeds = outputs.inputs_embeds
 
         # get the first token using the current hidden state
-        next_token = torch.argmax(outputs.logits[0, -1]).item()
-        tokens.append(next_token)
-        new_token_embed = self.get_input_embeddings()(
-            torch.tensor(next_token, device=input_ids.device)
-        ).view(1, 1, -1)
+        next_token = outputs.logits[:, -1].argmax(-1).detach().unsqueeze(1)
+        tokens = torch.cat((tokens, next_token), dim=1)
+        new_token_embed = lyr_embed(next_token)
         new_inputs_embeds = torch.cat((inputs_embeds, new_token_embed), dim=1)
 
         # get other tokens
+        kv_cache = outputs.past_key_values
         for _ in range(max_new_tokens - 1):
-            outputs = super().forward(inputs_embeds=new_inputs_embeds)
+            # FIXME here we use the base model forward, that means we DO NOT use latent thoughts after the preconfigured ones
+            # FIXME cache!
+            outputs = super().forward(inputs_embeds=new_inputs_embeds, past_key_values=kv_cache)
+            kv_cache = outputs.past_key_values
             self.gen_forward_cnt += 1
-            next_token = torch.argmax(outputs.logits[0, -1]).item()
-            if next_token == self.config.eos_token_id:
-                break
-            tokens.append(next_token)
-            new_token_embed = self.get_input_embeddings()(
-                torch.tensor(next_token, device=input_ids.device)
-            ).view(1, 1, -1)
-            new_inputs_embeds = torch.cat((new_inputs_embeds, new_token_embed), dim=1)
+            next_token = outputs.logits[:, -1].argmax(-1).detach().unsqueeze(1)
+            if next_token == self.config.latent_token_id:
+                logger.error("Latent token generated, not implemented in gen")
 
-        if synced_gpus:
-            # in FSDP, the number of forward pass need to be the same across devices
-            while (
-                self.gen_forward_cnt < max_new_tokens + MAX_N_LATENT
-            ):  # leave some room for latent tokens
-                self.gen_forward_cnt += 1
-                _ = super().forward(inputs_embeds=new_inputs_embeds)
+            tokens = torch.cat((tokens, next_token), dim=1)
+            if (tokens == self.config.eos_token_id).any(1).all(0):
+                break
+            new_token_embed = lyr_embed(next_token)
+            new_inputs_embeds = torch.cat((new_inputs_embeds, new_token_embed), dim=1)
 
         if output_embedding:
             # for analysis purpose
-            return torch.tensor(tokens).view(1, -1), new_inputs_embeds
+            return tokens, new_inputs_embeds
 
         else:
-            return torch.tensor(tokens).view(1, -1)
+            return tokens

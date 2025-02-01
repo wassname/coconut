@@ -238,7 +238,7 @@ def main():
             dataset_gen_val,
             num_workers=1,
             pin_memory=True,
-            batch_size=1,
+            batch_size=configs['batch_size_training'],
             collate_fn=collator,
         )
         if "gsm" in configs.val_path:
