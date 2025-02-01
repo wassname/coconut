@@ -23,7 +23,7 @@ from coconut.coconut import (
     CoconutConfig,
     CoconutQwen2ForCausalLM,
 )
-from coconut.evaluate import evaluate
+from coconut.eval import evaluate
 from pathlib import Path
 
 from coconut.trainer_optimi import TrainerOptimi, convert_to_bfloat16
@@ -105,7 +105,7 @@ def main():
     if configs.load_model_path:
         f = Path('./' + configs.load_model_path)
         assert f.exists(), f"Model path {f} does not exist"
-        model = CoconutQwen2ForCausalLM.from_pretrained(configs.load_model_path)
+        model = CoconutQwen2ForCausalLM.from_pretrained(configs.load_model_path, device_map=device)
         tokenizer = AutoTokenizer.from_pretrained(configs.load_model_path)
         logger.warning(f"Loaded model from {configs.load_model_path}")
     else:
