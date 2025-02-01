@@ -399,3 +399,29 @@ Wait it did start working!
     |  2 |  0.0863095 |             0 |       2 |  14.6686  |
     |  3 |  0.0714286 |             0 |       3 |  32.8783  |
     wandb: 🚀 View run gsm-qwen_20250201-071510 at: https://wandb.ai/wassname/coconut/runs/v49wpqas
+
+
+ok now with 0.5b and 32bit it seems to work eventually hmm
+
+TODO
+- test 16but but only linear
+- 16 bit but larger batc hsize
+- larger model on h100
+
+
+# Results: gsm-qwen_20250201-122443
+{'project': 'coconut', 'save_path': 'outputs/', 'name': 'gsm-qwen', 'only_eval': False, 'coconut': True, 'cot': False, 'no_thoughts': False, 'no_cot': False, 'c_thought': 2, 'epochs_per_stage': 1, 'max_latent_stage': 3, 'pad_latent_to_max': True, 'replacement_method': '-1', 'save_only_improve': True, 'uniform_prob': 0.0, 'model_id': 'plaguss/Qwen2.5-0.5B-Math-Shepherd-PRM-0.2', 'load_model_path': None, 'seed': 0, 'resume': 0, 'bf16': True, 'bf16_weight': False, 'train_path': 'data/gsm_train.json', 'val_path': 'data/gsm_valid.json', 'reset_optimizer': False, 'batch_size_training': 10, 'max_size': 10000, 'debug': False, 'gradient_accumulation_steps': 4, 'num_epochs': 20, 'lr': 0.0001, 'weight_decay': 0.01}
+|    |   eval/acc |   eval/cot_em |   epoch |   minutes |
+|---:|-----------:|--------------:|--------:|----------:|
+|  0 |  0.25      |             0 |     nan |  nan      |
+|  1 |  0.25      |             0 |       0 |   10.4013 |
+|  2 |  0.205357  |             0 |     nan |  nan      |
+|  3 |  0.205357  |             0 |       1 |   16.4774 |
+|  4 |  0.0684524 |             0 |     nan |  nan      |
+|  5 |  0.0684524 |             0 |       2 |   18.9123 |
+|  6 |  0.0535714 |             0 |     nan |  nan      |
+|  7 |  0.0684524 |             0 |     nan |  nan      |
+|  8 |  0.0327381 |             0 |     nan |  nan      |
+|  9 |  0.0416667 |             0 |       3 |   63.4671 |
+ 18%|███████████████████████████▎                                                                                                                              | 754/4250 [1:03:28<4:54:17,  5.05s/it]
+wandb: 🚀 View run gsm-qwen_20250201-122443 at: https://wandb.ai/wassname/coconut/runs/al3d68tu

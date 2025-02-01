@@ -39,5 +39,5 @@ max_size: 10000 # in verl this is enougth https://github.com/volcengine/verl/blo
 debug: False
 gradient_accumulation_steps: 4
 num_epochs: 20
-lr: !!float "1e-4"
-weight_decay: 0.01
+lr: !!float "5e-5" # 1e-4
+weight_decay: 0 # 0.01
