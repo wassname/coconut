@@ -383,3 +383,19 @@ Maybe I should use 0.5b and 32bit
 |---:|-----------:|--------------:|--------:|----------:|
 |  0 |   0.246305 |             0 |       2 |   20.8777 |
 |  1 |   0.142857 |             0 |       3 |  175.502  |
+
+
+so even 0.5b 32b weight, 16b training it doesn't work. lets see after the long train...
+0.26
+0.18
+0.08
+
+Wait it did start working!
+    {'project': 'coconut', 'save_path': 'outputs/', 'name': 'gsm-qwen', 'only_eval': False, 'coconut': True, 'cot': False, 'no_thoughts': False, 'no_cot': False, 'c_thought': 2, 'epochs_per_stage': 1, 'max_latent_stage': 3, 'pad_latent_to_max': True, 'replacement_method': '-1', 'save_only_improve': True, 'uniform_prob': 0.0, 'model_id': 'plaguss/Qwen2.5-0.5B-Math-Shepherd-PRM-0.2', 'load_model_path': None, 'seed': 0, 'resume': 0, 'bf16': True, 'bf16_weight': False, 'train_path': 'data/gsm_train.json', 'val_path': 'data/gsm_valid.json', 'reset_optimizer': False, 'batch_size_training': 10, 'max_size': 10000, 'debug': False, 'gradient_accumulation_steps': 4, 'num_epochs': 5, 'lr': 0.0001, 'weight_decay': 0.01}
+    |    |   eval/acc |   eval/cot_em |   epoch |   minutes |
+    |---:|-----------:|--------------:|--------:|----------:|
+    |  0 |  0.267857  |             0 |       0 |   9.56295 |
+    |  1 |  0.196429  |             0 |       1 |  13.2542  |
+    |  2 |  0.0863095 |             0 |       2 |  14.6686  |
+    |  3 |  0.0714286 |             0 |       3 |  32.8783  |
+    wandb: 🚀 View run gsm-qwen_20250201-071510 at: https://wandb.ai/wassname/coconut/runs/v49wpqas

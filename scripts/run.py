@@ -35,6 +35,7 @@ from transformers import (
     Trainer,
     TrainingArguments,
     AutoTokenizer,
+    TrainerCallback,
 )
 
 from loguru import logger
@@ -209,15 +210,15 @@ def main():
 
     if configs.resume:
         logger.warning(f"Resuming from epoch {configs.resume}")
-    for epoch in range(configs.resume, configs.num_epochs):
+    for phase in range(configs.resume, configs.num_epochs):
         start_time = time.time()
-        if epoch == configs.max_latent_stage:
+        if phase == configs.max_latent_stage:
             training_args.num_train_epochs = configs.num_epochs - configs.max_latent_stage
             print("max_latent_stage reached, training in one large run for", training_args.num_train_epochs)
-        elif epoch > configs.max_latent_stage:
+        elif phase > configs.max_latent_stage:
             break
 
-        scheduled_stage = epoch // configs['epochs_per_stage']
+        scheduled_stage = phase // configs['epochs_per_stage']
         no_bot_eot=configs.cot or configs.no_cot or configs.no_thoughts
         logger.info(f"scheduled_stage={scheduled_stage}, no_bot_eot={no_bot_eot}, c_thought={configs.c_thought}, max_latent_stage={configs.max_latent_stage}, cot={configs.cot}, coconut={configs.coconut}")
 
@@ -243,13 +244,13 @@ def main():
             max_new_tokens = 64
         else:
             max_new_tokens = 128
-        if epoch==0:
+        if phase==0:
             # quick QC to see how well untouched model does at the task
-            r = evaluate(valid_gen_dataloader, model, tokenizer, base_dataset_valid, max_new_tokens=max_new_tokens, name=f"eval_{epoch}_start", dtype=dtype, device=device, quick=True)
+            r = evaluate(valid_gen_dataloader, model, tokenizer, base_dataset_valid, max_new_tokens=max_new_tokens, name=f"eval_{phase}_start", dtype=dtype, device=device, quick=True)
             if wandb_run:
                 wandb_run.log(r)
 
-        logger.info(f"Training stage epoch={epoch} stage={scheduled_stage}")
+        logger.info(f"Training stage epoch={phase} stage={scheduled_stage}")
 
         dataset_loss_val = get_cot_latent_dataset(
             scheduled_stage,
@@ -277,13 +278,22 @@ def main():
                 TrainerCls = TrainerOptimi
             else:
                 TrainerCls = Trainer
+
+            class CoconutEvalCallback(TrainerCallback):               
+                
+                def on_epoch_end(self, *args, **kwargs):
+                    r = evaluate(valid_gen_dataloader, model, tokenizer, base_dataset_valid, max_new_tokens=max_new_tokens, name=f"eval_{phase}", dtype=dtype, device=device)
+                    if wandb_run:
+                        wandb_run.log(r)
+                    res.append(r)
+                    return 
             trainer = TrainerCls(
                 model=model,# if scheduled_stage > 0 else model.base_causallm,
                 args=training_args,
                 train_dataset=dataset_train,
                 eval_dataset=dataset_loss_val,
                 data_collator=collator,
-                callbacks=[ProgressCallbackNoPrint()]
+                callbacks=[ProgressCallbackNoPrint(), CoconutEvalCallback()]
                 # TODO pass in (opt, scheduler) as a callback
             )
             # TODO we don't need to shuffle train as it's done during load
@@ -296,17 +306,17 @@ def main():
                 pass
 
         clear_memory()
-        r = evaluate(valid_gen_dataloader, model, tokenizer, base_dataset_valid, max_new_tokens=max_new_tokens, name=f"eval_{epoch}", dtype=dtype, device=device)
-        r['epoch'] = epoch
+        r = evaluate(valid_gen_dataloader, model, tokenizer, base_dataset_valid, max_new_tokens=max_new_tokens, name=f"eval_{phase}", dtype=dtype, device=device)
+        r['epoch'] = phase
         r['minutes'] = (time.time() - start_time) / 60
         clear_memory()
         if wandb_run:
             wandb_run.log(r)
-
-        save_model(model, tokenizer, config_dict, save_dir / f"checkpoint_{epoch}")
         res.append(r)
 
-    print('results')
+        save_model(model, tokenizer, config_dict, save_dir / f"checkpoint_{phase}")
+
+    print(f'# Results: {run_name}')
     print(config_dict)
     df_res = pd.DataFrame(res)
     df_res.to_csv(save_dir / "results.csv")
