@@ -25,6 +25,9 @@ replacement_method: "-1"
 
 save_only_improve: True
 uniform_prob: 0.0
+# Qwen/Qwen2.5-0.5B-Instruct
+# model_id: fdyrd/QwenMath-0.5B
+# model_id: Qwen/Qwen2.5-Coder-0.5B
 model_id: plaguss/Qwen2.5-0.5B-Math-Shepherd-PRM-0.2
 load_model_path: 
 seed: 0
@@ -35,9 +38,14 @@ train_path: data/gsm_train.json
 val_path: data/gsm_valid.json
 reset_optimizer: False
 batch_size_training: 10
-max_size: 10000 # in verl this is enougth https://github.com/volcengine/verl/blob/main/examples/ppo_trainer/verl_getting_started.ipynb
+max_size: 20000 # in verl this is enougth https://github.com/volcengine/verl/blob/main/examples/ppo_trainer/verl_getting_started.ipynb
 debug: False
 gradient_accumulation_steps: 4
-num_epochs: 20
-lr: !!float "5e-5" # 1e-4
-weight_decay: 0 # 0.01
+num_epochs: 50
+lr: !!float "1e-4" # 1e-4
+system_prompt: |
+  Reason about the math question with CoT steps in << and >> tags or, if you are given <|start-latent|><|end-latent|> tags as part of the question, then you can think silently inside. Then return the final answer after ###, for example 
+  <<5^0+1*2=?>>
+  <<1+2=3>>
+  ### 3
+weight_decay: 0.01

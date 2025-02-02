@@ -3,15 +3,12 @@
 
 import random, torch, os
 import numpy as np
+from argparse import Namespace
 
 
-class Config:
-    # to access a dict with object.key
-    def __init__(self, dictionary):
-        self.__dict__ = dictionary
-
-    def __getitem__(self, key):
-        return self.__dict__[key]
+class Config(Namespace):
+    def get(self, key, default=None):
+        return getattr(self, key, default)
 
 
 def set_seed(seed_value):

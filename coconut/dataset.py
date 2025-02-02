@@ -14,16 +14,27 @@ from transformers import PreTrainedTokenizerBase
 from transformers.data.data_collator import pad_without_fast_tokenizer_warning
 
 
-def get_dataset(path, tokenizer, max_size=1000000000, drop_unused=True):
+def get_dataset(path, tokenizer, max_size=1000000000, drop_unused=True, system_prompt="", num_proc=32):
+    if system_prompt:
+        system_prompt = "<|im_start|>system\n" + system_prompt.strip() + "<|im_end|>\n"
+
+    pre_q = "<|im_start|>user\n"
+
+    encode = tokenizer.encode
+    # encode = tokenizer.apply_chat_template
+
+    post_q = "<|im_end|>\n<|im_start|>assistant\n"
+
     def tokenize_sample(sample):
-        question_tokenized = tokenizer.encode(
-            sample["question"] + "\n", add_special_tokens=True
+
+        question_tokenized = encode(
+            system_prompt+pre_q+sample["question"] + post_q, add_special_tokens=True
         )
         steps_tokenized = [
-            tokenizer.encode(s + "\n", add_special_tokens=False)
+            encode(s + "\n", add_special_tokens=False)
             for s in sample["steps"]
         ]
-        answer_tokenized = tokenizer.encode(
+        answer_tokenized = encode(
             "### " + sample["answer"], add_special_tokens=False
         ) + [tokenizer.eos_token_id]
 
@@ -42,14 +53,15 @@ def get_dataset(path, tokenizer, max_size=1000000000, drop_unused=True):
     dataset = Dataset.from_dict({k: [d[k] for d in data] for k in keys})
 
     dataset_tok = dataset.map(
-        tokenize_sample, remove_columns=list(dataset.features) if drop_unused else None, num_proc=32, 
+        tokenize_sample, remove_columns=list(dataset.features) if drop_unused else None, num_proc=num_proc, 
         desc=path
     )
 
     # verify
     d = data[0]
-    complete = d["question"] + "\n" + "\n".join(d["steps"]) + "\n### " + d["answer"]
-    complete_tokenized = tokenizer.encode(complete, add_special_tokens=True) + [
+    complete = system_prompt + pre_q + d["question"] + post_q + "\n".join(d["steps"]) + "\n### " + d["answer"]
+    # or should we apply format?
+    complete_tokenized = encode(complete, add_special_tokens=True) + [
         tokenizer.eos_token_id
     ]
     assert (
@@ -183,6 +195,7 @@ def get_question_only_latent_dataset(
     eot_id,
     no_bot_eot=False,
     drop_unused=True,
+    num_proc=32,
 ):
     """    
     for testing, with no reasoning or ans
@@ -223,7 +236,7 @@ def get_question_only_latent_dataset(
         }
 
     return base_dataset_valid.map(
-        process_dataset, remove_columns=list(base_dataset_valid.features) if drop_unused else None, num_proc=32,
+        process_dataset, remove_columns=list(base_dataset_valid.features) if drop_unused else None, num_proc=num_proc,
          desc=f"q_latent_{scheduled_stage}"
     )
 

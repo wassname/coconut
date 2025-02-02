@@ -83,7 +83,7 @@ def main():
 
         logger.info(f"Config: {config_dict}")
 
-    configs = Config(config_dict)
+    configs = Config(**config_dict)
 
     timestamp = pd.Timestamp.now().strftime("%Y%m%d-%H%M%S")
     run_name = f"{configs.name}_{timestamp}"
@@ -155,8 +155,11 @@ def main():
     logger.info(model)
     max_size=32 if configs.debug else (configs.max_size or 100000000)
     base_dataset_valid = get_dataset(
-        configs.val_path, tokenizer, max_size=max_size//30+3, drop_unused=False
+        configs.val_path, tokenizer, max_size=max_size//30+3, drop_unused=False,
+        system_prompt=configs.get("system_prompt", ""),
     )
+    # print(configs.get("system_prompt", ""), "system_prompt")
+    # logger
 
     if not configs.only_eval:
         base_dataset_train = get_dataset(
@@ -180,23 +183,22 @@ def main():
     training_args = TrainingArguments(
         run_name=run_name,
         output_dir=save_dir,
-        per_device_train_batch_size=configs['batch_size_training'],
+        per_device_train_batch_size=configs.batch_size_training,
         gradient_accumulation_steps=configs.gradient_accumulation_steps,
-        learning_rate=configs['lr'],
+        learning_rate=configs.lr,
         warmup_ratio=0.2,
-        # max_steps=configs['samples_per_epoch']//configs['batch_size_training']*configs['num_epochs'],
         logging_steps=1, # TODO ideally we log to tensorboard every step, but to ui every 100 steps
         save_steps=10000,
         bf16=configs.bf16,
         bf16_full_eval=configs.bf16,
         optim="adamw_bnb_8bit", # save memory:adamw_torch  adamw_bnb_8bit or paged_adamw_32bit
-        num_train_epochs=1,#configs['epochs_per_stage'],
+        num_train_epochs=1,
         torch_empty_cache_steps=100,
         save_safetensors=False,
         save_only_model=True,
         report_to="wandb" if wandb_run else None,
-        # lr_scheduler_type="cosine",# cosine cosine_with_restarts
         
+        # lr_scheduler_type="cosine",# cosine cosine_with_restarts. constant in ref. constant_with_warmup
         # save_strategy="no",
     )
 
@@ -219,7 +221,7 @@ def main():
         elif phase > configs.max_latent_stage:
             break
 
-        scheduled_stage = phase // configs['epochs_per_stage']
+        scheduled_stage = phase // configs.epochs_per_stage
         no_bot_eot=configs.cot or configs.no_cot or configs.no_thoughts
         logger.info(f"scheduled_stage={scheduled_stage}, no_bot_eot={no_bot_eot}, c_thought={configs.c_thought}, max_latent_stage={configs.max_latent_stage}, cot={configs.cot}, coconut={configs.coconut}")
 
@@ -238,7 +240,7 @@ def main():
             dataset_gen_val,
             num_workers=1,
             pin_memory=True,
-            batch_size=configs['batch_size_training'],
+            batch_size=configs.batch_size_training,
             collate_fn=collator,
         )
         if "gsm" in configs.val_path:
@@ -282,8 +284,10 @@ def main():
 
             class CoconutEvalCallback(TrainerCallback):               
                 
-                def on_epoch_end(self, *args, **kwargs):
+                def on_epoch_end(self, args, state, control, **kwargs):
                     r = evaluate(valid_gen_dataloader, model, tokenizer, base_dataset_valid, max_new_tokens=max_new_tokens, name=f"eval_{phase}", dtype=dtype, device=device)
+                    r['phase_step'] = state.global_step
+                    r['phase'] = phase
                     if wandb_run:
                         wandb_run.log(r)
                     res.append(r)
@@ -308,7 +312,7 @@ def main():
 
         clear_memory()
         r = evaluate(valid_gen_dataloader, model, tokenizer, base_dataset_valid, max_new_tokens=max_new_tokens, name=f"eval_{phase}", dtype=dtype, device=device)
-        r['epoch'] = phase
+        r['phase'] = phase
         r['minutes'] = (time.time() - start_time) / 60
         clear_memory()
         if wandb_run:

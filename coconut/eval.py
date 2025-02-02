@@ -52,7 +52,7 @@ def evaluate(dataloader, model, tokenizer, ds, max_new_tokens=64, device='cuda',
                     pad_token_id=tokenizer.eos_token_id,
                 )
 
-            llm_text_outputs = tokenizer.batch_decode(outputs, skip_special_tokens=True)
+            llm_text_outputs = tokenizer.batch_decode(outputs, skip_special_tokens=False)
 
             for i in range(len(llm_text_outputs)):
                 test_idx = idx[i].item()
@@ -76,7 +76,7 @@ def evaluate(dataloader, model, tokenizer, ds, max_new_tokens=64, device='cuda',
                         f"""Q #{test_idx}: Answer = '{answer}' ideal_CoT = '{indent(answer_cot)},'.
     Question: `{indent(question)}`.
     Extracted llm Output: `{crop(llm_answer_output)}` (=? {answer}) {correct}.
-    Full llm output: `{indent(crop(llm_text_output))}`. 
+    Full llm output: `{indent(crop(llm_text_output, maxl=1900))}`. 
     """)                
 
 

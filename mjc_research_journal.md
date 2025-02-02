@@ -171,6 +171,14 @@ Test accuracy: 0.13: 100%|██████████████████
 Qwen/Qwen2.5-0.5B starts with loss 0.6, loss 0.29 by step 500. 0.133 by end of epoch, .18 by 0.5 epochs
 plaguss/Qwen2.5-0.5B-Math-Shepherd-PRM-0.2 starts 0.97, 0.28 by 500, 0.18 by 0.5
 Qwen/Qwen2.5-Coder-0.5B 0.6, 0.3 by 500, 0.19 at 0.5 epochs
+So.. they are all about the same?
+
+| model_id | loss 0.5 | loss 500 | loss 0.5 epochs |
+|----------|----------|----------|-----------------|
+| Qwen          | 0.6      | 0.29     | 0.18            |
+| Math-PRM-0.2  | 0.97     | 0.28     | 0.18            |
+| Coder-0.5B    | 0.6      | 0.3      | 0.19            |
+
 
 {'loss': 0.6079, 'grad_norm': 13.604103088378906, 'learning_rate': 6.222775357809583e-06, 'epoch': 0.0}                                                                          
 {'loss': 0.2347, 'grad_norm': 8.023530960083008, 'learning_rate': 1.2445550715619167e-05, 'epoch': 0.01}                                                                         
@@ -425,3 +433,55 @@ TODO
 |  9 |  0.0416667 |             0 |       3 |   63.4671 |
  18%|███████████████████████████▎                                                                                                                              | 754/4250 [1:03:28<4:54:17,  5.05s/it]
 wandb: 🚀 View run gsm-qwen_20250201-122443 at: https://wandb.ai/wassname/coconut/runs/al3d68tu
+
+
+Hmm just try to replicate?
+Hmm just try with fp32?
+
+
+Note is the original should get 40% with gpt2
+used almost 400k samples, and 50 epochs!!
+
+also they did not use bf16
+they did not reset the optimiser. One big run of 25 epochs for CoT. Then 25 for tink
+no scheduler?
+
+
+So the RL experiment used a prompt and a tiny training. Why did that need 8k, but this needs 400k*50!!!. Maybe learning new fundemental behavious takes a long itme. Maybe the prompt helps?
+- try with prompt to help initial exploration
+- don't reset optimiser!!? how
+
+no no schedule?
+might help if I use chatml to tokenize?
+
+
+### prompts?
+
+https://github.com/Jiayi-Pan/TinyZero/blob/8a623926012ff785f2dc6f3639a821465eed07c4/examples/data_preprocess/countdown.py#L65
+
+"""<|im_start|>system\nFirst think about the reasoning process in the mind and then provides the user with the answer.<|im_end|>\n<|im_start|>user\n Using the numbers {numbers}, create an equation that equals {target}. You can use basic arithmetic operations (+, -, *, /) and each number can only be used once. Show your work in << and >> tags. And return the final answer after ### , for example <<(1 + 2) / 3 = 1>>\n## 1<|im_end|>\n<|im_start|>assistant\nLet me solve this step by step.\n"""
+
+
+prefix = f"""Reason about the math question then provide your answer. Show your work in <<< and >>> tags or think in <|start-latent|><|latent|><|end-latent|> tags. And return the final answer after ###, for example <<1+2=3>>\n### 3.
+
+prefix = f"""Reason about the math question in <<< and >>> tags or think silently in <|start-latent|><|latent|><|end-latent|> tags. And return the final answer after ###, for example <<1+2=3>>\n### 3.
+
+prefix = f"""Reason and solve the following math question in this format <|start-latent|><|latent|><|end-latent|><<1+2=3>>\n### 3"""
+
+Without prompt or chatml
+
+| model_id | loss 0.5 | loss 500 | loss 0.5 epochs |
+|----------|----------|----------|-----------------|
+| Qwen 0.5b         | 0.6      | 0.29     | 0.18            |
+| 0.5b Math-PRM-0.2  | 0.97     | 0.28     | 0.18            |
+| Coder-0.5B    | 0.6      | 0.3      | 0.19            |
+
+0.5b Math-PRM-0.2
+with prompt
+0steps 3.5
+step100, loss 0.5
+step 400, 0.2
+
+
+
+![seems to help with loer loss](files/image.png)
