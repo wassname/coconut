@@ -483,5 +483,7 @@ step100, loss 0.5
 step 400, 0.2
 
 
+but acc was only 0.02, wth
+
 
 ![seems to help with loer loss](files/image.png)

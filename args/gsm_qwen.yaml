@@ -27,8 +27,8 @@ save_only_improve: True
 uniform_prob: 0.0
 # Qwen/Qwen2.5-0.5B-Instruct
 # model_id: fdyrd/QwenMath-0.5B
-# model_id: Qwen/Qwen2.5-Coder-0.5B
-model_id: plaguss/Qwen2.5-0.5B-Math-Shepherd-PRM-0.2
+model_id: Qwen/Qwen2.5-Coder-0.5B
+# model_id: plaguss/Qwen2.5-0.5B-Math-Shepherd-PRM-0.2
 load_model_path: 
 seed: 0
 resume: 0
