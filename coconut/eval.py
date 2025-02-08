@@ -31,10 +31,11 @@ def evaluate(dataloader, model, tokenizer, ds, max_new_tokens=64, device='cuda',
     )
     logger.info(f"Starting evaluation {name}")
     cor, cor_cot, total = 0, 0, 0
+    batch_size = dataloader.batch_size
     with torch.no_grad():
         model.eval()
         for batch_n, batch in enumerate(dataloader):
-            if quick and batch_n > 3:
+            if quick and batch_n*batch_size > 32:
                 break
             
             idx = batch["idx"]
@@ -70,13 +71,13 @@ def evaluate(dataloader, model, tokenizer, ds, max_new_tokens=64, device='cuda',
                 cor += llm_answer_output == answer
                 cor_cot += llm_cot_output == answer_cot
 
-                if (batch_n < 1) and (i < 3):
+                if ((batch_n-1)*batch_size+i)<3:
                     correct = '✅' if llm_answer_output==answer else '❌'
                     logger.info(
                         f"""Q #{test_idx}: Answer = '{answer}' ideal_CoT = '{indent(answer_cot)},'.
     Question: `{indent(question)}`.
     Extracted llm Output: `{crop(llm_answer_output)}` (=? {answer}) {correct}.
-    Full llm output: `{indent(crop(llm_text_output))}`. 
+    Full llm output: `{indent(crop(llm_text_output, 3000))}`. 
     """)                
 
 

@@ -283,18 +283,23 @@ def main():
             class CoconutEvalCallback(TrainerCallback):               
                 
                 def on_epoch_end(self, *args, **kwargs):
-                    r = evaluate(valid_gen_dataloader, model, tokenizer, base_dataset_valid, max_new_tokens=max_new_tokens, name=f"eval_{phase}", dtype=dtype, device=device)
+                    r = evaluate(valid_gen_dataloader, model, tokenizer, base_dataset_valid, max_new_tokens=max_new_tokens, name=f"cb_eval_{phase}", dtype=dtype, device=device, quick=True)
                     if wandb_run:
                         wandb_run.log(r)
                     res.append(r)
                     return 
+
+            callbacks=[ProgressCallbackNoPrint()]
+            if training_args.num_train_epochs>1:
+                callbacks.append(CoconutEvalCallback())
+
             trainer = TrainerCls(
                 model=model,# if scheduled_stage > 0 else model.base_causallm,
                 args=training_args,
                 train_dataset=dataset_train,
                 eval_dataset=dataset_loss_val,
                 data_collator=collator,
-                callbacks=[ProgressCallbackNoPrint(), CoconutEvalCallback()]
+                callbacks=callbacks
                 # TODO pass in (opt, scheduler) as a callback
             )
             # TODO we don't need to shuffle train as it's done during load
