@@ -213,13 +213,13 @@ def main():
         logger.warning(f"Resuming from epoch {configs.resume}")
     for phase in range(configs.resume, configs.num_epochs):
         start_time = time.time()
-        if phase == configs.max_latent_stage:
+        scheduled_stage = phase // configs['epochs_per_stage']
+        if scheduled_stage == configs.max_latent_stage:
             training_args.num_train_epochs = configs.num_epochs - configs.max_latent_stage
             print("max_latent_stage reached, training in one large run for", training_args.num_train_epochs)
-        elif phase > configs.max_latent_stage:
+        elif scheduled_stage > configs.max_latent_stage:
             break
 
-        scheduled_stage = phase // configs['epochs_per_stage']
         no_bot_eot=configs.cot or configs.no_cot or configs.no_thoughts
         logger.info(f"scheduled_stage={scheduled_stage}, no_bot_eot={no_bot_eot}, c_thought={configs.c_thought}, max_latent_stage={configs.max_latent_stage}, cot={configs.cot}, coconut={configs.coconut}")
 
@@ -315,6 +315,7 @@ def main():
         r = evaluate(valid_gen_dataloader, model, tokenizer, base_dataset_valid, max_new_tokens=max_new_tokens, name=f"eval_{phase}", dtype=dtype, device=device)
         r['epoch'] = phase
         r['minutes'] = (time.time() - start_time) / 60
+        r['scheduled_stage'] = scheduled_stage
         clear_memory()
         if wandb_run:
             wandb_run.log(r)

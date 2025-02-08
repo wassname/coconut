@@ -431,3 +431,25 @@ wandb: 🚀 View run gsm-qwen_20250201-122443 at: https://wandb.ai/wassname/coco
 
 Trying on h100 for speed.
 With bf16 (not sure if this will learn), batch of 48. 2min for first epoch, 8 for second, ? 3rd
+
+
+# Results: gsm-qwen-1.5b_20250208-082744
+{'project': 'coconut', 'save_path': 'outputs/', 'name': 'gsm-qwen-1.5b', 'only_eval': False, 'coconut': True, 'cot': False, 'no_thoughts': False, 'no_cot': False, 'c_thought': 2, 'epochs_per_stage': 2, 'max_latent_stage': 3, 'pad_latent_to_max': True, 'replacement_method': '-1', 'uniform_prob': 0.0, 'model_id': 'Qwen/Qwen2.5-Math-1.5B', 'load_model_path': None, 'resume': 0, 'seed': 0, 'bf16': True, 'bf16_weight': True, 'train_path': 'data/gsm_train.json', 'val_path': 'data/gsm_valid.json', 'batch_size_training': 42, 'max_size': 8000, 'debug': False, 'gradient_accumulation_steps': 1, 'num_epochs': 50, 'lr': 0.0001, 'weight_decay': 0.0}
+|    |   eval/acc |   eval/cot_em |   epoch |   minutes |
+|---:|-----------:|--------------:|--------:|----------:|
+|  0 | 0.00371747 |             0 |       0 |   3.67468 |
+|  1 | 0.0260223  |             0 |       1 |   3.26432 |
+|  2 | 0.0780669  |             0 |       2 |   7.86726 |
+|  3 | 0.0238095  |             0 |     nan | nan       |
+|  4 | 0.047619   |             0 |     nan | nan       |
+|  5 | 0.047619   |             0 |     nan | nan       |
+|  6 | 0          |             0 |     nan | nan       |
+|  7 | 0.0952381  |             0 |     nan | nan       |
+|  8 | 0.047619   |             0 |     nan | nan       |
+|  9 | 0.0714286  |             0 |     nan | nan       |
+| 10 | 0.047619   |             0 |     nan | nan       |
+| 11 | 0.0952381  |             0 |     nan | nan       |
+| 12 | 0.0714286  |             0 |     nan | nan       |
+| 13 | 0.0855019  |             0 |       3 |  70.464   |
+
+A lot faster!

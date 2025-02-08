@@ -27,8 +27,10 @@ model_id: Qwen/Qwen2.5-Math-1.5B
 # model_id: deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B
 
 load_model_path: 
-# load_model_path: outputs/gsm-qwen-1.5b_20250131-120658/checkpoint_1
 resume: 0
+
+# load_model_path: outputs/gsm-qwen-1.5b_20250131-120658/checkpoint_1
+# resume: 6
 seed: 0
 bf16: True
 bf16_weight: True
