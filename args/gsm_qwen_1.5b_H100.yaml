@@ -12,7 +12,7 @@ no_thoughts: False
 no_cot: False
 
 c_thought: 2
-epochs_per_stage: 1
+epochs_per_stage: 2
 max_latent_stage: 3
 pad_latent_to_max: True
 replacement_method: "-1"
@@ -34,10 +34,10 @@ bf16: True
 bf16_weight: True
 train_path: data/gsm_train.json
 val_path: data/gsm_valid.json
-batch_size_training: 48
+batch_size_training: 42
 max_size: 8000 # in verl 8k is enougth https://github.com/volcengine/verl/blob/main/examples/ppo_trainer/verl_getting_started.ipynb
 debug: False
 gradient_accumulation_steps: 1
 num_epochs: 50
-lr: !!float "1e-5" # 1e-4 in coconut, but 1e-6 in verl
+lr: !!float "1e-4" # 1e-4 in coconut, but 1e-6 in verl
 weight_decay: 0.0 # 0.01 in coconut, but 0.00 in verl

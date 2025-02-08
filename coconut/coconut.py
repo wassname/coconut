@@ -334,7 +334,7 @@ class CoconutQwen2ForCausalLM(Qwen2ForCausalLM):
         self,
         input_ids,
         attention_mask,  # attention_mask is not used
-        max_new_tokens=16,
+        max_new_tokens=32,
         output_embedding=False,
         **kwargs,
     ):
@@ -359,12 +359,11 @@ class CoconutQwen2ForCausalLM(Qwen2ForCausalLM):
         kv_cache = outputs.past_key_values
         for _ in range(max_new_tokens - 1):
             # FIXME here we use the base model forward, that means we DO NOT use latent thoughts after the preconfigured ones
-            # FIXME cache!
             outputs = super().forward(inputs_embeds=new_inputs_embeds, past_key_values=kv_cache)
             kv_cache = outputs.past_key_values
             self.gen_forward_cnt += 1
             next_token = outputs.logits[:, -1].argmax(-1).detach().unsqueeze(1)
-            if (next_token == self.config.latent_token_id).any():
+            if (next_token == self.config.latent_token_id).all():
                 logger.error("Latent token generated, not implemented in gen")
 
             tokens = torch.cat((tokens, next_token), dim=1)

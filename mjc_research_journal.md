@@ -425,3 +425,9 @@ TODO
 |  9 |  0.0416667 |             0 |       3 |   63.4671 |
  18%|███████████████████████████▎                                                                                                                              | 754/4250 [1:03:28<4:54:17,  5.05s/it]
 wandb: 🚀 View run gsm-qwen_20250201-122443 at: https://wandb.ai/wassname/coconut/runs/al3d68tu
+
+
+# 2025-02-08 08:26:26
+
+Trying on h100 for speed.
+With bf16 (not sure if this will learn), batch of 48. 2min for first epoch, 8 for second, ? 3rd

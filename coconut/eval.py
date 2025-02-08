@@ -1,7 +1,7 @@
 import torch
 from tqdm.auto import tqdm
 from loguru import logger
-
+import re
 
 def indent(s):
     return s.replace("\n", "\n\t")
@@ -11,6 +11,13 @@ def crop(s, maxl=30):
     if len(s) > maxl:
         return s[:maxl] + "..."
     return s
+
+def extract_first_number2(text):
+    # updated regex to capture the first number after '###'
+    match = re.search(r'###\s*(\d+\.?\d*)', text)
+    if match:
+        return match.group(1)
+    return None
 
 @torch.no_grad()
 def evaluate(dataloader, model, tokenizer, ds, max_new_tokens=64, device='cuda', name="", dtype=torch.float32, quick=False):
@@ -59,7 +66,8 @@ def evaluate(dataloader, model, tokenizer, ds, max_new_tokens=64, device='cuda',
                 test_idx = idx[i].item()
                 llm_text_output = llm_text_outputs[i]
 
-                llm_answer_output = llm_text_output.split("#")[-1].replace(",", "").strip()
+                # llm_answer_output = llm_text_output.split("#")[-1].replace(",", "").strip()
+                llm_answer_output = extract_first_number2(llm_text_output)
                 llm_cot_output = (
                     ("\n".join(llm_text_output.split("\n")[1:])).split("#")[0].strip()
                 )
@@ -71,7 +79,8 @@ def evaluate(dataloader, model, tokenizer, ds, max_new_tokens=64, device='cuda',
                 cor += llm_answer_output == answer
                 cor_cot += llm_cot_output == answer_cot
 
-                if ((batch_n-1)*batch_size+i)<3:
+                batch_nm1 = (batch_n-1) if batch_n>0 else 0
+                if (batch_nm1*batch_size+i)<3:
                     correct = '✅' if llm_answer_output==answer else '❌'
                     logger.info(
                         f"""Q #{test_idx}: Answer = '{answer}' ideal_CoT = '{indent(answer_cot)},'.
