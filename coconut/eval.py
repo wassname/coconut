@@ -70,7 +70,7 @@ def evaluate(dataloader, model, tokenizer, ds, max_new_tokens=64, device='cuda',
                 cor += llm_answer_output == answer
                 cor_cot += llm_cot_output == answer_cot
 
-                if (batch_n < 3) and (i < 1):
+                if (batch_n < 1) and (i < 3):
                     correct = '✅' if llm_answer_output==answer else '❌'
                     logger.info(
                         f"""Q #{test_idx}: Answer = '{answer}' ideal_CoT = '{indent(answer_cot)},'.

@@ -18,3 +18,9 @@ run2:
   export CUDA_VISIBLE_DEVICES=1
   . ./.venv/bin/activate
   python scripts/run.py args/gsm_qwen_1.5b.yaml
+
+
+vast:
+  export CUDA_DEVICE_ORDER=PCI_BUS_ID
+  . ./.venv/bin/activate
+  python scripts/run.py args/gsm_qwen_1.5b_H100.yaml

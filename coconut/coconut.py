@@ -364,7 +364,7 @@ class CoconutQwen2ForCausalLM(Qwen2ForCausalLM):
             kv_cache = outputs.past_key_values
             self.gen_forward_cnt += 1
             next_token = outputs.logits[:, -1].argmax(-1).detach().unsqueeze(1)
-            if next_token == self.config.latent_token_id:
+            if (next_token == self.config.latent_token_id).any():
                 logger.error("Latent token generated, not implemented in gen")
 
             tokens = torch.cat((tokens, next_token), dim=1)
