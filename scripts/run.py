@@ -189,7 +189,7 @@ def main():
         save_steps=10000,
         bf16=configs.bf16,
         bf16_full_eval=configs.bf16,
-        optim="adamw_bnb_8bit", # save memory:adamw_torch  adamw_bnb_8bit or paged_adamw_32bit
+        optim="adamw_bnb_8bit" if configs.bf16 else "adamw_torch", # save memory:adamw_torch  adamw_bnb_8bit or paged_adamw_32bit
         num_train_epochs=1,#configs['epochs_per_stage'],
         torch_empty_cache_steps=100,
         save_safetensors=False,
@@ -198,6 +198,7 @@ def main():
         # lr_scheduler_type="cosine",# cosine cosine_with_restarts
         
         # save_strategy="no",
+        # max_grad_norm=0.1 # unsloth uses 0.1 vs the default 1
     )
 
     """
@@ -245,7 +246,7 @@ def main():
             max_new_tokens = 64
         else:
             max_new_tokens = 128
-        if phase==0:
+        if (phase==0) or (phase==configs.resume):
             # quick QC to see how well untouched model does at the task
             r = evaluate(valid_gen_dataloader, model, tokenizer, base_dataset_valid, max_new_tokens=max_new_tokens, name=f"eval_{phase}_start", dtype=dtype, device=device, quick=True)
             if wandb_run:

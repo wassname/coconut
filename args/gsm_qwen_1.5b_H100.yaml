@@ -29,17 +29,17 @@ model_id: Qwen/Qwen2.5-Math-1.5B
 load_model_path: 
 resume: 0
 
-# load_model_path: outputs/gsm-qwen-1.5b_20250131-120658/checkpoint_1
-# resume: 6
+# load_model_path: outputs/gsm-qwen-1.5b_20250208-082744/checkpoint_3
+# resume: 5
 seed: 0
-bf16: True
-bf16_weight: True
+bf16: False
+bf16_weight: False
 train_path: data/gsm_train.json
 val_path: data/gsm_valid.json
-batch_size_training: 42
+batch_size_training: 26
 max_size: 8000 # in verl 8k is enougth https://github.com/volcengine/verl/blob/main/examples/ppo_trainer/verl_getting_started.ipynb
 debug: False
 gradient_accumulation_steps: 1
-num_epochs: 50
+num_epochs: 150
 lr: !!float "1e-4" # 1e-4 in coconut, but 1e-6 in verl
 weight_decay: 0.0 # 0.01 in coconut, but 0.00 in verl

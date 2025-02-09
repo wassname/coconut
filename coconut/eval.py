@@ -7,9 +7,12 @@ def indent(s):
     return s.replace("\n", "\n\t")
 
 def crop(s, maxl=30):
-    s = s.replace('<|endoftext|>', '')
+    tokens = ['<|endoftext|>', '<|im_end|>']
+    for token in tokens:
+        while s.startswith(token):
+            s = s[len(token):]
     if len(s) > maxl:
-        return s[:maxl] + "..."
+        return "..." + s[-maxl:]
     return s
 
 def extract_first_number2(text):
@@ -17,7 +20,7 @@ def extract_first_number2(text):
     match = re.search(r'###\s*(\d+\.?\d*)', text)
     if match:
         return match.group(1)
-    return None
+    return ''
 
 @torch.no_grad()
 def evaluate(dataloader, model, tokenizer, ds, max_new_tokens=64, device='cuda', name="", dtype=torch.float32, quick=False):
@@ -60,7 +63,7 @@ def evaluate(dataloader, model, tokenizer, ds, max_new_tokens=64, device='cuda',
                     pad_token_id=tokenizer.eos_token_id,
                 )
 
-            llm_text_outputs = tokenizer.batch_decode(outputs, skip_special_tokens=True)
+            llm_text_outputs = tokenizer.batch_decode(outputs, skip_special_tokens=False)
 
             for i in range(len(llm_text_outputs)):
                 test_idx = idx[i].item()
@@ -79,8 +82,7 @@ def evaluate(dataloader, model, tokenizer, ds, max_new_tokens=64, device='cuda',
                 cor += llm_answer_output == answer
                 cor_cot += llm_cot_output == answer_cot
 
-                batch_nm1 = (batch_n-1) if batch_n>0 else 0
-                if (batch_nm1*batch_size+i)<3:
+                if (batch_n*batch_size+i)<3:
                     correct = '✅' if llm_answer_output==answer else '❌'
                     logger.info(
                         f"""Q #{test_idx}: Answer = '{answer}' ideal_CoT = '{indent(answer_cot)},'.

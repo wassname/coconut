@@ -35,8 +35,11 @@ def get_dataset(path, tokenizer, max_size=1000000000, drop_unused=True):
         }
         return sample
 
-    data = json.load(open(path))[:max_size]
-    print(f'loaded dataset of size {len(data)}')
+    data = json.load(open(path))
+    if max_size < len(data):
+        # FIXME shuffle
+        print(f'loaded dataset of size {len(data)}, cropping to {max_size}')
+        data = data[:max_size]
     data = [{**d, "idx": idx} for idx, d in enumerate(data)]
 
     keys = data[0].keys()

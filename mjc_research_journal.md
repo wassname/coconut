@@ -355,12 +355,12 @@ yeah seems good
 # ok I did a long run with 0,5 no good
 
 coconut.utils.Config object at 0x79fe3a95e710>
-|    |   eval/acc |   eval/cot_em |   epoch |
-|---:|-----------:|--------------:|--------:|
-|  0 |   0.719212 |             0 |       0 |
-|  1 |   0.576355 |             0 |       1 |
-|  2 |   0.458128 |             0 |       2 |
-|  3 |   0.251232 |             0 |       3 |
+|      | eval/acc | eval/cot_em | epoch |
+| ---: | -------: | ----------: | ----: |
+|    0 | 0.719212 |           0 |     0 |
+|    1 | 0.576355 |           0 |     1 |
+|    2 | 0.458128 |           0 |     2 |
+|    3 | 0.251232 |           0 |     3 |
 
 
 TODO better eval (forward one token at a time)
@@ -368,21 +368,21 @@ TODO run eval using transformers
 
 nope can't even replicate wth
 this is with -1
-|    |   eval/acc |   eval/cot_em |   epoch |
-|---:|-----------:|--------------:|--------:|
-|  0 |   0.719212 |             0 |       0 |
-|  1 |   0.561576 |             0 |       1 |
-|  2 |   0.463054 |             0 |       2 |
-|  3 |   0.295567 |             0 |       3 |
+|      | eval/acc | eval/cot_em | epoch |
+| ---: | -------: | ----------: | ----: |
+|    0 | 0.719212 |           0 |     0 |
+|    1 | 0.561576 |           0 |     1 |
+|    2 | 0.463054 |           0 |     2 |
+|    3 | 0.295567 |           0 |     3 |
 
 
 OK I can't even replciate, probobly 16bit training is the problem!?
 Maybe I should use 0.5b and 32bit
 
-|    |   eval/acc |   eval/cot_em |   epoch |   minutes |
-|---:|-----------:|--------------:|--------:|----------:|
-|  0 |   0.246305 |             0 |       2 |   20.8777 |
-|  1 |   0.142857 |             0 |       3 |  175.502  |
+|      | eval/acc | eval/cot_em | epoch | minutes |
+| ---: | -------: | ----------: | ----: | ------: |
+|    0 | 0.246305 |           0 |     2 | 20.8777 |
+|    1 | 0.142857 |           0 |     3 | 175.502 |
 
 
 so even 0.5b 32b weight, 16b training it doesn't work. lets see after the long train...
@@ -392,12 +392,12 @@ so even 0.5b 32b weight, 16b training it doesn't work. lets see after the long t
 
 Wait it did start working!
     {'project': 'coconut', 'save_path': 'outputs/', 'name': 'gsm-qwen', 'only_eval': False, 'coconut': True, 'cot': False, 'no_thoughts': False, 'no_cot': False, 'c_thought': 2, 'epochs_per_stage': 1, 'max_latent_stage': 3, 'pad_latent_to_max': True, 'replacement_method': '-1', 'save_only_improve': True, 'uniform_prob': 0.0, 'model_id': 'plaguss/Qwen2.5-0.5B-Math-Shepherd-PRM-0.2', 'load_model_path': None, 'seed': 0, 'resume': 0, 'bf16': True, 'bf16_weight': False, 'train_path': 'data/gsm_train.json', 'val_path': 'data/gsm_valid.json', 'reset_optimizer': False, 'batch_size_training': 10, 'max_size': 10000, 'debug': False, 'gradient_accumulation_steps': 4, 'num_epochs': 5, 'lr': 0.0001, 'weight_decay': 0.01}
-    |    |   eval/acc |   eval/cot_em |   epoch |   minutes |
-    |---:|-----------:|--------------:|--------:|----------:|
-    |  0 |  0.267857  |             0 |       0 |   9.56295 |
-    |  1 |  0.196429  |             0 |       1 |  13.2542  |
-    |  2 |  0.0863095 |             0 |       2 |  14.6686  |
-    |  3 |  0.0714286 |             0 |       3 |  32.8783  |
+    |      |  eval/acc | eval/cot_em | epoch | minutes |
+    | ---: | --------: | ----------: | ----: | ------: |
+    |    0 |  0.267857 |           0 |     0 | 9.56295 |
+    |    1 |  0.196429 |           0 |     1 | 13.2542 |
+    |    2 | 0.0863095 |           0 |     2 | 14.6686 |
+    |    3 | 0.0714286 |           0 |     3 | 32.8783 |
     wandb: 🚀 View run gsm-qwen_20250201-071510 at: https://wandb.ai/wassname/coconut/runs/v49wpqas
 
 
@@ -411,19 +411,19 @@ TODO
 
 # Results: gsm-qwen_20250201-122443
 {'project': 'coconut', 'save_path': 'outputs/', 'name': 'gsm-qwen', 'only_eval': False, 'coconut': True, 'cot': False, 'no_thoughts': False, 'no_cot': False, 'c_thought': 2, 'epochs_per_stage': 1, 'max_latent_stage': 3, 'pad_latent_to_max': True, 'replacement_method': '-1', 'save_only_improve': True, 'uniform_prob': 0.0, 'model_id': 'plaguss/Qwen2.5-0.5B-Math-Shepherd-PRM-0.2', 'load_model_path': None, 'seed': 0, 'resume': 0, 'bf16': True, 'bf16_weight': False, 'train_path': 'data/gsm_train.json', 'val_path': 'data/gsm_valid.json', 'reset_optimizer': False, 'batch_size_training': 10, 'max_size': 10000, 'debug': False, 'gradient_accumulation_steps': 4, 'num_epochs': 20, 'lr': 0.0001, 'weight_decay': 0.01}
-|    |   eval/acc |   eval/cot_em |   epoch |   minutes |
-|---:|-----------:|--------------:|--------:|----------:|
-|  0 |  0.25      |             0 |     nan |  nan      |
-|  1 |  0.25      |             0 |       0 |   10.4013 |
-|  2 |  0.205357  |             0 |     nan |  nan      |
-|  3 |  0.205357  |             0 |       1 |   16.4774 |
-|  4 |  0.0684524 |             0 |     nan |  nan      |
-|  5 |  0.0684524 |             0 |       2 |   18.9123 |
-|  6 |  0.0535714 |             0 |     nan |  nan      |
-|  7 |  0.0684524 |             0 |     nan |  nan      |
-|  8 |  0.0327381 |             0 |     nan |  nan      |
-|  9 |  0.0416667 |             0 |       3 |   63.4671 |
- 18%|███████████████████████████▎                                                                                                                              | 754/4250 [1:03:28<4:54:17,  5.05s/it]
+|      |                     eval/acc |                           eval/cot_em | epoch | minutes |
+| ---: | ---------------------------: | ------------------------------------: | ----: | ------: |
+|    0 |                         0.25 |                                     0 |   nan |     nan |
+|    1 |                         0.25 |                                     0 |     0 | 10.4013 |
+|    2 |                     0.205357 |                                     0 |   nan |     nan |
+|    3 |                     0.205357 |                                     0 |     1 | 16.4774 |
+|    4 |                    0.0684524 |                                     0 |   nan |     nan |
+|    5 |                    0.0684524 |                                     0 |     2 | 18.9123 |
+|    6 |                    0.0535714 |                                     0 |   nan |     nan |
+|    7 |                    0.0684524 |                                     0 |   nan |     nan |
+|    8 |                    0.0327381 |                                     0 |   nan |     nan |
+|    9 |                    0.0416667 |                                     0 |     3 | 63.4671 |
+|  18% | ███████████████████████████▎ | 754/4250 [1:03:28<4:54:17,  5.05s/it] |
 wandb: 🚀 View run gsm-qwen_20250201-122443 at: https://wandb.ai/wassname/coconut/runs/al3d68tu
 
 
@@ -435,21 +435,110 @@ With bf16 (not sure if this will learn), batch of 48. 2min for first epoch, 8 fo
 
 # Results: gsm-qwen-1.5b_20250208-082744
 {'project': 'coconut', 'save_path': 'outputs/', 'name': 'gsm-qwen-1.5b', 'only_eval': False, 'coconut': True, 'cot': False, 'no_thoughts': False, 'no_cot': False, 'c_thought': 2, 'epochs_per_stage': 2, 'max_latent_stage': 3, 'pad_latent_to_max': True, 'replacement_method': '-1', 'uniform_prob': 0.0, 'model_id': 'Qwen/Qwen2.5-Math-1.5B', 'load_model_path': None, 'resume': 0, 'seed': 0, 'bf16': True, 'bf16_weight': True, 'train_path': 'data/gsm_train.json', 'val_path': 'data/gsm_valid.json', 'batch_size_training': 42, 'max_size': 8000, 'debug': False, 'gradient_accumulation_steps': 1, 'num_epochs': 50, 'lr': 0.0001, 'weight_decay': 0.0}
-|    |   eval/acc |   eval/cot_em |   epoch |   minutes |
-|---:|-----------:|--------------:|--------:|----------:|
-|  0 | 0.00371747 |             0 |       0 |   3.67468 |
-|  1 | 0.0260223  |             0 |       1 |   3.26432 |
-|  2 | 0.0780669  |             0 |       2 |   7.86726 |
-|  3 | 0.0238095  |             0 |     nan | nan       |
-|  4 | 0.047619   |             0 |     nan | nan       |
-|  5 | 0.047619   |             0 |     nan | nan       |
-|  6 | 0          |             0 |     nan | nan       |
-|  7 | 0.0952381  |             0 |     nan | nan       |
-|  8 | 0.047619   |             0 |     nan | nan       |
-|  9 | 0.0714286  |             0 |     nan | nan       |
-| 10 | 0.047619   |             0 |     nan | nan       |
-| 11 | 0.0952381  |             0 |     nan | nan       |
-| 12 | 0.0714286  |             0 |     nan | nan       |
-| 13 | 0.0855019  |             0 |       3 |  70.464   |
+|      |   eval/acc | eval/cot_em | epoch | minutes |
+| ---: | ---------: | ----------: | ----: | ------: |
+|    0 | 0.00371747 |           0 |     0 | 3.67468 |
+|    1 |  0.0260223 |           0 |     1 | 3.26432 |
+|    2 |  0.0780669 |           0 |     2 | 7.86726 |
+|    3 |  0.0238095 |           0 |   nan |     nan |
+|    4 |   0.047619 |           0 |   nan |     nan |
+|    5 |   0.047619 |           0 |   nan |     nan |
+|    6 |          0 |           0 |   nan |     nan |
+|    7 |  0.0952381 |           0 |   nan |     nan |
+|    8 |   0.047619 |           0 |   nan |     nan |
+|    9 |  0.0714286 |           0 |   nan |     nan |
+|   10 |   0.047619 |           0 |   nan |     nan |
+|   11 |  0.0952381 |           0 |   nan |     nan |
+|   12 |  0.0714286 |           0 |   nan |     nan |
+|   13 |  0.0855019 |           0 |     3 |  70.464 |
 
 A lot faster!
+and with fixed eval that's like 9.5%
+now lets check with 32b, does it make a difference by epoch 13 or so?
+
+hmm by stage 3 it's already 16% much better. but 16mins, so 2.2x slower.
+NOTE, I did change something else. I added the latent tokens slower, so this is phase 1 still. also this was with adam_bnb_8bit oops
+
+what about bf16 training and 32b weight? 
+
+
+on h100
+32b with adamw_8bit, bs=32
+32b, bs=26
+32b weights, bf16 train, 8bit grad, bs=42?
+
+
+H100 at epoch 3
+| weight | train | grad | bs  | acc  | epoch | minutes |
+| ------ | ----- | ---- | --- | ---- | ----- | ------- |
+| 32b    | 32b   | 32b  | 26  | 0.25 | ?     | 19      |
+| 32b    | 32b   | 8b   | 32  | 0.16 | 3     | 16      |
+| 32b    | bf16  | 32b  | ?   | ?    | ?     | ?       |
+| 32b    | bf16  | 8b   | ?   | ?    | ?     | ?       |
+| bf16   | bf16  | 8b   | 42  | 0.09 | 3     | 8       |
+
+
+https://wandb.ai/wassname/coconut/runs/nk4mg6oj/logs
+radient_accumulation_steps': 1, 'num_epochs': 150, 'lr': 0.0001, 'weight_decay': 0.0}
+|    |   eval/acc |   eval/cot_em |   epoch |   minutes |   scheduled_stage |
+|---:|-----------:|--------------:|--------:|----------:|------------------:|
+|  0 |  0.0148699 |             0 |       0 |  19.6995  |                 0 |
+|  1 |  0.0223048 |             0 |       1 |  18.4202  |                 0 |
+|  2 |  0.327138  |             0 |       2 |  18.7642  |                 1 |
+|  3 |  0.249071  |             0 |       3 |  19.7056  |                 1 |
+|  4 |  0.189591  |             0 |       4 |  20.806   |                 2 |
+|  5 |  0.249071  |             0 |       5 |  21.1867  |                 2 |
+|  6 |  0.230769  |             0 |     nan | nan       |               nan |
+|  7 |  0.211538  |             0 |     nan | nan       |               nan |
+|  8 |  0.211538  |             0 |     nan | nan       |               nan |
+|  9 |  0.173077  |             0 |     nan | nan       |               nan |
+| 10 |  0.211538  |             0 |     nan | nan       |               nan |
+| 11 |  0.211538  |             0 |     nan | nan       |               nan |
+| 12 |  0.173077  |             0 |     nan | nan       |               nan |
+| 13 |  0.134615  |             0 |     nan | nan       |               nan |
+| 14 |  0.153846  |             0 |     nan | nan       |               nan |
+| 15 |  0.25      |             0 |     nan | nan       |               nan |
+| 16 |  0.173077  |             0 |     nan | nan       |               nan |
+| 17 |  0.153846  |             0 |     nan | nan       |               nan |
+| 18 |  0.134615  |             0 |     nan | nan       |               nan |
+| 19 |  0.288462  |             0 |     nan | nan       |               nan |
+| 20 |  0.0961538 |             0 |     nan | nan       |               nan |
+| 21 |  0.153846  |             0 |     nan | nan       |               nan |
+| 22 |  0.173077  |             0 |     nan | nan       |               nan |
+| 23 |  0.192308  |             0 |     nan | nan       |               nan |
+| 24 |  0.0576923 |             0 |    **** nan | nan       |               nan |
+| 25 |  0.0576923 |             0 |     nan | nan       |               nan |
+| 26 |  0.134615  |             0 |     nan | nan       |               nan |
+| 27 |  0.0961538 |             0 |     nan | nan       |               nan |
+| 28 |  0.0769231 |             0 |     nan | nan       |               nan |
+| 29 |  0.0384615 |             0 |     nan | nan       |               nan |
+| 30 |  0.104089  |             0 |       6 | 477.331   |                 3 |
+| 31 |  0.104089  |             0 |       7 |   3.61633 |                 3 |
+  0%|                                                                                 
+
+
+# tricks
+
+Hmm people are praising unsloths small model hacks https://colab.research.google.com/github/unslothai/notebooks/blob/main/nb/Qwen2.5_(3B)-GRPO.ipynb#scrollTo=cXk993X6C2ZZ
+special gradient checkpointing
+adam 8 bit
+lorra
+bs1
+grad accum 1
+max_grad_norm=0.1 (1)
+bf16
+cosien scheduler
+
+https://unsloth.ai/blog/r1-reasoning
+- > It's advised to apply GRPO to a model at least 1.5B in parameters to correctly generate thinking tokens as smaller models may not.  
+- > We enable -O3 in vLLM by default and enable prefix caching
+
+
+https://old.reddit.com/r/MachineLearning/comments/1ik3nkr/p_grpo_fits_in_8gb_vram_deepseek_r1s_zeros_recipe/
+
+https://substack.com/home/post/p-154490380
+- DPO online workerd etter (what is this?)
+
+
+https://github.com/unslothai/unsloth/blob/53a773e4fbc53a1d96c7ba107e5fe75dab07027b/unsloth/models/rl.py#L419
+- replace samping with Replace with our vLLM engine
