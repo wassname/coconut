@@ -10,17 +10,17 @@ run1:
   export CUDA_DEVICE_ORDER=PCI_BUS_ID
   export CUDA_VISIBLE_DEVICES=1
   . ./.venv/bin/activate
-  python scripts/run.py args/gsm_qwen.yaml
+  python scripts/run.py gsm_qwen
 
 run2:
   #!/bin/bash
   export CUDA_DEVICE_ORDER=PCI_BUS_ID
   export CUDA_VISIBLE_DEVICES=1
   . ./.venv/bin/activate
-  python scripts/run.py args/gsm_qwen_1.5b.yaml
+  python scripts/run.py gsm_qwen_1.5b
 
 
 vast:
   export CUDA_DEVICE_ORDER=PCI_BUS_ID
   . ./.venv/bin/activate
-  python scripts/run.py args/gsm_qwen_1.5b_H100.yaml
+  python scripts/run.py GsmQwen1_5b_H100

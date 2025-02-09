@@ -1,0 +1,47 @@
+{
+  // Use IntelliSense to learn about possible attributes.
+  // Hover to view descriptions of existing attributes.
+  // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+  "version": "0.2.0",
+  "configurations": [
+  
+    {
+      "name": "debug",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "./scripts/run.py",
+      "console": "integratedTerminal",
+      "args": [
+        "GsmQwen1_5b_H100"
+      ],
+      "justMyCode": false,
+      "autoReload": {
+       "enable": true
+      },
+      "env": {
+        "DEBUG": "true",
+        "CUDA_DEVICE_ORDER": "PCI_BUS_ID",
+        "CUDA_VISIBLE_DEVICES": "1"
+      }
+    },
+    {
+      "name": "cot full",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "./scripts/run.py",
+      "console": "integratedTerminal",
+      "args": [
+        "GsmQwen1_5b_H100"
+      ],
+      "justMyCode": false,
+      "autoReload": {
+       "enable": true
+      },
+      "env": {
+        // "DEBUG": "true",
+        "CUDA_DEVICE_ORDER": "PCI_BUS_ID",
+        "CUDA_VISIBLE_DEVICES": "1"
+      }
+    }
+  ]
+}

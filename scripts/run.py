@@ -74,17 +74,19 @@ def save_model(model, tokenizer, configs, save_dir: Path):
 
 def main():
     parser = argparse.ArgumentParser(description="coconut")
-    parser.add_argument("config_file")
+    parser.add_argument("config_file", default="GsmQwen1_5b_H100", help="Config class to use")
     args = parser.parse_args()
 
-    # load the configuration file
-    with open(args.config_file) as f:
-        config_dict = yaml.safe_load(f)
+    from omegaconf import OmegaConf
+    import omegaconfigs
+    config_cls = getattr(omegaconfigs, args.config_file)
+    oconfig = OmegaConf.structured(config_cls)
+    config_dict = OmegaConf.to_container(oconfig, resolve=True)
 
-        logger.info(f"Config: {config_dict}")
+    logger.info(f"Config: {config_dict}")
 
     configs = Config(config_dict)
-
+ 
     timestamp = pd.Timestamp.now().strftime("%Y%m%d-%H%M%S")
     run_name = f"{configs.name}_{timestamp}"
 
@@ -101,6 +103,17 @@ def main():
     device = "cuda" if torch.cuda.is_available() else "cpu"
     dtype = torch.bfloat16 if configs.bf16 else torch.float32
     logger.info(f"Using device: {device}, dtype: {dtype}")
+
+    # wandb
+    if not configs.debug and not configs.only_eval:
+        wandb_run = wandb.init(project=configs.project, group=configs.name, 
+                               name=run_name,
+                            #    resume="allow"
+                               )
+        wandb_run.config.update(configs, allow_val_change=True)
+    else:
+        os.environ["WANDB_MODE"] = "disabled"
+        wandb_run = None
 
     if configs.load_model_path:
         f = Path('./' + configs.load_model_path)
@@ -132,7 +145,6 @@ def main():
         
         model.resize_token_embeddings(len(tokenizer))
 
-
     latent_id = tokenizer.convert_tokens_to_ids("<|latent|>")
     bot_id = tokenizer.convert_tokens_to_ids("<|start-latent|>")
     eot_id = tokenizer.convert_tokens_to_ids("<|end-latent|>")
@@ -163,16 +175,7 @@ def main():
             configs.train_path, tokenizer, max_size=max_size
         )
 
-    # wandb
-    if not configs.debug and not configs.only_eval:
-        wandb_run = wandb.init(project=configs.project, group=configs.name, 
-                               name=run_name,
-                            #    resume="allow"
-                               )
-        wandb_run.config.update(configs, allow_val_change=True)
-    else:
-        os.environ["WANDB_MODE"] = "disabled"
-        wandb_run = None
+
 
     collator = CoconutCollator(tokenizer, latent_id=latent_id, label_pad_token_id=-100)
 
@@ -189,7 +192,7 @@ def main():
         save_steps=10000,
         bf16=configs.bf16,
         bf16_full_eval=configs.bf16,
-        optim="adamw_bnb_8bit" if configs.bf16 else "adamw_torch", # save memory:adamw_torch  adamw_bnb_8bit or paged_adamw_32bit
+        optim="adamw_bnb_8bit" if configs.opt_8b else "adamw_torch", # save memory:adamw_torch  adamw_bnb_8bit or paged_adamw_32bit
         num_train_epochs=1,#configs['epochs_per_stage'],
         torch_empty_cache_steps=100,
         save_safetensors=False,
@@ -219,6 +222,7 @@ def main():
             training_args.num_train_epochs = configs.num_epochs - configs.max_latent_stage
             print("max_latent_stage reached, training in one large run for", training_args.num_train_epochs)
         elif scheduled_stage > configs.max_latent_stage:
+            print("max_latent_stage reached, breaking")
             break
 
         no_bot_eot=configs.cot or configs.no_cot or configs.no_thoughts
