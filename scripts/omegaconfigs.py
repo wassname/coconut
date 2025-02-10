@@ -17,12 +17,17 @@ class BaseConfig:
     
     c_thought: int = 2
     epochs_per_stage: int = 2
-    max_latent_stage: int = 3
+    max_latent_stage: int = 2
     pad_latent_to_max: bool = True
-    replacement_method: str = "-1" # or 0.5, or ie+supressed[0.5:] or hs+supressed[0.5:] or supressed[0.5:]
+    # replacement_method: str = "-1" # or 0.5, or ie+supressed[0.5:] or hs+supressed[0.5:] or supressed[0.5:]
+    # replacement_method: str = "0.5"
+    replacement_method: str = "supressed[0.5:]"
+    # replacement_method: str = "hs+supressed[0.5:]"
+    # replacement_method: str = "ie+supressed[0.5:]"
+    
     
     uniform_prob: float = 0.0
-    model_id: str = "Qwen/Qwen2.5-Math-1.5B"
+    model_id: str = "Qwen/Qwen2.5-Math-1.5B-Instruct"
     
     load_model_path: str = "" # set to checkpoint
     resume: int = 0 # set to phase/epoch
@@ -34,12 +39,12 @@ class BaseConfig:
     
     train_path: str = "data/gsm_train.json"
     val_path: str = "data/gsm_valid.json"
-    batch_size_training: int = 42
+    batch_size_training: int = 26
     max_size: int = 8000 # full ~40k in coconut
     debug: bool = False
     gradient_accumulation_steps: int = 1
-    num_epochs: int = 50 # 50 in coconut
-    lr: float = 1e-4 # 1e-4 in coconut, but 1e-6 in verl
+    num_epochs: int = 39 # 50 in coconut
+    lr: float = 2e-5 # 1e-4 in coconut, but 1e-6 in verl
     weight_decay: float = 0.0 # 0.01 in coconut, 0 in verl
 
 
@@ -53,7 +58,7 @@ class GSMQwenConfig(BaseConfig):
 @dataclass
 class GsmQwen1_5b_H100(GSMQwenConfig):
     name: str = "gsm-qwen-1.5b"
-    replacement_method: str = "-1"
+    # replacement_method: str = "-1"
     
     load_model_path: str = ""
     resume: int = 0
@@ -61,7 +66,7 @@ class GsmQwen1_5b_H100(GSMQwenConfig):
     bf16: bool = True
     bf16_weight: bool = False
     opt_8b: bool = False
-    batch_size_training: int = 42
+    batch_size_training: int = 40
     gradient_accumulation_steps: int = 1
 
 # # ...existing code...

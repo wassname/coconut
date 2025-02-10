@@ -107,11 +107,11 @@ def hs2ie(hidden_states: HiddenStates, inputs_embeds: HiddenState, w_out=None, m
         return inputs_embeds + supressed_act[i_half:].sum(dim=0)
     elif method == 'hs+supressed[0.5:]':
         return hidden_states[-1] + supressed_act[i_half:].sum(dim=0)
-    elif method == 'supressed[0.5:]':
-        # FIXME this need to be repeated along token dim
-        T = inputs_embeds.shape[1]
-        hs = supressed_act[i_half:].sum(dim=0)
-        return inputs_embeds + supressed_act[-1]
+    # elif method == 'supressed[0.5:]':
+    #     # FIXME this need to be repeated along token dim
+    #     T = inputs_embeds.shape[1]
+    #     hs = supressed_act[i_half:].sum(dim=0)
+    #     return inputs_embeds + supressed_act[-1]
     elif method == 'ie+supressed[0.5:]':
         return inputs_embeds + supressed_act[i_half:].sum(dim=0)
     elif method == 'hs+supressed[0.5:]':

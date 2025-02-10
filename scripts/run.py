@@ -218,10 +218,10 @@ def main():
     for phase in range(configs.resume, configs.num_epochs):
         start_time = time.time()
         scheduled_stage = phase // configs['epochs_per_stage']
-        if scheduled_stage == configs.max_latent_stage:
+        if phase == (configs.max_latent_stage * configs['epochs_per_stage']):
             training_args.num_train_epochs = configs.num_epochs - configs.max_latent_stage
             print("max_latent_stage reached, training in one large run for", training_args.num_train_epochs)
-        elif scheduled_stage > configs.max_latent_stage:
+        elif phase > (configs.max_latent_stage * configs['epochs_per_stage']):
             print("max_latent_stage reached, breaking")
             break
 

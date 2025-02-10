@@ -473,8 +473,8 @@ H100 at epoch 3
 | ------ | ----- | ---- | --- | ---- | ----- | ------- |
 | 32b    | 32b   | 32b  | 26  | 0.25 | ?     | 19      |
 | 32b    | 32b   | 8b   | 32  | 0.16 | 3     | 16      |
-| 32b    | bf16  | 32b  | ?   | ?    | ?     | ?       |
-| 32b    | bf16  | 8b   | 42   | 0.26 | ?     | 8       |
+| 32b    | bf16  | 32b  | 42  | 0.23 | 3     | 8.8       |
+| 32b    | bf16  | 8b   | 42  | 0.26 | ?     | 8       |
 | bf16   | bf16  | 8b   | 42  | 0.09 | 3     | 8       |
 
 
@@ -542,3 +542,41 @@ https://substack.com/home/post/p-154490380
 
 https://github.com/unslothai/unsloth/blob/53a773e4fbc53a1d96c7ba107e5fe75dab07027b/unsloth/models/rl.py#L419
 - replace samping with Replace with our vLLM engine
+
+# 2025-02-09 03:25:01
+
+Ok so all quant exept bf16 weights are good
+
+Now trying with a lower learning rate and another replacement method, can we get higher than 0.25
+
+
+Hmm next can we try adding the Seq-VCR loss and TopoNet? 
+toponets https://x.com/apurvaratan/status/1884805634400330002
+https://arxiv.org/abs/2501.16396
+
+
+https://x.com/gm8xx8/status/1888831941161451536
+https://huggingface.co/tomg-group-umd/huginn-0125
+https://arxiv.org/abs/2502.05171
+
+[Seq-VCR](https://arxiv.org/html/2411.02344v1#S5)
+
+```py
+B=2
+T=3
+H=40000
+hs = torch.rand(B, T, H)
+P = 2048
+proj = nn.Linear(H, P)
+hs_p = proj(hs)
+hs_p = rearrange(hs, 'b t h -> (b t) h')
+torch.cov(hs_p)
+
+```
+
+
+ok in the mean time trying a run with
+- instruct model
+- lower lrless epochs
+- only suppressed activations... a yolo run
+- oh max 2 latent tokens
