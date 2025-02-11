@@ -3,6 +3,7 @@
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from torch.nn import CrossEntropyLoss
 from collections import namedtuple
 
@@ -25,12 +26,13 @@ from transformers import (
 )
 
 
-Outputs = namedtuple("Outputs", ["loss", "inputs_embeds", "logits", "past_key_values", "hidden_states"])
+Outputs = namedtuple(
+    "Outputs", ["loss", "inputs_embeds", "logits", "past_key_values", "hidden_states"]
+)
 MAX_N_LATENT = 8
 
-HiddenState = Float[Tensor, 'b t h']
-HiddenStates = Tuple[Float[Tensor, 'b t h']]
-
+HiddenState = Float[Tensor, "b t h"]
+HiddenStates = Tuple[Float[Tensor, "b t h"]]
 
 
 # def batch_cov(x: Float[Tensor, 'b h']) -> Float[Tensor, 'b h h']:
@@ -42,59 +44,95 @@ HiddenStates = Tuple[Float[Tensor, 'b t h']]
 #     prods = torch.bmm(xc.unsqueeze(2), xc.unsqueeze(1))
 #     return prods / (N - 1)  # Unbiased estimate
 
-@torch.autocast(device_type='cuda', dtype=torch.bfloat16)
+
+def calc_distribution_loss(
+    hs: Float[Tensor, "b t h"], chunk_size: int = 32
+) -> Float[Tensor, ""]:
+    B, T, P = hs.shape
+    total_loss = 0.0
+    eps = 1e-6
+
+    # hs = F.layer_norm(hs)
+
+    x = rearrange(hs, "b t h -> t b h")
+
+    # Get distribution per timestep
+    x_dist = F.softmax(x, dim=-1)
+
+    # Compute uniform target
+    uniform = torch.ones_like(x_dist) / P
+
+    x_dist_log = torch.log(x_dist + eps)
+
+    # KL divergence from uniform (prevent collapse)
+    kl_loss = F.kl_div(x_dist_log, uniform, reduction="batchmean", log_target=False)
+
+    # Entropy term (maximize feature usage)
+    entropy = -(x_dist * x_dist_log).sum(-1).mean()
+
+    total_loss = kl_loss - 0.1 * entropy
+
+    return total_loss / T
+
+
 def calc_seq_vcr_loss(hs: Float[Tensor, "b t h"]) -> Float[Tensor, ""]:
     B, T, P = hs.shape
-    
+
     # Compute covariance per timestep across batch
-    x = rearrange(hs, 'b t h -> t b h')  # Shape: (T, B, P)
-    
+    x = rearrange(hs, "b t h -> t b h")  # Shape: (T, B, P)
+
     # Calculate mean and center per timestepx.dtype
     x_mean = x.mean(dim=1, keepdim=True).detach()  # Shape: (T, 1, P)
     x_centered = x - x_mean
-    
+
     # Compute covariance matrices for each timestep
     C = torch.bmm(x_centered.transpose(1, 2), x_centered) / (B - 1)  # Shape: (T, P, P)
-    
+
     # Setup mask for diagonal elements
     diag = torch.eye(P, dtype=torch.bool, device=x.device).detach()
-    
+
     # Calculate losses
-    λ1, λ2 = 1., 1.
+    # TODO move these to function arguments. And try to make the loss automatically balanced if I can
+    λ1, λ2 = 1 / 1000000, 1 / 1000000
     η = 1e-6
     var_loss = torch.relu(1 - torch.sqrt(C * diag + η))
-    var_loss = reduce(var_loss, 't h1 h2 -> ', 'sum') / (T * P)
+    var_loss = reduce(var_loss, "t h1 h2 -> ", "sum") / (T * P)
 
     cov_loss = (C * (~diag).detach()).pow(2)
-    cov_loss = reduce(cov_loss, 't h1 h2 -> ', 'sum') / (T * P)
-    
+    cov_loss = reduce(cov_loss, "t h1 h2 -> ", "sum") / (T * P)
+
     # Combine and reduce
     loss = λ1 * var_loss + λ2 * cov_loss
     # loss = reduce(loss, 't h1 h2 -> ', 'sum') / (T * P)
     return loss
 
 
-
 class VCRLoss(nn.Module):
-    def __init__(self, D=2024):
+    def __init__(self, H=1536, D=128):
+        # TODO set these param properly
         super().__init__()
-        # self.down_proj = nn.Linear(N, D) # FIXME is this meant to be learnable?
+        self.down_proj = nn.Linear(
+            H, D, bias=False
+        )  # FIXME is this meant to be learnable?
+        nn.init.orthogonal_(self.down_proj.weight)
+        self.down_proj.weight.requires_grad = False
         # FIXME we should be applying this to the final high dim output too, but wait for reference implementation https://github.com/rarefin/SEQ_VCR
-    
-    def forward(self, hs_l: Float[Tensor, 'l b t h']) -> Float[Tensor, 'b']:
+
+    def forward(self, hs_l: Float[Tensor, "l b t h"]) -> Float[Tensor, "b"]:
         # for each layer
         loss = 0
         for hs in hs_l:
-            # hs = self.down_proj(hs)
+            hs = self.down_proj(hs)
+            # loss += calc_distribution_loss(hs)
             loss += calc_seq_vcr_loss(hs)
             torch.cuda.empty_cache()
-            
+
         return loss
 
 
-
-
-def get_supressed_activations(hs: Float[Tensor, 'l b t h'], w_out=None, w_inv=None) -> Float[Tensor, 'l b t h']:
+def get_supressed_activations(
+    hs: Float[Tensor, "l b t h"], w_out=None, w_inv=None
+) -> Float[Tensor, "l b t h"]:
     """
     Novel experiment: Here we define a transform to isolate supressed activations, where we hypothesis that style/concepts/scratchpads and other internal only representations must be stored.
 
@@ -111,65 +149,72 @@ def get_supressed_activations(hs: Float[Tensor, 'l b t h'], w_out=None, w_inv=No
     """
     with torch.no_grad():
         # here we pass the hs through the last layer, take a diff, and then project it back to find which activation changes lead to supressed
-        hs2 = rearrange(hs[:, :, -1:], 'l b t h -> (l b t) h')
+        hs2 = rearrange(hs[:, :, -1:], "l b t h -> (l b t) h")
         hs_out2 = torch.nn.functional.linear(hs2, w_out)
-        hs_out = rearrange(hs_out2, '(l b t) h -> l b t h', l=hs.shape[0], b=hs.shape[1], t=1)
+        hs_out = rearrange(
+            hs_out2, "(l b t) h -> l b t h", l=hs.shape[0], b=hs.shape[1], t=1
+        )
         diffs = hs_out[:, :, :].diff(dim=0)
-        diffs2 = rearrange(diffs, 'l b t h -> (l b t) h')
+        diffs2 = rearrange(diffs, "l b t h -> (l b t) h")
         # W_inv = get_cache_inv(w_out)
         diffs_inv2 = torch.nn.functional.linear(diffs2, w_inv)
-        diffs_inv = rearrange(diffs_inv2, '(l b t) h -> l b t h', l=hs.shape[0]-1, b=hs.shape[1], t=1).to(w_out.dtype)
+        diffs_inv = rearrange(
+            diffs_inv2, "(l b t) h -> l b t h", l=hs.shape[0] - 1, b=hs.shape[1], t=1
+        ).to(w_out.dtype)
         # TODO just return this?
-        eps = 1.e-1
+        eps = 1.0e-1
         supressed_mask = (diffs_inv < -eps).to(hs.dtype)
         # supressed_mask = repeat(supressed_mask, 'l b 1 h -> l b t h', t=hs.shape[2])
     supressed_act = hs[1:] * supressed_mask
     return supressed_act
 
 
-
-def hs2ie(hidden_states: HiddenStates, inputs_embeds: HiddenState, w_out=None, w_inv=None, method='-1') -> HiddenState:
+def hs2ie(
+    hidden_states: HiddenStates,
+    inputs_embeds: HiddenState,
+    w_out=None,
+    w_inv=None,
+    method="-1",
+) -> HiddenState:
     """hidden states to inputs_embeds"""
 
     n = len(hidden_states)
     i_half = int(n * 0.5)
-    if method == '-1':
+    if method == "-1":
         return hidden_states[-1]
-    elif method == '-2':
+    elif method == "-2":
         return hidden_states[-2]
-    elif method == '0.5':
+    elif method == "0.5":
         return hidden_states[i_half]
-    
-
 
     # FIXME ok so this doesn't account for information being removed then added
     # and it assumed removal == reduction in positive magnitude, but it could be negative. So I should refactor for all reduction in magnitude
-    hs = rearrange(list(hidden_states), 'l b t h -> l b t h')
+    hs = rearrange(list(hidden_states), "l b t h -> l b t h")
     supressed_act = get_supressed_activations(hs, w_out, w_inv)
 
-    if method == 'ie+supressed[-1]':
+    if method == "ie+supressed[-1]":
         # need to make it more like the original hidden states, so prev input embedding plus the supressed tokens
-        return inputs_embeds + supressed_act[-1] # last layer, add dummy sequence dim
-    elif method == 'ie+supressed[0.5:]':
+        return inputs_embeds + supressed_act[-1]  # last layer, add dummy sequence dim
+    elif method == "ie+supressed[0.5:]":
         return inputs_embeds + supressed_act[i_half:].sum(dim=0)
-    elif method == 'hs+supressed[0.5:]':
+    elif method == "hs+supressed[0.5:]":
         return hidden_states[-1] + supressed_act[i_half:].sum(dim=0)
     # elif method == 'supressed[0.5:]':
     #     # FIXME this need to be repeated along token dim
     #     T = inputs_embeds.shape[1]
     #     hs = supressed_act[i_half:].sum(dim=0)
     #     return inputs_embeds + supressed_act[-1]
-    elif method == 'ie+supressed[0.5:]':
+    elif method == "ie+supressed[0.5:]":
         return inputs_embeds + supressed_act[i_half:].sum(dim=0)
-    elif method == 'hs+supressed[0.5:]':
+    elif method == "hs+supressed[0.5:]":
         return hidden_states[-1] + supressed_act[i_half:].sum(dim=0)
-    elif method == 'supressed[0.5:]':
+    elif method == "supressed[0.5:]":
         T = inputs_embeds.shape[1]
         hs = supressed_act[i_half:].sum(dim=0)
-        hs = repeat(hs, 'b 1 h -> b t h', t=T)
+        # hs = repeat(hs, 'b 1 h -> b t h', t=T)
         return hs
-    
-    ValueError(f"Unknown method {method}")
+
+    raise ValueError(f"Unknown method {method}")
 
 
 class CoconutConfig(Qwen2Config):
@@ -181,22 +226,20 @@ class CoconutConfig(Qwen2Config):
 
 
 class CoconutQwen2ForCausalLM(Qwen2ForCausalLM):
-    def __init__(
-        self,
-        config
-    ):
+    def __init__(self, config):
         super().__init__(config)
         self.gen_forward_cnt = 0
         self.vcr_loss = VCRLoss()
 
-
-    def forward(self, input_ids, attention_mask=None, labels=None, position_ids=None, **kwargs):
+    def forward(
+        self, input_ids, attention_mask=None, labels=None, position_ids=None, **kwargs
+    ):
         if attention_mask is None:
-            attention_mask=torch.ones_like(input_ids, device=input_ids.device)
+            attention_mask = torch.ones_like(input_ids, device=input_ids.device)
         if labels is None:
-            labels=input_ids.clone()
+            labels = input_ids.clone()
         if position_ids is None:
-            position_ids=torch.arange(
+            position_ids = torch.arange(
                 0, input_ids.shape[1], dtype=torch.long, device=input_ids.device
             ).unsqueeze(0)
 
@@ -213,11 +256,11 @@ class CoconutQwen2ForCausalLM(Qwen2ForCausalLM):
 
         max_n_latents = max([len(l) for l in latent_lists])
 
-        next_compute_range = (0, input_ids.shape[1])
+        ncr = (0, input_ids.shape[1])
         inputs_embeds = self.get_input_embeddings()(input_ids)
 
         if max_n_latents > 0:
-            next_compute_range = (0, latent_indices[:, 1].min().item())
+            ncr = (0, latent_indices[:, 1].min().item())
             # before the earliest latent token position
 
         kv_cache = None
@@ -234,15 +277,9 @@ class CoconutQwen2ForCausalLM(Qwen2ForCausalLM):
                 # first forward pass
                 with torch.autocast(device_type=device_type):
                     outputs = super().forward(
-                        inputs_embeds=inputs_embeds[
-                            :, next_compute_range[0] : next_compute_range[1], :
-                        ],
-                        attention_mask=attention_mask[
-                            :, next_compute_range[0] : next_compute_range[1]
-                        ],
-                        position_ids=position_ids[
-                            :, next_compute_range[0] : next_compute_range[1]
-                        ],
+                        inputs_embeds=inputs_embeds[:, ncr[0] : ncr[1], :],
+                        attention_mask=attention_mask[:, ncr[0] : ncr[1]],
+                        position_ids=position_ids[:, ncr[0] : ncr[1]],
                         output_hidden_states=True,
                         use_cache=True,
                     )
@@ -252,42 +289,34 @@ class CoconutQwen2ForCausalLM(Qwen2ForCausalLM):
                 # extract kv cache to reuse
                 past_key_values = [
                     (
-                        k[:, :, : next_compute_range[0], :],
-                        v[:, :, : next_compute_range[0], :],
+                        k[:, :, : ncr[0], :],
+                        v[:, :, : ncr[0], :],
                     )
                     for k, v in kv_cache
                 ]
 
                 # Qwen needs this
-                past_key_values= DynamicCache.from_legacy_cache(past_key_values)
+                past_key_values = DynamicCache.from_legacy_cache(past_key_values)
                 with torch.autocast(device_type=device_type):
                     outputs = super().forward(
-                        inputs_embeds=inputs_embeds[
-                            :, next_compute_range[0] : next_compute_range[1], :
-                        ],
-                        attention_mask=attention_mask[:, : next_compute_range[1]],
-                        position_ids=position_ids[
-                            :, next_compute_range[0] : next_compute_range[1]
-                        ],
+                        inputs_embeds=inputs_embeds[:, ncr[0] : ncr[1], :],
+                        attention_mask=attention_mask[:, : ncr[1]],
+                        position_ids=position_ids[:, ncr[0] : ncr[1]],
                         past_key_values=past_key_values,
                         output_hidden_states=True,
                         use_cache=True,
                     )
 
-                hidden_states_offset = next_compute_range[0]
+                hidden_states_offset = ncr[0]
                 # when we use kv_cache for the first k tokens
                 # in `outputs.hidden_states`, [0, k) will be skipped
                 # so we need to keep this offset to correctly use the last hidden states
 
             logits.append(outputs.logits)
 
-            next_compute_range = (
-                next_compute_range[1],
-                (
-                    input_ids.shape[1]
-                    if pass_idx + 1 >= max_n_latents
-                    else next_compute_range[1] + 1
-                ),
+            ncr = (
+                ncr[1],
+                (input_ids.shape[1] if pass_idx + 1 >= max_n_latents else ncr[1] + 1),
             )
 
             hidden_states = outputs.hidden_states
@@ -317,20 +346,25 @@ class CoconutQwen2ForCausalLM(Qwen2ForCausalLM):
             ]
             # tensor_shape = torch.stack([torch.stack([xx for xx in x]) for x in tensor_list]).shape
             # # tensor_shapes = [[tuple(xx.shape) for xx in x] for x in tensor_list]
-            # print({'pass_idx':pass_idx, 
-            #        'inputs_embeds': inputs_embeds.shape, 
-            #        'tensor_shape': tensor_shape, 
+            # print({'pass_idx':pass_idx,
+            #        'inputs_embeds': inputs_embeds.shape,
+            #        'tensor_shape': tensor_shape,
             #        'hidden_states_offset': hidden_states_offset})
-
 
             # replace some of them with continuous thoughts
             for idx_pair in filling_indices:
                 batch_idx, token_idx = idx_pair
 
-                # TODO experiment with transformers here, we are replacing. 
+                # TODO experiment with transformers here, we are replacing.
                 # replace it with the preceding last hidden states
                 Wo = self.get_output_embeddings().weight
-                recrv_embeds = hs2ie(hidden_states, inputs_embeds, Wo, Wo_inv,  method=self.config.replacement_method)
+                recrv_embeds = hs2ie(
+                    hidden_states,
+                    inputs_embeds,
+                    Wo,
+                    Wo_inv,
+                    method=self.config.replacement_method,
+                )
                 # print({'hs': torch.stack(hidden_states).shape, 'recrv_embeds': recrv_embeds.shape, 'tensor_list': tensor_list[batch_idx][token_idx].shape})
                 tensor_list[batch_idx][token_idx] = recrv_embeds[
                     batch_idx, token_idx - 1 - hidden_states_offset, :
@@ -346,32 +380,28 @@ class CoconutQwen2ForCausalLM(Qwen2ForCausalLM):
             )
 
             # Collect hs
-            hs = rearrange(list(hidden_states), 'l b t h -> l b t h')
+            hs = rearrange(list(hidden_states), "l b t h -> l b t h")
             all_hs.append(hs)
 
-        
-
-        past_key_values=(
-                        [
-                            (
-                                k[:, :, : next_compute_range[0], :],
-                                v[:, :, : next_compute_range[0], :],
-                            )
-                            for k, v in kv_cache
-                        ]
-                        if kv_cache
-                        else None
-                    )
-        past_key_values= DynamicCache.from_legacy_cache(past_key_values)
+        past_key_values = (
+            [
+                (
+                    k[:, :, : ncr[0], :],
+                    v[:, :, : ncr[0], :],
+                )
+                for k, v in kv_cache
+            ]
+            if kv_cache
+            else None
+        )
+        past_key_values = DynamicCache.from_legacy_cache(past_key_values)
 
         # final pass
         with torch.autocast(device_type=device_type):
             outputs = super().forward(
-                inputs_embeds=inputs_embeds[
-                    :, next_compute_range[0] : next_compute_range[1], :
-                ],
-                attention_mask=attention_mask[:, : next_compute_range[1]],
-                position_ids=position_ids[:, next_compute_range[0] : next_compute_range[1]],
+                inputs_embeds=inputs_embeds[:, ncr[0] : ncr[1], :],
+                attention_mask=attention_mask[:, : ncr[1]],
+                position_ids=position_ids[:, ncr[0] : ncr[1]],
                 past_key_values=past_key_values,
                 output_hidden_states=True,
             )
@@ -379,7 +409,7 @@ class CoconutQwen2ForCausalLM(Qwen2ForCausalLM):
         logits.append(outputs.logits)
 
         # Collect hs
-        hs = rearrange(list(outputs.hidden_states), 'l b t h -> l b t h')
+        hs = rearrange(list(outputs.hidden_states), "l b t h -> l b t h")
         all_hs.append(hs)
         all_hs = torch.concat(all_hs, dim=2)
 
@@ -396,13 +426,18 @@ class CoconutQwen2ForCausalLM(Qwen2ForCausalLM):
         # Seq-VCR loss
         with torch.autocast(device_type=input_ids.device.type):
             loss_vcr = self.vcr_loss(all_hs)
+        # TODO report diff losses to wandb
         loss += loss_vcr
-
 
         assert torch.isfinite(loss).all(), f"Loss is {loss}"
 
-        return Outputs(loss=loss, inputs_embeds=inputs_embeds, logits=logits, past_key_values=outputs.past_key_values, hidden_states=list(all_hs))
-
+        return Outputs(
+            loss=loss,
+            inputs_embeds=inputs_embeds,
+            logits=logits,
+            past_key_values=outputs.past_key_values,
+            hidden_states=list(all_hs),
+        )
 
     def generate(
         self,
@@ -433,7 +468,9 @@ class CoconutQwen2ForCausalLM(Qwen2ForCausalLM):
         kv_cache = outputs.past_key_values
         for _ in range(max_new_tokens - 1):
             # FIXME here we use the base model forward, that means we DO NOT use latent thoughts after the preconfigured ones
-            outputs = super().forward(inputs_embeds=new_inputs_embeds, past_key_values=kv_cache)
+            outputs = super().forward(
+                inputs_embeds=new_inputs_embeds, past_key_values=kv_cache
+            )
             kv_cache = outputs.past_key_values
             self.gen_forward_cnt += 1
             next_token = outputs.logits[:, -1].argmax(-1).detach().unsqueeze(1)

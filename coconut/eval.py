@@ -45,7 +45,7 @@ def evaluate(dataloader, model, tokenizer, ds, max_new_tokens=64, device='cuda',
     with torch.no_grad():
         model.eval()
         for batch_n, batch in enumerate(dataloader):
-            if quick and batch_n*batch_size > 32:
+            if quick and batch_n*batch_size > 64:
                 break
             
             idx = batch["idx"]

@@ -221,7 +221,7 @@ def main():
         scheduled_stage = phase // configs['epochs_per_stage']
         if phase == (configs.max_latent_stage * configs['epochs_per_stage']):
             training_args.num_train_epochs = configs.num_epochs - configs.max_latent_stage
-            print("max_latent_stage reached, training in one large run for", training_args.num_train_epochs)
+            print(f"max_latent_stage reached, training in one large run for {training_args.num_train_epochs} epochs. phase={phase}")
         elif phase > (configs.max_latent_stage * configs['epochs_per_stage']):
             print("max_latent_stage reached, breaking")
             break

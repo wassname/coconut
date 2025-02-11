@@ -58,7 +58,7 @@ class GSMQwenConfig(BaseConfig):
 @dataclass
 class GsmQwen1_5b_H100(GSMQwenConfig):
     name: str = "gsm-qwen-1.5b"
-    # replacement_method: str = "-1"
+    replacement_method: str = "0.5"
     
     load_model_path: str = ""
     resume: int = 0
@@ -66,7 +66,7 @@ class GsmQwen1_5b_H100(GSMQwenConfig):
     bf16: bool = True
     bf16_weight: bool = False
     opt_8b: bool = False
-    batch_size_training: int = 2
+    batch_size_training: int = 30
     gradient_accumulation_steps: int = 1
 
 # # ...existing code...
