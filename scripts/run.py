@@ -165,14 +165,15 @@ def main():
 
     # setup eval
     logger.info(model)
+    num_proc = 1 if configs.debug else 16
     max_size=32 if configs.debug else (configs.max_size or 100000000)
     base_dataset_valid = get_dataset(
-        configs.val_path, tokenizer, max_size=max_size//30+3, drop_unused=False
+        configs.val_path, tokenizer, max_size=max_size//30+3, drop_unused=False, num_proc=num_proc
     )
 
     if not configs.only_eval:
         base_dataset_train = get_dataset(
-            configs.train_path, tokenizer, max_size=max_size
+            configs.train_path, tokenizer, max_size=max_size, num_proc=num_proc
         )
 
 
@@ -238,6 +239,7 @@ def main():
             eot_id,
             no_bot_eot=no_bot_eot,
             # drop_unused=False,
+            num_proc=num_proc
         )
         valid_gen_dataloader = torch.utils.data.DataLoader(
             dataset_gen_val,
@@ -266,6 +268,7 @@ def main():
             latent_id,
             eot_id,
             no_bot_eot=no_bot_eot,
+            num_proc=num_proc,
         )
 
         if not configs.only_eval:
@@ -278,6 +281,7 @@ def main():
                 eot_id,
                 no_bot_eot=no_bot_eot,
                 shuffle=True,
+                num_proc=num_proc,
             )
 
             if configs.bf16_weight:

@@ -561,18 +561,72 @@ https://arxiv.org/abs/2502.05171
 
 [Seq-VCR](https://arxiv.org/html/2411.02344v1#S5)
 
+
 ```py
+
+from einops import rearrange, reduce
+import torch
+from torch import nn
+
+
+# Seq-VCR
 B=2
 T=3
 H=40000
-hs = torch.rand(B, T, H)
+L = 14
+hs_l = torch.rand(L, B, T, H)
 P = 2048
 proj = nn.Linear(H, P)
-hs_p = proj(hs)
-hs_p = rearrange(hs, 'b t h -> (b t) h')
-torch.cov(hs_p)
+
+# def batch_diag(batched_variance):
+#   # https://github.com/pytorch/pytorch/issues/21971
+#     batch_shape = batched_variance.shape[:-1]
+#     event_size = batched_variance.size(-1)
+#     cov = batched_variance.new_zeros(batch_shape + (event_size * event_size,))
+#     cov[..., ::1 + event_size] = batched_variance
+#    return cov.reshape(batch_shape + (event_size, event_size))
+
+def batch_cov(points):
+    B, N, D = points.size()
+    mean = points.mean(dim=1).unsqueeze(1)
+    diffs = (points - mean).reshape(B * N, D)
+    prods = torch.bmm(diffs.unsqueeze(2), diffs.unsqueeze(1)).reshape(B, N, D, D)
+    bcov = prods.sum(dim=1) / (N - 1)  # Unbiased estimate
+    return bcov  # (B, D, D)
+
+  
+def calc_seq_vcr_loss(hs):
+  B, T, P = hs_proj.shape
+
+  # calc cov
+  x = rearrange(hs, 'b t h -> (b t) h')
+  x_centered = x - x.mean(dim=0, keepdim=True)
+  C = batch_cov(x_centered)
+  C = rearrange(C, '(b t) h h -> b t h h', B=B)
+
+  # Eq (3) from https://arxiv.org/pdf/2411.02344v1
+  λ1 = 1. # coeff
+  λ2 = 1.  # coeff
+  η = 1e-6 # num stability
+  # Variance term: the diagonal elements (variance) should be at least 1.
+  var_loss = torch.relu(1 - torch.sqrt(C.diag() + eta))
+
+  # Covariance term: the off-diagonal elements should approach zero.
+  off_diag_mask = ~torch.eye(d, dtype=torch.bool, device=x.device)
+  cov_loss = C[off_diag_mask].pow(2)
+
+  loss = λ1 * var_loss + λ2 * cov_loss
+  loss = reduce(loss, 'b t h h -> b', 'sum') / ( T * d )
+  return loss
+
+# for each layer
+loss = 0
+for hs in hs_l:
+  hs_proj = proj(hs)
+  loss += calc_seq_vcr_loss(hs_proj)
 
 ```
+
 
 
 ok in the mean time trying a run with

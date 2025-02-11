@@ -14,7 +14,7 @@ from transformers import PreTrainedTokenizerBase
 from transformers.data.data_collator import pad_without_fast_tokenizer_warning
 
 
-def get_dataset(path, tokenizer, max_size=1000000000, drop_unused=True):
+def get_dataset(path, tokenizer, max_size=1000000000, drop_unused=True, num_proc=16):
     def tokenize_sample(sample):
         question_tokenized = tokenizer.encode(
             sample["question"] + "\n", add_special_tokens=True
@@ -46,7 +46,7 @@ def get_dataset(path, tokenizer, max_size=1000000000, drop_unused=True):
     dataset = Dataset.from_dict({k: [d[k] for d in data] for k in keys})
 
     dataset_tok = dataset.map(
-        tokenize_sample, remove_columns=list(dataset.features) if drop_unused else None, num_proc=32, 
+        tokenize_sample, remove_columns=list(dataset.features) if drop_unused else None, num_proc=num_proc, 
         desc=path
     )
 
@@ -187,6 +187,7 @@ def get_question_only_latent_dataset(
     eot_id,
     no_bot_eot=False,
     drop_unused=True,
+    num_proc=16,
 ):
     """    
     for testing, with no reasoning or ans
@@ -227,7 +228,7 @@ def get_question_only_latent_dataset(
         }
 
     return base_dataset_valid.map(
-        process_dataset, remove_columns=list(base_dataset_valid.features) if drop_unused else None, num_proc=32,
+        process_dataset, remove_columns=list(base_dataset_valid.features) if drop_unused else None, num_proc=num_proc,
          desc=f"q_latent_{scheduled_stage}"
     )
 
@@ -242,6 +243,7 @@ def get_cot_latent_dataset(
     no_bot_eot=False,
     shuffle=False,
     drop_unused=True,
+    num_proc=16,
 ):
     """chain of thought latent dataset for training
     
@@ -312,7 +314,7 @@ def get_cot_latent_dataset(
         }
 
     processed_dataset = base_dataset.map(
-        process_dataset, remove_columns=list(base_dataset.features) if drop_unused else None, num_proc=32,
+        process_dataset, remove_columns=list(base_dataset.features) if drop_unused else None, num_proc=num_proc,
         desc=f"cot_latent_{scheduled_stage}"
     )
     if shuffle:
