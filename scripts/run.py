@@ -302,13 +302,25 @@ def main():
             if training_args.num_train_epochs>1:
                 callbacks.append(CoconutEvalCallback())
 
-            trainer = TrainerCls(
+            class MyTrainer(TrainerCls):
+                """custom trainer to log loss componenets."""
+                def compute_loss(self, model, inputs, return_outputs=False,  num_items_in_batch=None):
+                    outputs = model(**inputs)
+                    loss = outputs["loss"] if isinstance(outputs, dict) else outputs[0]
+                    if outputs.log:
+                        self.log(outputs.log)
+                    if return_outputs:
+                        return loss, outputs
+                    return loss
+
+            trainer = MyTrainer(
                 model=model,# if scheduled_stage > 0 else model.base_causallm,
                 args=training_args,
                 train_dataset=dataset_train,
                 eval_dataset=dataset_loss_val,
                 data_collator=collator,
-                callbacks=callbacks
+                callbacks=callbacks,
+                # compute_loss_func=compute_loss_func,
                 # TODO pass in (opt, scheduler) as a callback
             )
             # TODO we don't need to shuffle train as it's done during load

@@ -17,7 +17,7 @@ class BaseConfig:
     
     c_thought: int = 2
     epochs_per_stage: int = 2
-    max_latent_stage: int = 2
+    max_latent_stage: int = 3
     pad_latent_to_max: bool = True
     # replacement_method: str = "-1" # or 0.5, or ie+supressed[0.5:] or hs+supressed[0.5:] or supressed[0.5:]
     # replacement_method: str = "0.5"
@@ -43,8 +43,8 @@ class BaseConfig:
     max_size: int = 8000 # full ~40k in coconut
     debug: bool = False
     gradient_accumulation_steps: int = 1
-    num_epochs: int = 39 # 50 in coconut
-    lr: float = 2e-5 # 1e-4 in coconut, but 1e-6 in verl
+    num_epochs: int = 25 # 50 in coconut
+    lr: float = 1e-4 # 1e-4 in coconut, but 1e-6 in verl
     weight_decay: float = 0.0 # 0.01 in coconut, 0 in verl
 
 

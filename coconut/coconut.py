@@ -1,5 +1,6 @@
 # Copyright (c) Meta Platforms, Inc. and affiliates.
 # All rights reserved.
+from collections import defaultdict
 
 import torch
 import torch.nn as nn
@@ -27,7 +28,7 @@ from transformers import (
 
 
 Outputs = namedtuple(
-    "Outputs", ["loss", "inputs_embeds", "logits", "past_key_values", "hidden_states"]
+    "Outputs", ["loss", "inputs_embeds", "logits", "past_key_values", "hidden_states", "log",] # loss_ar loss_vcr
 )
 MAX_N_LATENT = 8
 
@@ -75,7 +76,7 @@ def calc_distribution_loss(
     return total_loss / T
 
 
-def calc_seq_vcr_loss(hs: Float[Tensor, "b t h"]) -> Float[Tensor, ""]:
+def calc_seq_vcr_loss(hs: Float[Tensor, "b t h"], η = 1e-4) -> Float[Tensor, ""]:
     B, T, P = hs.shape
 
     # Compute covariance per timestep across batch
@@ -93,18 +94,22 @@ def calc_seq_vcr_loss(hs: Float[Tensor, "b t h"]) -> Float[Tensor, ""]:
 
     # Calculate losses
     # TODO move these to function arguments. And try to make the loss automatically balanced if I can
-    λ1, λ2 = 1 / 1000000, 1 / 1000000
-    η = 1e-6
+    λ1, λ2 = 1. / 5000, 1. / 50000
+    
+    # The Variance Term encourages unit variance in each dimension (most important)
     var_loss = torch.relu(1 - torch.sqrt(C * diag + η))
-    var_loss = reduce(var_loss, "t h1 h2 -> ", "sum") / (T * P)
+    var_loss = reduce(var_loss, "t h1 h2 -> ", "sum") / (T * diag.sum())
 
-    cov_loss = (C * (~diag).detach()).pow(2)
-    cov_loss = reduce(cov_loss, "t h1 h2 -> ", "sum") / (T * P)
+    # the Covariance Term penalizes covariance between different dimensions, promoting decorrelation and diversity in representations
+    non_diag = (~diag).detach()
+    cov_loss = (C * non_diag).pow(2)
+    cov_loss = reduce(cov_loss, "t h1 h2 -> ", "sum") / (T * non_diag.sum())
 
     # Combine and reduce
     loss = λ1 * var_loss + λ2 * cov_loss
-    # loss = reduce(loss, 't h1 h2 -> ', 'sum') / (T * P)
-    return loss
+    return loss, {"loss_vcr_var": var_loss.item(), "loss_vcr_cov": cov_loss.item()}
+
+
 
 
 class VCRLoss(nn.Module):
@@ -121,13 +126,17 @@ class VCRLoss(nn.Module):
     def forward(self, hs_l: Float[Tensor, "l b t h"]) -> Float[Tensor, "b"]:
         # for each layer
         loss = 0
+        logs = defaultdict(int)
         for hs in hs_l:
             hs = self.down_proj(hs)
             # loss += calc_distribution_loss(hs)
-            loss += calc_seq_vcr_loss(hs)
+            loss_i, extra = calc_seq_vcr_loss(hs)
+            for k, v in extra.items():
+                logs[k] += v
+            loss += loss_i
             torch.cuda.empty_cache()
 
-        return loss
+        return loss, dict(logs)
 
 
 def get_supressed_activations(
@@ -196,6 +205,7 @@ def hs2ie(
         # need to make it more like the original hidden states, so prev input embedding plus the supressed tokens
         return inputs_embeds + supressed_act[-1]  # last layer, add dummy sequence dim
     elif method == "ie+supressed[0.5:]":
+        # ie comes in with the wrong shape and looking ahead
         return inputs_embeds + supressed_act[i_half:].sum(dim=0)
     elif method == "hs+supressed[0.5:]":
         return hidden_states[-1] + supressed_act[i_half:].sum(dim=0)
@@ -360,7 +370,7 @@ class CoconutQwen2ForCausalLM(Qwen2ForCausalLM):
                 Wo = self.get_output_embeddings().weight
                 recrv_embeds = hs2ie(
                     hidden_states,
-                    inputs_embeds,
+                    inputs_embeds[:, :token_idx],
                     Wo,
                     Wo_inv,
                     method=self.config.replacement_method,
@@ -425,8 +435,9 @@ class CoconutQwen2ForCausalLM(Qwen2ForCausalLM):
 
         # Seq-VCR loss
         with torch.autocast(device_type=input_ids.device.type):
-            loss_vcr = self.vcr_loss(all_hs)
+            loss_vcr, extra = self.vcr_loss(all_hs)
         # TODO report diff losses to wandb
+        extra['loss_ar'] = loss.item()
         loss += loss_vcr
 
         assert torch.isfinite(loss).all(), f"Loss is {loss}"
@@ -437,6 +448,7 @@ class CoconutQwen2ForCausalLM(Qwen2ForCausalLM):
             logits=logits,
             past_key_values=outputs.past_key_values,
             hidden_states=list(all_hs),
+            log=extra,
         )
 
     def generate(
