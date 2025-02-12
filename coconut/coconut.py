@@ -113,7 +113,7 @@ def calc_seq_vcr_loss(hs: Float[Tensor, "b t h"], η = 1e-4) -> Float[Tensor, ""
 
 
 class VCRLoss(nn.Module):
-    def __init__(self, H=1536, D=128):
+    def __init__(self, H=1536, D=256):
         # TODO set these param properly
         super().__init__()
         self.down_proj = nn.Linear(
