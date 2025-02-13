@@ -111,6 +111,7 @@ def main():
                             #    resume="allow"
                                )
         wandb_run.config.update(configs, allow_val_change=True)
+        text_table = wandb.Table(columns=["step", "text"])
     else:
         os.environ["WANDB_MODE"] = "disabled"
         wandb_run = None
@@ -176,34 +177,39 @@ def main():
             configs.train_path, tokenizer, max_size=max_size, num_proc=num_proc
         )
 
+    def create_optimizer(model, configs):
+
+        if configs.bf16_weight:
+            raise NotImplementedError("bf16_weight not implemented")
+        elif configs.opt_8b:
+            import bitsandbytes as bnb
+            return bnb.optim.Adam8bit(
+                model.parameters(),
+                lr=configs.lr,
+                weight_decay=configs.weight_decay,
+                bf16=True,
+            )
+        else:
+            import optimi
+            return optimi.AdamW(
+                model.parameters(),
+                lr=configs.lr,
+                weight_decay=configs.weight_decay,
+            )
+
+    if configs.reset_optimizer:
+        optimizer = None
+
+    else:
+        optimizer = optim.AdamW(
+            model.parameters(),
+            lr=configs.lr,
+            weight_decay=configs.weight_decay,
+        )
+
 
 
     collator = CoconutCollator(tokenizer, latent_id=latent_id, label_pad_token_id=-100)
-
-    # Set up training arguments
-    training_args = TrainingArguments(
-        run_name=run_name,
-        output_dir=save_dir,
-        per_device_train_batch_size=configs['batch_size_training'],
-        gradient_accumulation_steps=configs.gradient_accumulation_steps,
-        learning_rate=configs['lr'],
-        warmup_ratio=0.2,
-        # max_steps=configs['samples_per_epoch']//configs['batch_size_training']*configs['num_epochs'],
-        logging_steps=1, # TODO ideally we log to tensorboard every step, but to ui every 100 steps
-        save_steps=10000,
-        bf16=configs.bf16,
-        bf16_full_eval=configs.bf16,
-        optim="adamw_bnb_8bit" if configs.opt_8b else "adamw_torch", # save memory:adamw_torch  adamw_bnb_8bit or paged_adamw_32bit
-        num_train_epochs=1,#configs['epochs_per_stage'],
-        torch_empty_cache_steps=100,
-        save_safetensors=False,
-        save_only_model=True,
-        report_to="wandb" if wandb_run else None,
-        # lr_scheduler_type="cosine",# cosine cosine_with_restarts
-        
-        # save_strategy="no",
-        # max_grad_norm=0.1 # unsloth uses 0.1 vs the default 1
-    )
 
     """
     The stages
@@ -219,12 +225,6 @@ def main():
     for phase in range(configs.resume, configs.num_epochs):
         start_time = time.time()
         scheduled_stage = phase // configs['epochs_per_stage']
-        if phase == (configs.max_latent_stage * configs['epochs_per_stage']):
-            training_args.num_train_epochs = configs.num_epochs - configs.max_latent_stage
-            print(f"max_latent_stage reached, training in one large run for {training_args.num_train_epochs} epochs. phase={phase}")
-        elif phase > (configs.max_latent_stage * configs['epochs_per_stage']):
-            print("max_latent_stage reached, breaking")
-            break
 
         no_bot_eot=configs.cot or configs.no_cot or configs.no_thoughts
         logger.info(f"scheduled_stage={scheduled_stage}, no_bot_eot={no_bot_eot}, c_thought={configs.c_thought}, max_latent_stage={configs.max_latent_stage}, cot={configs.cot}, coconut={configs.coconut}")
@@ -270,6 +270,14 @@ def main():
             no_bot_eot=no_bot_eot,
             num_proc=num_proc,
         )
+        valid_loss_dataloader = torch.utils.data.DataLoader(
+            dataset_loss_val,
+            num_workers=1,
+            shuffle=False,
+            pin_memory=True,
+            batch_size=configs.batch_size_training,
+            collate_fn=collator,
+        )
 
         if not configs.only_eval:
             dataset_train = get_cot_latent_dataset(
@@ -283,54 +291,119 @@ def main():
                 shuffle=True,
                 num_proc=num_proc,
             )
-
-            if configs.bf16_weight:
-                TrainerCls = TrainerOptimi
-            else:
-                TrainerCls = Trainer
-
-            class CoconutEvalCallback(TrainerCallback):               
-                
-                def on_epoch_end(self, *args, **kwargs):
-                    r = evaluate(valid_gen_dataloader, model, tokenizer, base_dataset_valid, max_new_tokens=max_new_tokens, name=f"cb_eval_{phase}", dtype=dtype, device=device, quick=True)
-                    if wandb_run:
-                        wandb_run.log(r)
-                    res.append(r)
-                    return 
-
-            callbacks=[ProgressCallbackNoPrint()]
-            if training_args.num_train_epochs>1:
-                callbacks.append(CoconutEvalCallback())
-
-            class MyTrainer(TrainerCls):
-                """custom trainer to log loss componenets."""
-                def compute_loss(self, model, inputs, return_outputs=False,  num_items_in_batch=None):
-                    outputs = model(**inputs)
-                    loss = outputs["loss"] if isinstance(outputs, dict) else outputs[0]
-                    if outputs.log:
-                        self.log(outputs.log)
-                    if return_outputs:
-                        return loss, outputs
-                    return loss
-
-            trainer = MyTrainer(
-                model=model,# if scheduled_stage > 0 else model.base_causallm,
-                args=training_args,
-                train_dataset=dataset_train,
-                eval_dataset=dataset_loss_val,
-                data_collator=collator,
-                callbacks=callbacks,
-                # compute_loss_func=compute_loss_func,
-                # TODO pass in (opt, scheduler) as a callback
+            train_dataloader = torch.utils.data.DataLoader(
+                dataset_train,
+                num_workers=1,
+                shuffle=False,
+                pin_memory=True,
+                batch_size=configs.batch_size_training,
+                collate_fn=collator,
+                # sampler=DistributedSampler(dataset_train, shuffle=True),
             )
-            # TODO we don't need to shuffle train as it's done during load
+
+            if configs.reset_optimizer:
+                del optimizer
+                optimizer = create_optimizer(model, configs)
+
+
+            model.train()
+            total_length = len(train_dataloader) // configs.gradient_accumulation_steps
+            pbar = tqdm(
+                colour="blue",
+                desc=f"Training Epoch: {phase+1}",
+                total=total_length,
+                dynamic_ncols=True,
+            )
+
+            total_train_steps = 0
+
+            for step, batch in enumerate(train_dataloader):
+
+                if step == 0 and wandb_run:
+                    print("logging training data")
+                    cur_bs = min(3, len(batch["input_ids"]))
+                    text_str = ""
+                    for data_idx in range(cur_bs):
+                        for token_idx in range(len(batch["input_ids"][data_idx])):
+                            text_str += (
+                                str(batch["input_ids"][data_idx][token_idx].item())
+                                + "\t"
+                                + str(batch["labels"][data_idx][token_idx].item())
+                                + "\t"
+                                + tokenizer.decode(
+                                    batch["input_ids"][data_idx][token_idx]
+                                )
+                                + "\n"
+                            )
+                        text_str += "====" * 10 + "\n"
+                    text_table.add_data(total_train_steps, text_str)
+                    # copy the table due to a bug in wandb
+                    # https://github.com/wandb/wandb/issues/2981
+
+                    wandb_run.log({"data_table": copy(text_table)})
+
+                total_train_steps += 1
+                batch = {
+                    key: batch[key].to(device) for key in batch.keys() if key != "idx"
+                }
+
+                with torch.autocast(device_type=device, dtype=dtype):
+                    outputs = model(**batch)
+
+                loss = outputs.loss / configs.gradient_accumulation_steps
+                loss.backward()
+
+                if (step + 1) % configs.gradient_accumulation_steps == 0 or step == len(
+                    train_dataloader
+                ) - 1:
+                    optimizer.step()
+                    optimizer.zero_grad()
+                    pbar.update(1)
+
+                if wandb_run:
+                    log_dict = {
+                        "train/epoch": phase + 1,
+                        "train/step": phase * len(train_dataloader) + step,
+                        "train/loss": loss.detach().float()
+                        * configs.gradient_accumulation_steps,
+                    }
+                    wandb_run.log(log_dict)
+
+                pbar.set_description(
+                    f"Training Epoch: {phase+1}/{configs.num_epochs}, batch {step}/{len(train_dataloader)} "
+                    f"completed (loss: {round(float(loss.detach().float() * configs.gradient_accumulation_steps), 4)}"
+                )
+                if step % 100 == 0:
+                    clear_memory()
+            pbar.close()
+
+            # val loss
+            total_loss = 0
+            with torch.no_grad():
+                model.eval()
+                for step, batch in enumerate(valid_loss_dataloader):
+
+                    batch = {
+                        key: batch[key].to(device) for key in batch.keys() if key != "idx"
+                    }
+
+                    with torch.autocast(device_type=device, dtype=dtype):
+                        outputs = model(**batch)
+                    loss = outputs.loss
+                    total_loss += loss.item()
+
+                if wandb_run:
+
+                    log_dict = {
+                        "eval/loss": total_loss / len(valid_loss_dataloader),
+                    }
+                    wandb_run.log(log_dict)
+                    print("eval loss", total_loss / len(valid_loss_dataloader))
+
             clear_memory()
-            rm_old_prog_cb(trainer)
-            try:
-                trainer.train()
-            except KeyboardInterrupt:
-                logger.info("Interrupted")
-                pass
+
+            r = evaluate(valid_gen_dataloader, model, tokenizer, base_dataset_valid, max_new_tokens=max_new_tokens, name=f"eval_{phase}", dtype=dtype, device=device, quick=True)
+
 
         clear_memory()
         r = evaluate(valid_gen_dataloader, model, tokenizer, base_dataset_valid, max_new_tokens=max_new_tokens, name=f"eval_{phase}", dtype=dtype, device=device)

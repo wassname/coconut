@@ -34,7 +34,7 @@ class BaseConfig:
 
     seed: int = 0
     bf16: bool = True
-    bf16_weight: bool = False # experimental
+    bf16_weight: bool = False # experimental, doesn't seem to work
     opt_8b: bool = False
     
     train_path: str = "data/gsm_train.json"
@@ -42,10 +42,12 @@ class BaseConfig:
     batch_size_training: int = 26
     max_size: int = 14000 # full ~40k in coconut
     debug: bool = False
-    gradient_accumulation_steps: int = 2
+    gradient_accumulation_steps: int = 1
     num_epochs: int = 25 # 50 in coconut
     lr: float = 1e-4 # 1e-4 in coconut, but 1e-6 in verl
-    weight_decay: float = 0.0 # 0.01 in coconut, 0 in verl
+    weight_decay: float = 0.01 # 0.01 in coconut, 0 in verl
+
+    reset_optimizer: bool = False
 
 
 @dataclass
