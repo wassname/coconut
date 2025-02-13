@@ -180,18 +180,21 @@ def main():
     def create_optimizer(model, configs):
 
         if configs.bf16_weight:
-            raise NotImplementedError("bf16_weight not implemented")
+            import optimi
+            return optimi.AdamW(
+                model.parameters(),
+                lr=configs.lr,
+                weight_decay=configs.weight_decay,
+            )
         elif configs.opt_8b:
             import bitsandbytes as bnb
             return bnb.optim.Adam8bit(
                 model.parameters(),
                 lr=configs.lr,
                 weight_decay=configs.weight_decay,
-                bf16=True,
             )
         else:
-            import optimi
-            return optimi.AdamW(
+            return optim.AdamW(
                 model.parameters(),
                 lr=configs.lr,
                 weight_decay=configs.weight_decay,
