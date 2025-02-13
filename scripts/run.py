@@ -213,6 +213,7 @@ def main():
 
 
     collator = CoconutCollator(tokenizer, latent_id=latent_id, label_pad_token_id=-100)
+    scaler = torch.amp.GradScaler()
 
     """
     The stages
@@ -353,15 +354,27 @@ def main():
                 with torch.autocast(device_type=device, dtype=dtype):
                     outputs = model(**batch)
 
-                loss = outputs.loss / configs.gradient_accumulation_steps
-                loss.backward()
+                    loss = outputs.loss / configs.gradient_accumulation_steps
+                
+                scaler.scale(loss).backward()
+                # loss.backward()
 
                 if (step + 1) % configs.gradient_accumulation_steps == 0 or step == len(
                     train_dataloader
                 ) - 1:
-                    optimizer.step()
+
+                    # # Unscales the gradients of optimizer's assigned params in-place
+                    # scaler.unscale_(optimizer)
+
+                    # # Since the gradients of optimizer's assigned params are unscaled, clips as usual:
+                    # torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm)
+                    
+                    scaler.step(optimizer)
+                    # optimizer.step()
+                    scaler.update()
                     optimizer.zero_grad()
                     pbar.update(1)
+
 
                 if wandb_run:
                     log_dict = {
@@ -404,9 +417,6 @@ def main():
                     print("eval loss", total_loss / len(valid_loss_dataloader))
 
             clear_memory()
-
-            r = evaluate(valid_gen_dataloader, model, tokenizer, base_dataset_valid, max_new_tokens=max_new_tokens, name=f"eval_{phase}", dtype=dtype, device=device, quick=True)
-
 
         clear_memory()
         r = evaluate(valid_gen_dataloader, model, tokenizer, base_dataset_valid, max_new_tokens=max_new_tokens, name=f"eval_{phase}", dtype=dtype, device=device)
