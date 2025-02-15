@@ -232,6 +232,7 @@ class CoconutConfig(Qwen2Config):
         self.replacement_method = kwargs.pop("replacement_method", "-1")
         self.latent_token_id = kwargs.pop("latent_token_id", None)
         self.eos_token_id = kwargs.pop("eos_token_id", None)
+        self.loss_seq_vcr = kwargs.pop("loss_seq_vcr", False)
         super().__init__(**kwargs)
 
 
@@ -434,11 +435,14 @@ class CoconutQwen2ForCausalLM(Qwen2ForCausalLM):
         )
 
         # Seq-VCR loss
-        with torch.autocast(device_type=input_ids.device.type):
-            loss_vcr, extra = self.vcr_loss(all_hs)
-        # TODO report diff losses to wandb
-        extra['loss_ar'] = loss.item()
-        loss += loss_vcr
+        extra = {}
+        if self.config.loss_seq_vcr:
+            with torch.autocast(device_type=input_ids.device.type):
+                loss_vcr, extra2 = self.vcr_loss(all_hs)
+            # TODO report diff losses to wandb
+            extra['loss_ar'] = loss.item()
+            extra.update(extra2)
+            loss += loss_vcr
 
         assert torch.isfinite(loss).all(), f"Loss is {loss}"
 

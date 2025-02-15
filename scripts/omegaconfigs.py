@@ -16,8 +16,8 @@ class BaseConfig:
     no_cot: bool = False
     
     c_thought: int = 2
-    epochs_per_stage: int = 2
-    max_latent_stage: int = 4
+    epochs_per_stage: int = 4
+    max_latent_stage: int = 3
     pad_latent_to_max: bool = True
     # replacement_method: str = "-1" # or 0.5, or ie+supressed[0.5:] or hs+supressed[0.5:] or supressed[0.5:]
     # replacement_method: str = "0.5"
@@ -40,14 +40,16 @@ class BaseConfig:
     train_path: str = "data/gsm_train.json"
     val_path: str = "data/gsm_valid.json"
     batch_size_training: int = 26
-    max_size: int = 14000 # full ~40k in coconut
+    max_size: int = 40000 # full ~40k in coconut
     debug: bool = False
     gradient_accumulation_steps: int = 1
-    num_epochs: int = 25 # 50 in coconut
+    num_epochs: int = 30 # 50 in coconut
     lr: float = 1e-4 # 1e-4 in coconut, but 1e-6 in verl
     weight_decay: float = 0.01 # 0.01 in coconut, 0 in verl
 
     reset_optimizer: bool = False
+
+    loss_seq_vcr: bool = False # experimental loss, might help with intermediate state stabiliy
 
 
 @dataclass
@@ -68,7 +70,7 @@ class GsmQwen1_5b_H100(GSMQwenConfig):
     bf16: bool = True
     bf16_weight: bool = False
     opt_8b: bool = True
-    batch_size_training: int = 30
+    batch_size_training: int = 32
     gradient_accumulation_steps: int = 1
 
 # # ...existing code...

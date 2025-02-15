@@ -141,7 +141,7 @@ def main():
 
         # load base model
         model_config = CoconutConfig.from_pretrained(configs.model_id,    latent_token_id=latent_id, 
-            bot_id=bot_id, eot_id=eot_id, eos_token_id=tokenizer.eos_token_id, replacement_method=configs.replacement_method)
+            bot_id=bot_id, eot_id=eot_id, eos_token_id=tokenizer.eos_token_id, replacement_method=configs.replacement_method, loss_seq_vcr=configs.loss_seq_vcr)
         model = CoconutQwen2ForCausalLM.from_pretrained(configs.model_id, config=model_config, device_map=device)
         
         model.resize_token_embeddings(len(tokenizer))
@@ -298,7 +298,7 @@ def main():
             train_dataloader = torch.utils.data.DataLoader(
                 dataset_train,
                 num_workers=1,
-                shuffle=False,
+                shuffle=True,
                 pin_memory=True,
                 batch_size=configs.batch_size_training,
                 collate_fn=collator,

@@ -21,6 +21,7 @@ run2:
 
 
 vast:
+  export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
   export CUDA_DEVICE_ORDER=PCI_BUS_ID
   . ./.venv/bin/activate
   python scripts/run.py GsmQwen1_5b_H100
