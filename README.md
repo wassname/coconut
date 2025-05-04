@@ -12,6 +12,23 @@ Forked to replicate and experiment and understand
     - [ ] the supressed neurons?
     - [ ] the second to last hidden state (containing supressed neurons)?
     - [ ] a projection of the last hidden state? Normalised
+  - Make it **explainable**
+    - [ ] add a linear probe that predicts the next token from the last passed hidden state (which we might apply sparsity or projection too). This would mean the model wants to make the passed information explainable to a linear layer. In otherworse simple and linear and hopefully explainable.
+             
+          ```py
+          # During COCONUT-style reasoning
+          hidden_state_t = model(input_tokens, previous_hidden_state)
+          sparse_state_t = sparsify(hidden_state_t)  
+          
+          # Linear probe to predict next token
+          predicted_next_logits = nn.Linear(hidden_dim, vocab_size)(sparse_state_t)
+          next_token_tp = actual_next_token_in_sequence
+          
+          # Loss to encourage linear decodability of NEXT step
+          linear_probe_loss = cross_entropy(predicted_next_logits, next_token_tp1)
+          
+          # Pass sparse_state_t to next iteration
+          ```
 
 
 install
