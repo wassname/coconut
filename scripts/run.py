@@ -200,6 +200,7 @@ def main():
         
         # lr_scheduler_type="cosine",# cosine cosine_with_restarts. constant in ref. constant_with_warmup
         # save_strategy="no",
+        lr_scheduler_type="constant_with_warmup",
     )
 
     """
@@ -213,17 +214,24 @@ def main():
 
     if configs.resume:
         logger.warning(f"Resuming from epoch {configs.resume}")
-    for phase in range(configs.resume, configs.num_epochs):
+    
+    for epoch in range(configs.resume, configs.num_epochs):
         start_time = time.time()
-        if phase == configs.max_latent_stage:
-            training_args.num_train_epochs = configs.num_epochs - configs.max_latent_stage
-            print("max_latent_stage reached, training in one large run for", training_args.num_train_epochs)
-        elif phase > configs.max_latent_stage:
-            break
 
-        scheduled_stage = phase // configs.epochs_per_stage
-        no_bot_eot=configs.cot or configs.no_cot or configs.no_thoughts
-        logger.info(f"scheduled_stage={scheduled_stage}, no_bot_eot={no_bot_eot}, c_thought={configs.c_thought}, max_latent_stage={configs.max_latent_stage}, cot={configs.cot}, coconut={configs.coconut}")
+        max_latent_epoch = configs.max_latent_stage * configs.epochs_per_stage
+
+
+        if epoch <= configs.cot_epochs:
+            scheduled_stage = 0
+            no_bot_eot = True
+        elif epoch < max_latent_epoch:
+            scheduled_stage = (epoch - configs.cot_epochs) // configs.epochs_per_stage
+            no_bot_eot = False
+        else:
+            scheduled_stage = configs.max_latent_stage
+
+
+        logger.info(f"scheduled_stage={scheduled_stage}, no_bot_eot={no_bot_eot}, c_thought={configs.c_thought}, max_latent_stage={configs.max_latent_stage}, coconut={configs.coconut}")
 
         # initial eval
         dataset_gen_val = get_question_only_latent_dataset(
@@ -249,13 +257,13 @@ def main():
             batch_size=configs.batch_size_training,
             collate_fn=collator,
         )
-        if phase==0:
+        if epoch==0:
             # quick QC to see how well untouched model does at the task
-            r = evaluate(valid_gen_dataloader, model, tokenizer, base_dataset_valid, max_new_tokens=max_new_tokens, name=f"eval_{phase}_start", dtype=dtype, device=device, quick=True)
+            r = evaluate(valid_gen_dataloader, model, tokenizer, base_dataset_valid, max_new_tokens=max_new_tokens, name=f"eval_{epoch}_start", dtype=dtype, device=device, quick=True)
             if wandb_run:
                 wandb_run.log(r)
 
-        logger.info(f"Training stage epoch={phase} stage={scheduled_stage}")
+        logger.info(f"Prep data for epoch={epoch} stage={scheduled_stage}")
 
         dataset_loss_val = get_cot_latent_dataset(
             scheduled_stage,
@@ -287,9 +295,9 @@ def main():
             class CoconutEvalCallback(TrainerCallback):               
                 
                 def on_epoch_end(self, args, state, control, **kwargs):
-                    r = evaluate(valid_gen_dataloader, model, tokenizer, base_dataset_valid, max_new_tokens=max_new_tokens, name=f"eval_{phase}", dtype=dtype, device=device)
+                    r = evaluate(valid_gen_dataloader, model, tokenizer, base_dataset_valid, max_new_tokens=max_new_tokens, name=f"eval_{epoch}", dtype=dtype, device=device)
                     r['phase_step'] = state.global_step
-                    r['phase'] = phase
+                    r['phase'] = epoch
                     if wandb_run:
                         wandb_run.log(r)
                     res.append(r)
@@ -303,26 +311,25 @@ def main():
                 callbacks=[ProgressCallbackNoPrint(), CoconutEvalCallback()]
                 # TODO pass in (opt, scheduler) as a callback
             )
-            # TODO we don't need to shuffle train as it's done during load
             clear_memory()
             rm_old_prog_cb(trainer)
             try:
-                logger.info(f"Training {phase} {scheduled_stage} {configs.name}")
+                logger.info(f"Training e={epoch} s={scheduled_stage} {configs.name}")
                 trainer.train()
             except KeyboardInterrupt:
                 logger.info("Interrupted")
                 pass
 
         clear_memory()
-        r = evaluate(valid_gen_dataloader, model, tokenizer, base_dataset_valid, max_new_tokens=max_new_tokens, name=f"eval_{phase}", dtype=dtype, device=device)
-        r['phase'] = phase
+        r = evaluate(valid_gen_dataloader, model, tokenizer, base_dataset_valid, max_new_tokens=max_new_tokens, name=f"eval_{epoch}", dtype=dtype, device=device)
+        r['phase'] = epoch
         r['minutes'] = (time.time() - start_time) / 60
         clear_memory()
         if wandb_run:
             wandb_run.log(r)
         res.append(r)
 
-        save_model(model, tokenizer, config_dict, save_dir / f"checkpoint_{phase}")
+        save_model(model, tokenizer, config_dict, save_dir / f"checkpoint_{epoch}")
 
     print(f'\n# Results: {run_name}')
     print(config_dict)

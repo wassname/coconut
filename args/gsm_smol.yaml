@@ -8,11 +8,11 @@ only_eval: False
 
 coconut: True
 cot: False
-no_thoughts: False
 no_cot: False
 
 c_thought: 2
-epochs_per_stage: 3
+cot_epochs: 6
+epochs_per_stage: 5
 max_latent_stage: 3
 pad_latent_to_max: True
 
@@ -38,12 +38,12 @@ bf16_weight: False
 train_path: data/gsm_train.json
 val_path: data/gsm_valid.json
 reset_optimizer: False
-batch_size_training: 16
-max_size: 20000 # in verl 8k is enougth https://github.com/volcengine/verl/blob/main/examples/ppo_trainer/verl_getting_started.ipynb
+batch_size_training: 32
+max_size: 1000000000 # in verl 8k is enougth https://github.com/volcengine/verl/blob/main/examples/ppo_trainer/verl_getting_started.ipynb
 debug: False
-gradient_accumulation_steps: 2
-num_epochs: 50
-lr: !!float "1e-4" 
+gradient_accumulation_steps: 4
+num_epochs: 26
+lr: !!float "1e-5" 
 # system_prompt: |
 #   Solve the math question by multiple short reasoning steps like `<<5*0+1*2=?>>` OR silently within `<|start-latent|><|end-latent|>`. Then return the final answer like `### 2\n<|im_end|><|im_end|>`. No other preamble or comments are allowed.
 weight_decay: 0.01

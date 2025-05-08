@@ -510,3 +510,32 @@ eval_1 12mins
 
 TODO can we resume from a stage is saved or passed?
 outputs/gsm-smol_20250508-155834/checkpoint_0
+
+OK I'm running, on smol, with the proper number of epochs. Overnight
+So it shold do as well as gpt2 if not better that is. GSM9k, 42.9 with CoT, 21.6 without thought, 34.1 coconut. In fact this should do better as it has better pretrasining than gpt2 with the same size
+
+
+meant to do 25 epochs of CoT First
+ 
+# from the github
+
+https://github.com/facebookresearch/coconut/issues/11
+
+> Hi, thanks for the question.
+
+> We haven't got time to carefully tune the hyper-parameters for larger models like Llama. Generally it's better to use a smaller lr (e.g. 1e-5) and fewer epochs per stage to avoid overfitting.
+
+> We'd like to note that, since these larger models have been pre-trained extensively on language space rather than latent space, you may find coconut at a disadvantage in comparison with language CoT. Future work will explore pre-training in latent space to better unlock the potential of latent reasoning.
+
+https://github.com/facebookresearch/coconut/issues/3
+
+> Hi, thanks for the question. I've confirmed that the exact code can reproduce the reported number. We used 4 GPUs to train the model, which means the effective batch size is 32 * 4 = 128. In the wandb log you shared, the effective batch size seems to be 32?
+
+so changes I need to make
+
+
+- bs: 128
+- ls: 1e-5 with smol2 for speed
+- 25 to 50 epochs
+- should be around 40% with CoT
+- max size 1000000000 not (it's 3012 samples at 32 batch, 45mins)
