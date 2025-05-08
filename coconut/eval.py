@@ -28,6 +28,8 @@ def evaluate(dataloader, model, tokenizer, ds, max_new_tokens=64, device='cuda',
 
     # val generation accuracy
     total_length = len(dataloader)
+    if quick:
+        total_length = 3 * dataloader.batch_size
 
     pbar = tqdm(
         colour="green", desc=f"Test Accuracy {name}", total=total_length, dynamic_ncols=True

@@ -502,3 +502,11 @@ ok revisit 1. gpt2 2. seq-vcr 3. wich alyer 4 batch size
 # 2025-05-06 19:26:30
 
 Ok I think that if I add special positional encodings the model might learn faster that it's in another mode
+
+ok with smol2 it's 5:28 mins train, 3:06mins to test the first epoch
+
+eval_1 12mins
+
+
+TODO can we resume from a stage is saved or passed?
+outputs/gsm-smol_20250508-155834/checkpoint_0

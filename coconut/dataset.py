@@ -57,7 +57,7 @@ def get_dataset(path, tokenizer, max_size=1000000000, drop_unused=True, system_p
 
     dataset_tok = dataset.map(
         tokenize_sample, remove_columns=list(dataset.features) if drop_unused else None, num_proc=num_proc, 
-        desc=path
+        desc=f'tokenize_sample: {path}'
     )
 
     # # verify
@@ -241,7 +241,7 @@ def get_question_only_latent_dataset(
 
     return base_dataset_valid.map(
         process_dataset, remove_columns=list(base_dataset_valid.features) if drop_unused else None, num_proc=num_proc,
-         desc=f"q_latent_{scheduled_stage}"
+         desc=f"process_dataset: q_latent_{scheduled_stage}"
     )
 
 
@@ -326,7 +326,7 @@ def get_cot_latent_dataset(
 
     processed_dataset = base_dataset.map(
         process_dataset, remove_columns=list(base_dataset.features) if drop_unused else None, num_proc=32,
-        desc=f"cot_latent_{scheduled_stage}"
+        desc=f"process_dataset: cot_latent_{scheduled_stage}"
     )
     if shuffle:
         processed_dataset = processed_dataset.shuffle()

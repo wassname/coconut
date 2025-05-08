@@ -102,7 +102,7 @@ def main():
     dtype = torch.bfloat16 if configs.bf16 else torch.float32
     logger.info(f"Using device: {device}, dtype: {dtype}")
 
-    if configs.load_model_path:
+    if configs.resume:
         f = Path('./' + configs.load_model_path)
         assert f.exists(), f"Model path {f} does not exist"
         model = CoconutQwen2ForCausalLM.from_pretrained(configs.load_model_path, device_map=device)
@@ -191,7 +191,7 @@ def main():
         save_steps=10000,
         bf16=configs.bf16,
         bf16_full_eval=configs.bf16,
-        optim="adamw_bnb_8bit", # save memory:adamw_torch  adamw_bnb_8bit or paged_adamw_32bit
+        # optim="adamw_bnb_8bit", # save memory:adamw_torch  adamw_bnb_8bit or paged_adamw_32bit
         num_train_epochs=1,
         torch_empty_cache_steps=100,
         save_safetensors=False,
@@ -240,6 +240,8 @@ def main():
             max_new_tokens = 64
         else:
             max_new_tokens = 128
+        if configs.debug:
+            max_new_tokens = 8
         valid_gen_dataloader = torch.utils.data.DataLoader(
             dataset_gen_val,
             num_workers=6,
@@ -305,6 +307,7 @@ def main():
             clear_memory()
             rm_old_prog_cb(trainer)
             try:
+                logger.info(f"Training {phase} {scheduled_stage} {configs.name}")
                 trainer.train()
             except KeyboardInterrupt:
                 logger.info("Interrupted")

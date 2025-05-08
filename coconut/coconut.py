@@ -153,7 +153,7 @@ class CoconutQwen2ForCausalLM(LlamaForCausalLM):
         if position_ids is None:
             position_ids=torch.arange(
                 0, input_ids.shape[1], dtype=torch.long, device=input_ids.device
-            ).unsqueeze(0)
+            ).unsqueeze(0).expand(input_ids.shape[0], -1)
 
 
         logits = []
@@ -290,7 +290,7 @@ class CoconutQwen2ForCausalLM(LlamaForCausalLM):
                 if self.config.use_position_ids:
                     thinking_base_position = 100000  # Well beyond normal context windows
                     position_ids[batch_idx][token_idx] = thinking_base_position + pass_idx
-                    # TODO consider token_type_ids, or add a distinct thinking vector the embeddings, perhaps just embedding <|thought|> token and adding
+                    # TODO consider token_type_ids, or add a distinct thinking vector the embeddings, perhaps just embedding <latent> token back in and adding
 
 
             # assemble the new inputs_embeds
