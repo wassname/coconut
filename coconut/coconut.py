@@ -102,26 +102,27 @@ def hs2ie(hidden_states: HiddenStates, inputs_embeds: HiddenState, w_out=None, m
     hs = rearrange(list(hidden_states), 'l b t h -> l b t h')
     supressed_act = get_supressed_activations(hs, w_out)
 
+    To = hidden_states[-1].shape[1]
+    Ti = inputs_embeds.shape[1]
+
     if method == 'ie+supressed[-1]':
         # need to make it more like the original hidden states, so prev input embedding plus the supressed tokens
-        return inputs_embeds + supressed_act[-1] # last layer, add dummy sequence dim
+        return inputs_embeds[:, :To] + supressed_act[-1] # last layer, add dummy sequence dim
     elif method == 'ie+supressed[0.5:]':
-        return inputs_embeds + supressed_act[i_half:].sum(dim=0)
+        return inputs_embeds[:, :To] + supressed_act[i_half:].sum(dim=0)
     elif method == 'hs+supressed[0.5:]':
         return hidden_states[-1] + supressed_act[i_half:].sum(dim=0)
     elif method == 'supressed[0.5:]':
         # FIXME this need to be repeated along token dim
-        T = inputs_embeds.shape[1]
         hs = supressed_act[i_half:].sum(dim=0)
-        return inputs_embeds + supressed_act[-1]
+        return inputs_embeds[:, :To] + supressed_act[-1]
     elif method == 'ie+supressed[0.5:]':
-        return inputs_embeds + supressed_act[i_half:].sum(dim=0)
+        return inputs_embeds[:, :To] + supressed_act[i_half:].sum(dim=0)
     elif method == 'hs+supressed[0.5:]':
         return hidden_states[-1] + supressed_act[i_half:].sum(dim=0)
     elif method == 'supressed[0.5:]':
-        T = inputs_embeds.shape[1]
         hs = supressed_act[i_half:].sum(dim=0)
-        hs = repeat(hs, 'b 1 h -> b t h', t=T)
+        hs = repeat(hs, 'b 1 h -> b t h', t=Ti)
         return hs
     
     ValueError(f"Unknown method {method}")
