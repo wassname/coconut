@@ -26,7 +26,6 @@ from coconut.coconut import (
 from coconut.eval import evaluate
 from pathlib import Path
 
-from coconut.trainer_optimi import TrainerOptimi, convert_to_bfloat16
 
 
 import transformers
@@ -147,9 +146,6 @@ def main():
         lm_head.weight.data[token_id] = lm_head.weight.data[target_id].clone()
 
     model = model.to(device)
-    
-    if configs.bf16_weight:
-        convert_to_bfloat16(model)
 
     # setup eval
     logger.info(model)
@@ -186,8 +182,8 @@ def main():
         per_device_train_batch_size=configs.batch_size_training,
         gradient_accumulation_steps=configs.gradient_accumulation_steps,
         learning_rate=configs.lr,
-        warmup_ratio=0.2,
-        logging_steps=1, # TODO ideally we log to tensorboard every step, but to ui every 100 steps
+        warmup_ratio=0.1,
+        logging_steps=5, # TODO ideally we log to tensorboard every step, but to ui every 100 steps
         save_steps=10000,
         bf16=configs.bf16,
         bf16_full_eval=configs.bf16,
@@ -287,10 +283,10 @@ def main():
                 shuffle=True,
             )
 
-            if configs.bf16_weight:
-                TrainerCls = TrainerOptimi
-            else:
-                TrainerCls = Trainer
+            # if configs.bf16_weight:
+            #     TrainerCls = TrainerOptimi
+            # else:
+            #     TrainerCls = Trainer
 
             class CoconutEvalCallback(TrainerCallback):               
                 
@@ -302,7 +298,7 @@ def main():
                         wandb_run.log(r)
                     res.append(r)
                     return 
-            trainer = TrainerCls(
+            trainer = Trainer(
                 model=model,# if scheduled_stage > 0 else model.base_causallm,
                 args=training_args,
                 train_dataset=dataset_train,
