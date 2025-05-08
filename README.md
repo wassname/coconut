@@ -1,4 +1,9 @@
+# STATUS: in this fork I try without the TRL trainer. I tried to add it for simplicity but who knows if it has bugs in
+
+
 Forked to replicate and experiment and understand
+
+
 
 - [x] made single GPU for simplicity (no torch run, easier debug)
 - [x] refactored and added comment in places
