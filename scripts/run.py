@@ -98,7 +98,7 @@ def main():
 
     # set devices
     print_cuda_devices()
-    device = "cuda" if torch.cuda.is_available() else "cpu"
+    device = "cuda" #if torch.cuda.is_available() else "cpu"
     dtype = torch.bfloat16 if configs.bf16 else torch.float32
     logger.info(f"Using device: {device}, dtype: {dtype}")
 
@@ -236,17 +236,17 @@ def main():
             no_bot_eot=no_bot_eot,
             # drop_unused=False,
         )
-        valid_gen_dataloader = torch.utils.data.DataLoader(
-            dataset_gen_val,
-            num_workers=1,
-            pin_memory=True,
-            batch_size=configs.batch_size_training,
-            collate_fn=collator,
-        )
         if "gsm" in configs.val_path:
             max_new_tokens = 64
         else:
             max_new_tokens = 128
+        valid_gen_dataloader = torch.utils.data.DataLoader(
+            dataset_gen_val,
+            num_workers=6,
+            pin_memory=True,
+            batch_size=configs.batch_size_training,
+            collate_fn=collator,
+        )
         if phase==0:
             # quick QC to see how well untouched model does at the task
             r = evaluate(valid_gen_dataloader, model, tokenizer, base_dataset_valid, max_new_tokens=max_new_tokens, name=f"eval_{phase}_start", dtype=dtype, device=device, quick=True)

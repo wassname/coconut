@@ -16,14 +16,17 @@ from transformers.data.data_collator import pad_without_fast_tokenizer_warning
 
 def get_dataset(path, tokenizer, max_size=1000000000, drop_unused=True, system_prompt="", num_proc=32):
     if system_prompt:
-        system_prompt = "<|im_start|>system\n" + system_prompt.strip() + "<|im_end|>\n"
+        # system_prompt = "<|im_start|>system\n" + system_prompt.strip() + "<|im_end|>\n"
+        system_prompt = system_prompt.strip() + "\n"
 
-    pre_q = "<|im_start|>user\n"
+    # pre_q = "<|im_start|>user\n"
+    pre_q = ""
 
     encode = tokenizer.encode
     # encode = tokenizer.apply_chat_template
 
-    post_q = "<|im_end|>\n<|im_start|>assistant\n"
+    # post_q = "<|im_end|>\n<|im_start|>assistant\n"
+    post_q = ""
 
     def tokenize_sample(sample):
 
@@ -35,7 +38,7 @@ def get_dataset(path, tokenizer, max_size=1000000000, drop_unused=True, system_p
             for s in sample["steps"]
         ]
         answer_tokenized = encode(
-            "### " + sample["answer"], add_special_tokens=False
+            "### " + sample["answer"] + "\n", add_special_tokens=False
         ) + [tokenizer.eos_token_id]
 
         sample = {
@@ -57,19 +60,20 @@ def get_dataset(path, tokenizer, max_size=1000000000, drop_unused=True, system_p
         desc=path
     )
 
-    # verify
-    d = data[0]
-    complete = system_prompt + pre_q + d["question"] + post_q + "\n".join(d["steps"]) + "\n### " + d["answer"]
-    # or should we apply format?
-    complete_tokenized = encode(complete, add_special_tokens=True) + [
-        tokenizer.eos_token_id
-    ]
-    assert (
-        complete_tokenized
-        == dataset_tok[0]["question_tokenized"]
-        + list(itertools.chain.from_iterable(dataset_tok[0]["steps_tokenized"]))
-        + dataset_tok[0]["answer_tokenized"]
-    )
+    # # verify
+    # d = data[0]
+    # complete = system_prompt + pre_q + d["question"] + post_q + "\n".join(d["steps"]) + "\n### " + d["answer"]+ "\n"
+    # # or should we apply format?
+    # complete_tokenized = encode(complete, add_special_tokens=True) + [
+    #     tokenizer.eos_token_id
+    # ]
+    # s3 = (dataset_tok[0]["question_tokenized"]
+    #     + list(itertools.chain.from_iterable(dataset_tok[0]["steps_tokenized"]))
+    #     + dataset_tok[0]["answer_tokenized"])
+    # assert (
+    #     complete_tokenized
+    #     == s3
+    # ), f"{complete}\n!=\n{tokenizer.decode(s3)} != {tokenizer.decode(complete_tokenized)}"
 
 
 

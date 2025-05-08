@@ -2,7 +2,7 @@
 
 project: coconut
 save_path: outputs/
-name: gsm-qwen
+name: gsm-smol
 
 only_eval: False
 
@@ -28,7 +28,7 @@ uniform_prob: 0.0
 # Qwen/Qwen2.5-0.5B-Instruct
 # Qwen/Qwen2.5-0.5B
 # model_id: fdyrd/QwenMath-0.5B
-model_id: Qwen/Qwen2.5-Coder-0.5B
+model_id: HuggingFaceTB/SmolLM2-135M-Instruct
 # model_id: plaguss/Qwen2.5-0.5B-Math-Shepherd-PRM-0.2
 load_model_path: 
 seed: 0
@@ -38,12 +38,12 @@ bf16_weight: False
 train_path: data/gsm_train.json
 val_path: data/gsm_valid.json
 reset_optimizer: False
-batch_size_training: 10
+batch_size_training: 32
 max_size: 20000 # in verl 8k is enougth https://github.com/volcengine/verl/blob/main/examples/ppo_trainer/verl_getting_started.ipynb
 debug: False
-gradient_accumulation_steps: 4
+gradient_accumulation_steps: 1
 num_epochs: 50
-lr: !!float "1e-4" 
-system_prompt: |
-  Solve the math question by multiple short reasoning steps like `<<5*0+1*2=?>>` OR silently within `<|start-latent|><|end-latent|>`. Then return the final answer like `### 2`. No other preamble or comments are allowed.
-weight_decay: 0.01
+lr: !!float "6e-5" 
+# system_prompt: |
+#   Solve the math question by multiple short reasoning steps like `<<5*0+1*2=?>>` OR silently within `<|start-latent|><|end-latent|>`. Then return the final answer like `### 2\n<|im_end|><|im_end|>`. No other preamble or comments are allowed.
+weight_decay: 0.001

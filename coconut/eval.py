@@ -7,7 +7,10 @@ def indent(s):
     return s.replace("\n", "\n\t")
 
 def crop(s, maxl=30):
-    s = s.replace('<|endoftext|>', '')
+    s = (s
+         .replace('<|endoftext|>', '')
+         .replace('<|im_end|>', '')
+    )
     if len(s) > maxl:
         return s[:maxl] + "..."
     return s
@@ -58,7 +61,7 @@ def evaluate(dataloader, model, tokenizer, ds, max_new_tokens=64, device='cuda',
                 test_idx = idx[i].item()
                 llm_text_output = llm_text_outputs[i]
 
-                llm_answer_output = llm_text_output.split("#")[-1].replace(",", "").strip()
+                llm_answer_output = llm_text_output.split("#")[-1].replace(",", "").replace("<|im_end|>", "").strip()
                 llm_cot_output = (
                     ("\n".join(llm_text_output.split("\n")[1:])).split("#")[0].strip()
                 )
