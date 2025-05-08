@@ -487,3 +487,18 @@ but acc was only 0.02, wth
 
 
 ![seems to help with loer loss](files/image.png)
+
+
+# trying with smol model, but god it's so basd and slow
+
+I reckon I will need 1.5b+ to even work, so I should just rent some H100 or two
+- USD $2.00 per hour. 3.25 aud
+# 
+ok revisit 1. gpt2 2. seq-vcr 3. wich alyer 4 batch size
+
+
+
+
+# 2025-05-06 19:26:30
+
+Ok I think that if I add special positional encodings the model might learn faster that it's in another mode

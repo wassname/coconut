@@ -26,11 +26,12 @@ run
 ~~~sh
 
 export CUDA_DEVICE_ORDER=PCI_BUS_ID
-export CUDA_VISIBLE_DEVICES=1
 . ./.venv/bin/activate
-python scripts/run.py args/gsm_qwen.yaml
+python scripts/run.py args/gsm_smol.yaml
 ~~~
 ----
+
+Old readme
 
 # Coconut
 

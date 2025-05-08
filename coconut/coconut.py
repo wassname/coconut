@@ -12,7 +12,7 @@ from typing import Tuple, List, Union, Optional, Dict
 from torch import Tensor
 
 from transformers import DynamicCache
-from transformers.models.gpt2 import GPT2LMHeadModel
+# from transformers.models.gpt2 import GPT2LMHeadModel
 
 from loguru import logger
 
@@ -22,6 +22,8 @@ from transformers import (
     DynamicCache,
     PreTrainedTokenizer,
     Qwen2Config,
+    LlamaConfig,
+    LlamaForCausalLM,
 )
 
 
@@ -125,15 +127,16 @@ def hs2ie(hidden_states: HiddenStates, inputs_embeds: HiddenState, w_out=None, m
     ValueError(f"Unknown method {method}")
 
 
-class CoconutConfig(Qwen2Config):
+class CoconutConfig(LlamaConfig):
     def __init__(self, **kwargs):
         self.replacement_method = kwargs.pop("replacement_method", "-1")
         self.latent_token_id = kwargs.pop("latent_token_id", None)
         self.eos_token_id = kwargs.pop("eos_token_id", None)
+        self.use_position_ids = kwargs.pop("use_position_ids", True)
         super().__init__(**kwargs)
 
 
-class CoconutQwen2ForCausalLM(Qwen2ForCausalLM):
+class CoconutQwen2ForCausalLM(LlamaForCausalLM):
     def __init__(
         self,
         config
@@ -151,6 +154,7 @@ class CoconutQwen2ForCausalLM(Qwen2ForCausalLM):
             position_ids=torch.arange(
                 0, input_ids.shape[1], dtype=torch.long, device=input_ids.device
             ).unsqueeze(0)
+
 
         logits = []
 
@@ -280,6 +284,14 @@ class CoconutQwen2ForCausalLM(Qwen2ForCausalLM):
                     batch_idx, token_idx - 1 - hidden_states_offset, :
                 ]
                 # print(tensor_list[batch_idx][token_idx].shape, recrv_embeds.shape, batch_idx, token_idx, token_idx - 1 - hidden_states_offset)
+
+
+                # modifiation. Hypothesis: if the model has a unique positional id for thinking token then it will more quickly learn to mode switch to the recusrsive thinking mode
+                if self.config.use_position_ids:
+                    thinking_base_position = 100000  # Well beyond normal context windows
+                    position_ids[batch_idx][token_idx] = thinking_base_position + pass_idx
+                    # TODO consider token_type_ids, or add a distinct thinking vector the embeddings, perhaps just embedding <|thought|> token and adding
+
 
             # assemble the new inputs_embeds
             inputs_embeds = torch.stack(
