@@ -569,3 +569,10 @@ and they just load args on top
 ok I think we could have 
 1e-3 with cosine
 or 3e-4 with linear
+
+
+hmm maybe I need to remove qwen
+maybe I need to apply chat template?'
+
+
+hmm I shoudl check the lods

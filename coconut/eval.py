@@ -52,6 +52,7 @@ def evaluate(dataloader, model, tokenizer, ds, max_new_tokens=64, device='cuda',
         with torch.autocast(device_type=device, dtype=dtype):
             outputs = model.generate(
                 **batch,
+                use_cache=False,
                 max_new_tokens=max_new_tokens,
                 pad_token_id=tokenizer.eos_token_id,
             )
@@ -77,10 +78,10 @@ def evaluate(dataloader, model, tokenizer, ds, max_new_tokens=64, device='cuda',
             if (batch_n < 3) and (i < 1):
                 correct = '✅' if llm_answer_output==answer else '❌'
                 logger.info(
-                    f"""Q #{test_idx}: Answer = '{answer}' ideal_CoT = '{indent(answer_cot)},'.
-Question: `{indent(question)}`.
+                    f"""Q #{test_idx}: Question: `{indent(question)}`.
+Full llm output: `{indent(crop(llm_text_output, maxl=2900))}`. 
 Extracted llm Output: `{crop(llm_answer_output)}` (=? {answer}) {correct}.
-Full llm output: `{indent(crop(llm_text_output, maxl=1900))}`. 
+Answer = '{answer}' ideal_CoT = '{indent(answer_cot)}'.
 """)                
 
 

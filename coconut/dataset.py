@@ -30,14 +30,14 @@ def get_dataset(path, tokenizer, max_size=1000000000, drop_unused=True, system_p
 
     def tokenize_sample(sample):
 
-        question_tokenized = encode(
+        question_tokenized = tokenizer.encode(
             system_prompt+pre_q+sample["question"] + post_q, add_special_tokens=True
         )
         steps_tokenized = [
-            encode(s + "\n", add_special_tokens=False)
+            tokenizer.encode(s + "\n", add_special_tokens=False)
             for s in sample["steps"]
         ]
-        answer_tokenized = encode(
+        answer_tokenized = tokenizer.encode(
             "### " + sample["answer"] + "\n", add_special_tokens=False
         ) + [tokenizer.eos_token_id]
 
@@ -64,7 +64,7 @@ def get_dataset(path, tokenizer, max_size=1000000000, drop_unused=True, system_p
     # d = data[0]
     # complete = system_prompt + pre_q + d["question"] + post_q + "\n".join(d["steps"]) + "\n### " + d["answer"]+ "\n"
     # # or should we apply format?
-    # complete_tokenized = encode(complete, add_special_tokens=True) + [
+    # complete_tokenized = tokenizer.encode(complete, add_special_tokens=True) + [
     #     tokenizer.eos_token_id
     # ]
     # s3 = (dataset_tok[0]["question_tokenized"]

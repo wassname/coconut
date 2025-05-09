@@ -174,7 +174,6 @@ def main():
                             #    resume="allow"
                                )
         wandb_run.config.update(configs, allow_val_change=True)
-        text_table = wandb.Table(columns=["step", "text"])
     else:
         os.environ["WANDB_MODE"] = "disabled"
         wandb_run = None
@@ -204,13 +203,12 @@ def main():
             )
         
     optimizer = create_optimizer(model, configs)
+    print('optimizer', optimizer)
     collator = CoconutCollator(tokenizer, latent_id=latent_id, label_pad_token_id=-100)
     if configs.bf16:
-        scaler = torch.cuda.amp.GradScaler()
-        autocast = torch.autocast
+        scaler = torch.amp.GradScaler()
     else:
         scaler = None
-        autocast = contextlib.nullcontext
 
     """
     The stages
@@ -264,6 +262,7 @@ def main():
             max_new_tokens = 128
         if configs.debug:
             max_new_tokens = 8
+            print("DEBUG MODE: max_new_tokens set to 8")
         valid_gen_dataloader = torch.utils.data.DataLoader(
             dataset_gen_val,
             num_workers=6,
@@ -340,7 +339,7 @@ def main():
                     key: batch[key].to(device) for key in batch.keys() if key != "idx"
                 }
 
-                with autocast(device_type=device, dtype=dtype):
+                with torch.autocast(device_type=device, dtype=dtype):
                     outputs = model(**batch)
 
                     loss = outputs.loss / configs.gradient_accumulation_steps
@@ -358,9 +357,11 @@ def main():
                     if configs.grad_clip is not None:
                         if scaler is not None:
                             scaler.unscale_(optimizer)
-                        torch.nn.utils.clip_grad_norm_(
+                        norm = torch.nn.utils.clip_grad_norm_(
                             model.parameters(), configs.grad_clip
                         )
+                        if wandb_run:
+                            wandb_run.log({"train/grad_norm": norm})
 
                     if scaler is not None:
                         scaler.step(optimizer)
@@ -399,7 +400,7 @@ def main():
                         key: batch[key].to(device) for key in batch.keys() if key != "idx"
                     }
 
-                    with autocast(device_type=device, dtype=dtype):
+                    with torch.autocast(device_type=device, dtype=dtype):
                         outputs = model(**batch)
                     loss = outputs.loss
                     total_loss += loss.item()
