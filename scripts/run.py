@@ -8,6 +8,7 @@ import pandas as pd
 import time
 import torch
 from torch import nn
+import contextlib
 import torch.optim as optim
 import yaml
 from tqdm import tqdm
@@ -105,7 +106,7 @@ def main():
     if configs.resume:
         f = Path('./' + configs.load_model_path)
         assert f.exists(), f"Model path {f} does not exist"
-        model = CoconutQwen2ForCausalLM.from_pretrained(configs.load_model_path, device_map=device)
+        model = CoconutQwen2ForCausalLM.from_pretrained(configs.load_model_path, device_map="auto", torch_dtype=dtype)
         tokenizer = AutoTokenizer.from_pretrained(configs.load_model_path)
         logger.warning(f"Loaded model from {configs.load_model_path}")
     else:
@@ -128,7 +129,7 @@ def main():
         # load base model
         model_config = CoconutConfig.from_pretrained(configs.model_id,    latent_token_id=latent_id, 
             bot_id=bot_id, eot_id=eot_id, eos_token_id=tokenizer.eos_token_id, replacement_method=configs.replacement_method)
-        model = CoconutQwen2ForCausalLM.from_pretrained(configs.model_id, config=model_config, device_map=device)
+        model = CoconutQwen2ForCausalLM.from_pretrained(configs.model_id, config=model_config, device_map=device, torch_dtype=dtype)
         
         model.resize_token_embeddings(len(tokenizer))
 
@@ -139,10 +140,13 @@ def main():
 
     embeddings = model.get_input_embeddings()
     target_id = tokenizer.convert_tokens_to_ids("<<")
+    # TODO check this is in vocab
     for token_id in [latent_id, bot_id, eot_id]:
         # tie embeddings for special tokens
-        target_embedding = embeddings.weight.data[token_id]
+        target_embedding = embeddings.weight.data[target_id]
         embeddings.weight.data[token_id] = target_embedding.clone()
+
+        # The input embeddings and lm heads are tied in GPT2. So the code below is not necessary
         lm_head = model.lm_head
         lm_head.weight.data[token_id] = lm_head.weight.data[target_id].clone()
 
@@ -170,37 +174,43 @@ def main():
                             #    resume="allow"
                                )
         wandb_run.config.update(configs, allow_val_change=True)
+        text_table = wandb.Table(columns=["step", "text"])
     else:
         os.environ["WANDB_MODE"] = "disabled"
         wandb_run = None
 
-    collator = CoconutCollator(tokenizer, latent_id=latent_id, label_pad_token_id=-100)
+    def create_optimizer(model, configs, warmup=False):
+        # TODO add warmup/scheduler
 
-    # Set up training arguments
-    training_args = SFTConfig(
-        run_name=run_name,
-        output_dir=save_dir,
-
-        # weight_decay=weight_decay,
-        logging_steps=5, # TODO ideally we log to tensorboard every step, but to ui every 100 steps
-        save_steps=10000,
-        num_train_epochs=1,
-        torch_empty_cache_steps=100,
-        save_safetensors=False,
-        save_only_model=True,
-        report_to="wandb" if wandb_run else None,
-
-        bf16=configs.bf16,
-        bf16_full_eval=configs.bf16,
+        if configs.bf16_weight:
+            import optimi
+            return optimi.AdamW(
+                model.parameters(),
+                lr=configs.lr,
+                weight_decay=configs.weight_decay,
+            )
+        elif configs.opt_8b:
+            import bitsandbytes as bnb
+            return bnb.optim.Adam8bit(
+                model.parameters(),
+                lr=configs.lr,
+                weight_decay=configs.weight_decay,
+            )
+        else:
+            return optim.AdamW(
+                model.parameters(),
+                lr=configs.lr,
+                weight_decay=configs.weight_decay,
+            )
         
-        # optim="adamw_bnb_8bit", # save memory:adamw_torch  adamw_bnb_8bit or paged_adamw_32bit
-        # save_strategy="no",
-        warmup_ratio=0.1,
-        per_device_train_batch_size=configs.batch_size_training,
-        gradient_accumulation_steps=configs.gradient_accumulation_steps,
-        learning_rate=configs.lr,
-        lr_scheduler_type="constant",
-    )
+    optimizer = create_optimizer(model, configs)
+    collator = CoconutCollator(tokenizer, latent_id=latent_id, label_pad_token_id=-100)
+    if configs.bf16:
+        scaler = torch.cuda.amp.GradScaler()
+        autocast = torch.autocast
+    else:
+        scaler = None
+        autocast = contextlib.nullcontext
 
     """
     The stages
@@ -230,9 +240,9 @@ def main():
             scheduled_stage = configs.max_latent_stage
 
 
-        training_args.lr_scheduler_type="constant"
-        if epoch==0 or epoch==(configs.cot_epochs+1):
-            training_args.lr_scheduler_type="constant_with_warmup"
+        # training_args.lr_scheduler_type="constant"
+        # if epoch==0 or epoch==(configs.cot_epochs+1):
+        #     training_args.lr_scheduler_type="constant_with_warmup"
 
 
         logger.info(f"scheduled_stage={scheduled_stage}, no_bot_eot={no_bot_eot}, c_thought={configs.c_thought}, max_latent_stage={configs.max_latent_stage}, coconut={configs.coconut}")
@@ -278,6 +288,14 @@ def main():
             eot_id,
             no_bot_eot=no_bot_eot,
         )
+        valid_loss_dataloader = torch.utils.data.DataLoader(
+            dataset_loss_val,
+            num_workers=1,
+            shuffle=False,
+            pin_memory=True,
+            batch_size=configs.batch_size_training,
+            collate_fn=collator,
+        )
 
         if not configs.only_eval:
             dataset_train = get_cot_latent_dataset(
@@ -290,34 +308,111 @@ def main():
                 no_bot_eot=no_bot_eot,
                 shuffle=True,
             )
+            if configs.reset_optimizer:
+                del optimizer
+                optimizer = create_optimizer(model, configs, warmup=(epoch==0 or epoch==(configs.cot_epochs+1)))
 
-            class CoconutEvalCallback(TrainerCallback):               
-                
-                def on_epoch_end(self, args, state, control, **kwargs):
-                    r = evaluate(valid_gen_dataloader, model, tokenizer, base_dataset_valid, max_new_tokens=max_new_tokens, name=f"eval_{epoch}", dtype=dtype, device=device)
-                    r['phase_step'] = state.global_step
-                    r['phase'] = epoch
-                    if wandb_run:
-                        wandb_run.log(r)
-                    res.append(r)
-                    return 
-            trainer = SFTTrainer(
-                model=model,# if scheduled_stage > 0 else model.base_causallm,
-                args=training_args,
-                train_dataset=dataset_train,
-                eval_dataset=dataset_loss_val,
-                data_collator=collator,
-                callbacks=[ProgressCallbackNoPrint(), CoconutEvalCallback()]
+            train_dataloader = torch.utils.data.DataLoader(
+                dataset_train,
+                num_workers=1,
+                shuffle=True,
+                pin_memory=True,
+                batch_size=configs.batch_size_training,
+                collate_fn=collator,
+                # sampler=DistributedSampler(dataset_train, shuffle=True),
             )
-            clear_memory()
-            rm_old_prog_cb(trainer)
+
+            optimizer.zero_grad()
             model.train()
-            try:
-                logger.info(f"Training e={epoch} s={scheduled_stage} {configs.name}")
-                trainer.train()
-            except KeyboardInterrupt:
-                logger.info("Interrupted")
-                pass
+            total_length = len(train_dataloader) // configs.gradient_accumulation_steps
+            pbar = tqdm(
+                colour="blue",
+                desc=f"Training Epoch: {epoch}",
+                total=total_length,
+                dynamic_ncols=True,
+            )
+            total_train_steps = 0
+
+            for step, batch in enumerate(train_dataloader):
+
+                total_train_steps += 1
+                batch = {
+                    key: batch[key].to(device) for key in batch.keys() if key != "idx"
+                }
+
+                with autocast(device_type=device, dtype=dtype):
+                    outputs = model(**batch)
+
+                    loss = outputs.loss / configs.gradient_accumulation_steps
+
+                if scaler is not None:
+                    scaler.scale(loss).backward()
+                else:
+                    loss.backward()
+
+                # # every N steps (or last batch) do optimizer step
+                is_last_step = step == len(train_dataloader) - 1
+                if (step + 1) % configs.gradient_accumulation_steps == 0 or is_last_step:
+
+                    # # Unscales the gradients of optimizer's assigned params in-place
+                    if configs.grad_clip is not None:
+                        if scaler is not None:
+                            scaler.unscale_(optimizer)
+                        torch.nn.utils.clip_grad_norm_(
+                            model.parameters(), configs.grad_clip
+                        )
+
+                    if scaler is not None:
+                        scaler.step(optimizer)
+                        scaler.update()
+                    else:
+                        optimizer.step()
+                    optimizer.zero_grad()
+                    
+                    pbar.update(1)
+
+
+                if wandb_run:
+                    log_dict = {
+                        "train/epoch": epoch,
+                        "train/step": epoch * len(train_dataloader) + step,
+                        "train/loss": loss.detach().float()
+                        * configs.gradient_accumulation_steps,
+                    }
+                    wandb_run.log(log_dict)
+
+                pbar.set_description(
+                    f"T Epoch: {epoch}/{configs.num_epochs}, batch {step}/{len(train_dataloader)} "
+                    f"(loss: {round(float(loss.detach().float() * configs.gradient_accumulation_steps), 4):2.2f}"
+                )
+                if step % 100 == 0:
+                    clear_memory()
+            pbar.close()
+
+            # val loss
+            total_loss = 0
+            with torch.no_grad():
+                model.eval()
+                for step, batch in enumerate(valid_loss_dataloader):
+
+                    batch = {
+                        key: batch[key].to(device) for key in batch.keys() if key != "idx"
+                    }
+
+                    with autocast(device_type=device, dtype=dtype):
+                        outputs = model(**batch)
+                    loss = outputs.loss
+                    total_loss += loss.item()
+
+                if wandb_run:
+
+                    log_dict = {
+                        "eval/loss": total_loss / len(valid_loss_dataloader),
+                    }
+                    wandb_run.log(log_dict)
+                    print("eval loss", total_loss / len(valid_loss_dataloader))
+
+            clear_memory()
 
         clear_memory()
         r = evaluate(valid_gen_dataloader, model, tokenizer, base_dataset_valid, max_new_tokens=max_new_tokens, name=f"eval_{epoch}", 

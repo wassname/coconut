@@ -36,63 +36,62 @@ def evaluate(dataloader, model, tokenizer, ds, max_new_tokens=64, device='cuda',
     )
     logger.info(f"Starting evaluation {name}")
     cor, cor_cot, total = 0, 0, 0
-    with torch.no_grad():
-        model.eval()
-        for batch_n, batch in enumerate(dataloader):
-            if quick and batch_n > 3:
-                break
-            
-            idx = batch["idx"]
-            batch = {
-                k: v.to(device)
-                for k, v in batch.items()
-                if v != None and k not in ["idx", "position_ids"]
-            }
+    model.eval()
+    for batch_n, batch in enumerate(dataloader):
+        if quick and batch_n > 3:
+            break
+        
+        idx = batch["idx"]
+        batch = {
+            k: v.to(device)
+            for k, v in batch.items()
+            if v != None and k not in ["idx", "position_ids"]
+        }
 
 
-            with torch.autocast(device_type=device, dtype=dtype):
-                outputs = model.generate(
-                    **batch,
-                    max_new_tokens=max_new_tokens,
-                    pad_token_id=tokenizer.eos_token_id,
-                )
+        with torch.autocast(device_type=device, dtype=dtype):
+            outputs = model.generate(
+                **batch,
+                max_new_tokens=max_new_tokens,
+                pad_token_id=tokenizer.eos_token_id,
+            )
 
-            llm_text_outputs = tokenizer.batch_decode(outputs, skip_special_tokens=False)
+        llm_text_outputs = tokenizer.batch_decode(outputs, skip_special_tokens=False)
 
-            for i in range(len(llm_text_outputs)):
-                test_idx = idx[i].item()
-                llm_text_output = llm_text_outputs[i]
+        for i in range(len(llm_text_outputs)):
+            test_idx = idx[i].item()
+            llm_text_output = llm_text_outputs[i]
 
-                llm_answer_output = llm_text_output.split("#")[-1].replace(",", "").replace("<|im_end|>", "").strip()
-                llm_cot_output = (
-                    ("\n".join(llm_text_output.split("\n")[1:])).split("#")[0].strip()
-                )
+            llm_answer_output = llm_text_output.split("#")[-1].replace(",", "").replace("<|im_end|>", "").strip()
+            llm_cot_output = (
+                ("\n".join(llm_text_output.split("\n")[1:])).split("#")[0].strip()
+            )
 
-                total += 1
-                answer = answers_val[test_idx]
-                answer_cot = cot_val[test_idx]
-                question = question_val[test_idx]
-                cor += llm_answer_output == answer
-                cor_cot += llm_cot_output == answer_cot
+            total += 1
+            answer = answers_val[test_idx]
+            answer_cot = cot_val[test_idx]
+            question = question_val[test_idx]
+            cor += llm_answer_output == answer
+            cor_cot += llm_cot_output == answer_cot
 
-                if (batch_n < 3) and (i < 1):
-                    correct = '✅' if llm_answer_output==answer else '❌'
-                    logger.info(
-                        f"""Q #{test_idx}: Answer = '{answer}' ideal_CoT = '{indent(answer_cot)},'.
-    Question: `{indent(question)}`.
-    Extracted llm Output: `{crop(llm_answer_output)}` (=? {answer}) {correct}.
-    Full llm output: `{indent(crop(llm_text_output, maxl=1900))}`. 
-    """)                
+            if (batch_n < 3) and (i < 1):
+                correct = '✅' if llm_answer_output==answer else '❌'
+                logger.info(
+                    f"""Q #{test_idx}: Answer = '{answer}' ideal_CoT = '{indent(answer_cot)},'.
+Question: `{indent(question)}`.
+Extracted llm Output: `{crop(llm_answer_output)}` (=? {answer}) {correct}.
+Full llm output: `{indent(crop(llm_text_output, maxl=1900))}`. 
+""")                
 
 
-            pbar.update(1)
-            pbar.set_description(f"Test accuracy: {round(float(cor / total), 2)}. {name}")
+        pbar.update(1)
+        pbar.set_description(f"Test accuracy: {round(float(cor / total), 2)}. {name}")
 
-        pbar.close()
-        logger.info(f"Correct={cor}, CoT_correct={cor_cot}, Total={total}. {name}")
-        logger.info(f"Accuracy on val:  {cor} / {total} = {cor / total: .4%}")
-        logger.info(
-            f"CoT match on val: {cor_cot} / {total} = {cor_cot / total: .4%}"
-        )
+    pbar.close()
+    logger.info(f"Correct={cor}, CoT_correct={cor_cot}, Total={total}. {name}")
+    logger.info(f"Accuracy on val:  {cor} / {total} = {cor / total: .4%}")
+    logger.info(
+        f"CoT match on val: {cor_cot} / {total} = {cor_cot / total: .4%}"
+    )
 
     return {"eval/acc": cor / total, "eval/cot_em": cor_cot / total}

@@ -35,6 +35,7 @@ seed: 0
 resume: 0
 bf16: True
 bf16_weight: False
+opt_8b: False
 train_path: data/gsm_train.json
 val_path: data/gsm_valid.json
 reset_optimizer: False
@@ -43,6 +44,7 @@ max_size: 1000000000 # in verl 8k is enougth https://github.com/volcengine/verl/
 debug: False
 gradient_accumulation_steps: 4
 num_epochs: 26
+grad_clip: 1.0
 
 # this could work but I'd need to work out how to do it over the whole scdule and resume
 # lr: !!float "1e-3" 
