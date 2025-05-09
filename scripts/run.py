@@ -27,6 +27,7 @@ from coconut.coconut import (
 )
 from coconut.eval import evaluate
 from pathlib import Path
+from torch.optim.lr_scheduler import CosineAnnealingLR, CosineAnnealingWarmRestarts, ExponentialLR, LinearLR
 
 
 
@@ -203,6 +204,7 @@ def main():
             )
         
     optimizer = create_optimizer(model, configs)
+    # scheduler = CosineAnnealingLR(optimizer, T_max=cfg.epochs)
     print('optimizer', optimizer)
     collator = CoconutCollator(tokenizer, latent_id=latent_id, label_pad_token_id=-100)
     if configs.bf16:
@@ -348,6 +350,9 @@ def main():
                     scaler.scale(loss).backward()
                 else:
                     loss.backward()
+
+                # if scheduler is not None:
+                #     scheduler.step()
 
                 # # every N steps (or last batch) do optimizer step
                 is_last_step = step == len(train_dataloader) - 1

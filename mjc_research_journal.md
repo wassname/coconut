@@ -576,3 +576,10 @@ maybe I need to apply chat template?'
 
 
 hmm I shoudl check the lods
+
+# 2025-05-10 07:04:36
+
+For some reason it doesn't seem to learn in bfloat16.
+With 9 epochs of CoT training smol2 model only has 0.6% acc. Weird. I'ts learnt some CoT but it's all wrong.
+This is using 1e-3 and no weight decay as reccmended by the model makers.
+I might have to go back to Qwen 0.6, and then even 16b and 8b, and hope they work or V100

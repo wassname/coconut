@@ -31,18 +31,18 @@ uniform_prob: 0.0
 model_id: HuggingFaceTB/SmolLM2-135M-Instruct
 # model_id: plaguss/Qwen2.5-0.5B-Math-Shepherd-PRM-0.2
 load_model_path: 
+train_path: data/gsm_train.json
+val_path: data/gsm_valid.json
 seed: 0
 resume: 0
 bf16: False
 bf16_weight: False
 opt_8b: False
-train_path: data/gsm_train.json
-val_path: data/gsm_valid.json
+debug: False
 reset_optimizer: False
-batch_size_training: 22
 max_size: 1000000000 # in verl 8k is enougth https://github.com/volcengine/verl/blob/main/examples/ppo_trainer/verl_getting_started.ipynb
 # max_size: 80000 # in verl 8k is enougth https://github.com/volcengine/verl/blob/main/examples/ppo_trainer/verl_getting_started.ipynb
-debug: False
+batch_size_training: 22
 gradient_accumulation_steps: 6
 num_epochs: 25
 grad_clip: 1.0
