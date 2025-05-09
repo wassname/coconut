@@ -153,6 +153,9 @@ def main():
 
     model = model.to(device)
 
+    # if configs.bf16_weight:
+    #     convert_to_bfloat16(model)
+
     # setup eval
     logger.info(model)
     max_size=32 if configs.debug else (configs.max_size or 100000000)
@@ -207,7 +210,7 @@ def main():
     # scheduler = CosineAnnealingLR(optimizer, T_max=cfg.epochs)
     print('optimizer', optimizer)
     collator = CoconutCollator(tokenizer, latent_id=latent_id, label_pad_token_id=-100)
-    if configs.bf16:
+    if dtype == torch.float16:
         scaler = torch.amp.GradScaler()
     else:
         scaler = None
@@ -343,6 +346,10 @@ def main():
 
                 with torch.autocast(device_type=device, dtype=dtype):
                     outputs = model(**batch)
+
+                    for k in outputs.log:
+                        if wandb_run:
+                            wandb_run.log({f"train/{k}": outputs.log[k]})
 
                     loss = outputs.loss / configs.gradient_accumulation_steps
 

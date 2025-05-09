@@ -5,7 +5,7 @@ import torch
 import torch.nn as nn
 from torch.nn import CrossEntropyLoss
 from collections import namedtuple
-
+from collections import defaultdict
 from einops import rearrange, reduce, repeat
 from jaxtyping import Float, Int
 from typing import Tuple, List, Union, Optional, Dict
@@ -27,7 +27,9 @@ from transformers import (
 )
 
 
-Outputs = namedtuple("Outputs", ["loss", "inputs_embeds", "logits", "past_key_values"])
+Outputs = namedtuple(
+    "Outputs", ["loss", "inputs_embeds", "logits", "past_key_values", "hidden_states", "log", ] # loss_ar loss_vcr
+)
 MAX_N_LATENT = 8
 
 HiddenState = Float[Tensor, 'b t h']
@@ -47,7 +49,94 @@ def get_cache_inv(w_out):
         _w_out_inv = torch.pinverse(w_out.clone().float())
     return _w_out_inv
 
+def calc_distribution_loss(
+    hs: Float[Tensor, "b t h"], chunk_size: int = 32
+) -> Float[Tensor, ""]:
+    B, T, P = hs.shape
+    total_loss = 0.0
+    eps = 1e-6
 
+    # hs = F.layer_norm(hs)
+
+    x = rearrange(hs, "b t h -> t b h")
+
+    # Get distribution per timestep
+    x_dist = F.softmax(x, dim=-1)
+
+    # Compute uniform target
+    uniform = torch.ones_like(x_dist) / P
+
+    x_dist_log = torch.log(x_dist + eps)
+
+    # KL divergence from uniform (prevent collapse)
+    kl_loss = F.kl_div(x_dist_log, uniform, reduction="batchmean", log_target=False)
+
+    # Entropy term (maximize feature usage)
+    entropy = -(x_dist * x_dist_log).sum(-1).mean()
+
+    total_loss = kl_loss - 0.1 * entropy
+
+    return total_loss / T
+
+
+def calc_seq_vcr_loss(hs: Float[Tensor, "b t h"], η = 1e-4) -> Float[Tensor, ""]:
+    B, T, P = hs.shape
+
+    # Compute covariance per timestep across batch
+    x = rearrange(hs, "b t h -> t b h")  # Shape: (T, B, P)
+
+    # Calculate mean and center per timestepx.dtype
+    x_mean = x.mean(dim=1, keepdim=True).detach()  # Shape: (T, 1, P)
+    x_centered = x - x_mean
+
+    # Compute covariance matrices for each timestep
+    C = torch.bmm(x_centered.transpose(1, 2), x_centered) / (B - 1)  # Shape: (T, P, P)
+
+    # Setup mask for diagonal elements
+    diag = torch.eye(P, dtype=torch.bool, device=x.device).detach()
+
+    # Calculate losses
+    # TODO move these to function arguments. And try to make the loss automatically balanced if I can
+    λ1, λ2 = 1. / 5000, 1. / 50000
+    
+    # The Variance Term encourages unit variance in each dimension (most important)
+    var_loss = torch.relu(1 - torch.sqrt(C * diag + η))
+    var_loss = reduce(var_loss, "t h1 h2 -> ", "sum") / (T * diag.sum())
+
+    # the Covariance Term penalizes covariance between different dimensions, promoting decorrelation and diversity in representations
+    non_diag = (~diag).detach()
+    cov_loss = (C * non_diag).pow(2)
+    cov_loss = reduce(cov_loss, "t h1 h2 -> ", "sum") / (T * non_diag.sum())
+
+    # Combine and reduce
+    loss = λ1 * var_loss + λ2 * cov_loss
+    return loss, {"loss_vcr_var": var_loss.item(), "loss_vcr_cov": cov_loss.item()}
+
+class VCRLoss(nn.Module):
+    def __init__(self, H=1536, D=256):
+        # TODO set these param properly
+        super().__init__()
+        self.down_proj = nn.Linear(
+            H, D, bias=False
+        )  # FIXME is this meant to be learnable?
+        nn.init.orthogonal_(self.down_proj.weight)
+        self.down_proj.weight.requires_grad = False
+        # FIXME we should be applying this to the final high dim output too, but wait for reference implementation https://github.com/rarefin/SEQ_VCR
+
+    def forward(self, hs_l: Float[Tensor, "l b t h"]) -> Float[Tensor, "b"]:
+        # for each layer
+        loss = 0
+        logs = defaultdict(int)
+        for hs in hs_l:
+            hs = self.down_proj(hs)
+            # loss += calc_distribution_loss(hs)
+            loss_i, extra = calc_seq_vcr_loss(hs)
+            for k, v in extra.items():
+                logs[k] += v
+            loss += loss_i
+            torch.cuda.empty_cache()
+
+        return loss, dict(logs)
 
 def get_supressed_activations(hs: Float[Tensor, 'l b t h'], w_out=None) -> Float[Tensor, 'l b t h']:
     """
@@ -128,16 +217,17 @@ def hs2ie(hidden_states: HiddenStates, inputs_embeds: HiddenState, w_out=None, m
     ValueError(f"Unknown method {method}")
 
 
-class CoconutConfig(LlamaConfig):
+class CoconutConfig(Qwen2Config):
     def __init__(self, **kwargs):
         self.replacement_method = kwargs.pop("replacement_method", "-1")
         self.latent_token_id = kwargs.pop("latent_token_id", None)
         self.eos_token_id = kwargs.pop("eos_token_id", None)
         self.use_position_ids = kwargs.pop("use_position_ids", True)
+        self.loss_seq_vcr = kwargs.pop("loss_seq_vcr", False)
         super().__init__(**kwargs)
 
 
-class CoconutQwen2ForCausalLM(LlamaForCausalLM):
+class CoconutQwen2ForCausalLM(Qwen2ForCausalLM):
     def __init__(
         self,
         config
@@ -178,6 +268,13 @@ class CoconutQwen2ForCausalLM(LlamaForCausalLM):
             # before the earliest latent token position
 
         kv_cache = None
+
+        all_hs = []
+
+        # FIXME: this lags behind, but for efficiency we accept this limitation
+        Wo = self.get_output_embeddings().weight
+        Wo_inv = torch.pinverse(Wo.clone().float()).detach()
+        device_type = input_ids.device.type
 
         for pass_idx in range(max_n_latents):
             if kv_cache is None:
@@ -328,6 +425,11 @@ class CoconutQwen2ForCausalLM(LlamaForCausalLM):
 
         logits.append(outputs.logits)
 
+        # collect hs
+        hs = rearrange(list(outputs.hidden_states), "l b t h -> l b t h")
+        all_hs.append(hs)
+        all_hs = torch.concat(all_hs, dim=2)
+
         self.gen_forward_cnt += max_n_latents + 1
 
         logits = torch.cat(logits, dim=-2)
@@ -338,9 +440,20 @@ class CoconutQwen2ForCausalLM(LlamaForCausalLM):
             shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1)
         )
 
+        # Seq-VCR loss
+        extra = {}
+        if self.config.loss_seq_vcr:
+            with torch.autocast(device_type=input_ids.device.type):
+                loss_vcr, extra2 = self.vcr_loss(all_hs)
+            # TODO report diff losses to wandb
+            extra['loss_ar'] = loss.item()
+            extra.update(extra2)
+            loss += loss_vcr
+
         assert torch.isfinite(loss).all(), f"Loss is {loss}"
 
-        return Outputs(loss=loss, inputs_embeds=inputs_embeds, logits=logits, past_key_values=outputs.past_key_values)
+        return Outputs(loss=loss, inputs_embeds=inputs_embeds, logits=logits, past_key_values=outputs.past_key_values,
+                        hidden_states=list(all_hs), log=extra)
 
 
     def generate(
