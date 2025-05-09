@@ -43,7 +43,14 @@ max_size: 1000000000 # in verl 8k is enougth https://github.com/volcengine/verl/
 debug: False
 gradient_accumulation_steps: 4
 num_epochs: 26
-lr: !!float "1e-5" 
+
+# this could work but I'd need to work out how to do it over the whole scdule and resume
+# lr: !!float "1e-3" 
+# lr_scheduler_type: cosine
+
+lr: !!float "1e-4" 
+# lr_scheduler_type: constant_with_warmup
 # system_prompt: |
 #   Solve the math question by multiple short reasoning steps like `<<5*0+1*2=?>>` OR silently within `<|start-latent|><|end-latent|>`. Then return the final answer like `### 2\n<|im_end|><|im_end|>`. No other preamble or comments are allowed.
-weight_decay: 0.01
+# weight_decay: 0.01
+weight_decay: 0.0

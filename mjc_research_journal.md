@@ -539,3 +539,33 @@ so changes I need to make
 - 25 to 50 epochs
 - should be around 40% with CoT
 - max size 1000000000 not (it's 3012 samples at 32 batch, 45mins)
+
+
+
+in the smol2 train they used 3e-4 !
+https://github.com/huggingface/alignment-handbook/blob/main/recipes/smollm2/sft/config.yaml
+presumably with linear (defualt) but maybe cosine
+https://github.com/huggingface/nanotron/blob/c737f00f01e65bc44e7624695351da7ed756ec31/examples/doremi/configs/config_280m_llama.yaml#L69
+weight_decay: 0.01
+
+
+ah butthen unsloth uses linear, and 5e-5 hmm
+but we are not continued pretrain we are CoT train
+https://colab.research.google.com/github/unslothai/notebooks/blob/main/nb/Mistral_(7B)-Text_Completion.ipynb#scrollTo=95_Nn-89DhsL
+another is cosine 5e-5 weight decay 0 huh
+
+
+
+https://github.com/huggingface/alignment-handbook/blob/main/recipes/smollm2/sft/config_smol.yaml
+wow smol has 1e-3??
+but this would just be at the start of all training since it's cosine so not so good for me hmm
+
+their recipy for fine tune is also 1e-3
+
+note they use trl sft
+and they just load args on top
+
+
+ok I think we could have 
+1e-3 with cosine
+or 3e-4 with linear

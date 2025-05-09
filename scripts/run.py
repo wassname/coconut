@@ -11,6 +11,7 @@ from torch import nn
 import torch.optim as optim
 import yaml
 from tqdm import tqdm
+from trl import SFTConfig, SFTTrainer
 from transformers import AutoModelForCausalLM, AutoTokenizer
 import wandb
 from coconut.dataset import (
@@ -176,27 +177,29 @@ def main():
     collator = CoconutCollator(tokenizer, latent_id=latent_id, label_pad_token_id=-100)
 
     # Set up training arguments
-    training_args = TrainingArguments(
+    training_args = SFTConfig(
         run_name=run_name,
         output_dir=save_dir,
-        per_device_train_batch_size=configs.batch_size_training,
-        gradient_accumulation_steps=configs.gradient_accumulation_steps,
-        learning_rate=configs.lr,
-        warmup_ratio=0.1,
+
+        # weight_decay=weight_decay,
         logging_steps=5, # TODO ideally we log to tensorboard every step, but to ui every 100 steps
         save_steps=10000,
-        bf16=configs.bf16,
-        bf16_full_eval=configs.bf16,
-        # optim="adamw_bnb_8bit", # save memory:adamw_torch  adamw_bnb_8bit or paged_adamw_32bit
         num_train_epochs=1,
         torch_empty_cache_steps=100,
         save_safetensors=False,
         save_only_model=True,
         report_to="wandb" if wandb_run else None,
+
+        bf16=configs.bf16,
+        bf16_full_eval=configs.bf16,
         
-        # lr_scheduler_type="cosine",# cosine cosine_with_restarts. constant in ref. constant_with_warmup
+        # optim="adamw_bnb_8bit", # save memory:adamw_torch  adamw_bnb_8bit or paged_adamw_32bit
         # save_strategy="no",
-        lr_scheduler_type="constant_with_warmup",
+        warmup_ratio=0.1,
+        per_device_train_batch_size=configs.batch_size_training,
+        gradient_accumulation_steps=configs.gradient_accumulation_steps,
+        learning_rate=configs.lr,
+        lr_scheduler_type="constant",
     )
 
     """
@@ -211,7 +214,7 @@ def main():
     if configs.resume:
         logger.warning(f"Resuming from epoch {configs.resume}")
     
-    for epoch in range(configs.resume, configs.num_epochs):
+    for epoch in tqdm(range(configs.resume, configs.num_epochs), unit='epoch'):
         start_time = time.time()
 
         max_latent_epoch = configs.max_latent_stage * configs.epochs_per_stage
@@ -225,6 +228,11 @@ def main():
             no_bot_eot = False
         else:
             scheduled_stage = configs.max_latent_stage
+
+
+        training_args.lr_scheduler_type="constant"
+        if epoch==0 or epoch==(configs.cot_epochs+1):
+            training_args.lr_scheduler_type="constant_with_warmup"
 
 
         logger.info(f"scheduled_stage={scheduled_stage}, no_bot_eot={no_bot_eot}, c_thought={configs.c_thought}, max_latent_stage={configs.max_latent_stage}, coconut={configs.coconut}")
@@ -283,11 +291,6 @@ def main():
                 shuffle=True,
             )
 
-            # if configs.bf16_weight:
-            #     TrainerCls = TrainerOptimi
-            # else:
-            #     TrainerCls = Trainer
-
             class CoconutEvalCallback(TrainerCallback):               
                 
                 def on_epoch_end(self, args, state, control, **kwargs):
@@ -298,17 +301,17 @@ def main():
                         wandb_run.log(r)
                     res.append(r)
                     return 
-            trainer = Trainer(
+            trainer = SFTTrainer(
                 model=model,# if scheduled_stage > 0 else model.base_causallm,
                 args=training_args,
                 train_dataset=dataset_train,
                 eval_dataset=dataset_loss_val,
                 data_collator=collator,
                 callbacks=[ProgressCallbackNoPrint(), CoconutEvalCallback()]
-                # TODO pass in (opt, scheduler) as a callback
             )
             clear_memory()
             rm_old_prog_cb(trainer)
+            model.train()
             try:
                 logger.info(f"Training e={epoch} s={scheduled_stage} {configs.name}")
                 trainer.train()
@@ -317,7 +320,9 @@ def main():
                 pass
 
         clear_memory()
-        r = evaluate(valid_gen_dataloader, model, tokenizer, base_dataset_valid, max_new_tokens=max_new_tokens, name=f"eval_{epoch}", dtype=dtype, device=device)
+        r = evaluate(valid_gen_dataloader, model, tokenizer, base_dataset_valid, max_new_tokens=max_new_tokens, name=f"eval_{epoch}", 
+                     dtype=dtype, 
+                     device=device)
         r['phase'] = epoch
         r['minutes'] = (time.time() - start_time) / 60
         clear_memory()
