@@ -38,11 +38,11 @@ bf16_weight: False
 train_path: data/gsm_train.json
 val_path: data/gsm_valid.json
 reset_optimizer: False
-batch_size_training: 11
+batch_size_training: 13
 max_size: 20000 # in verl 8k is enougth https://github.com/volcengine/verl/blob/main/examples/ppo_trainer/verl_getting_started.ipynb
 debug: False
-grad_clip: 1.0
-gradient_accumulation_steps: 12
+grad_clip: 10.0
+gradient_accumulation_steps: 10
 
 lr: !!float "1e-4" 
 # system_prompt: |

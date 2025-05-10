@@ -182,6 +182,8 @@ def main():
         os.environ["WANDB_MODE"] = "disabled"
         wandb_run = None
 
+    logger.info(f"loading with optimisations: 8 bit gradients: {configs.opt_8b}, brainfloat 16 inputs: {configs.bf16_weight}, bf16 model weights with  Kahan Summation optimiser (experimental): {configs.bf16}")
+
     def create_optimizer(model, configs, warmup=False):
         # TODO add warmup/scheduler
 
@@ -210,10 +212,6 @@ def main():
     # scheduler = CosineAnnealingLR(optimizer, T_max=cfg.epochs)
     print('optimizer', optimizer)
     collator = CoconutCollator(tokenizer, latent_id=latent_id, label_pad_token_id=-100)
-    if dtype == torch.float16:
-        scaler = torch.amp.GradScaler()
-    else:
-        scaler = None
 
     """
     The stages
@@ -353,10 +351,8 @@ def main():
 
                     loss = outputs.loss / configs.gradient_accumulation_steps
 
-                if scaler is not None:
-                    scaler.scale(loss).backward()
-                else:
-                    loss.backward()
+
+                loss.backward()
 
                 # if scheduler is not None:
                 #     scheduler.step()
@@ -367,19 +363,14 @@ def main():
 
                     # # Unscales the gradients of optimizer's assigned params in-place
                     if configs.grad_clip is not None:
-                        if scaler is not None:
-                            scaler.unscale_(optimizer)
                         norm = torch.nn.utils.clip_grad_norm_(
                             model.parameters(), configs.grad_clip
                         )
                         if wandb_run:
                             wandb_run.log({"train/grad_norm": norm})
 
-                    if scaler is not None:
-                        scaler.step(optimizer)
-                        scaler.update()
-                    else:
-                        optimizer.step()
+
+                    optimizer.step()
                     optimizer.zero_grad()
                     
                     pbar.update(1)
