@@ -57,7 +57,7 @@ def evaluate(dataloader, model, tokenizer, ds, max_new_tokens=64, device='cuda',
                 pad_token_id=tokenizer.eos_token_id,
             )
 
-        for i in range(len(llm_text_outputs)):
+        for i in range(len(outputs)):
             test_idx = idx[i].item()
 
             # split into question and answer
@@ -65,6 +65,7 @@ def evaluate(dataloader, model, tokenizer, ds, max_new_tokens=64, device='cuda',
             a_toks = outputs[i][q_toks.size(0):]
             q_s = tokenizer.decode(q_toks, skip_special_tokens=False)
             a_s = tokenizer.decode(a_toks, skip_special_tokens=False)
+            a_s = tokenizer.backup_decode(a_toks, skip_special_tokens=False)
             llm_text_output = tokenizer.decode(a_toks, skip_special_tokens=True)
 
             llm_answer_output = llm_text_output.split("#")[-1].replace(",", "").replace("<|im_end|>", "").strip()
@@ -86,7 +87,8 @@ def evaluate(dataloader, model, tokenizer, ds, max_new_tokens=64, device='cuda',
 Full question: `{indent(crop(q_s, maxl=2900))}`.
 Full llm output: `{indent(crop(llm_text_output, maxl=2900))}`. 
 Extracted llm Output: `{crop(a_s)}` (=? {answer}) {correct}.
-Answer = '{answer}' ideal_CoT = '{indent(answer_cot)}'.
+ideal_CoT = '{indent(answer_cot)}'.
+Answer = '{answer}' .
 """)                
 
 

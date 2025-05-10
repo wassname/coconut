@@ -5,7 +5,7 @@ import os
 import time
 from copy import copy
 from pathlib import Path
-
+from dataclasses import asdict
 import pandas as pd
 import torch
 import torch.optim as optim
@@ -108,7 +108,8 @@ def main():
     parser.add_argument("experiment", type=str, help=f"experiment names: [{experiments}]")
     args = parser.parse_args()
 
-    conf = getattr(configs, args.experiment)
+    conf = getattr(configs, args.experiment)()
+    config_dict = asdict(conf)
 
     timestamp = pd.Timestamp.now().strftime("%Y%m%d-%H%M%S")
     run_name = f"{conf.name}_{timestamp}"
