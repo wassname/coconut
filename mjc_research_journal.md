@@ -583,3 +583,12 @@ For some reason it doesn't seem to learn in bfloat16.
 With 9 epochs of CoT training smol2 model only has 0.6% acc. Weird. I'ts learnt some CoT but it's all wrong.
 This is using 1e-3 and no weight decay as reccmended by the model makers.
 I might have to go back to Qwen 0.6, and then even 16b and 8b, and hope they work or V100
+
+
+
+- Qwen
+- omegaconfig again?
+  - save config
+- either smaller epochs for testing or ... yeah that's easier
+- I don't know the right lr... 1e-4 after 20k did not work. incoherent. loss of 1.5. 
+maybe warmup too

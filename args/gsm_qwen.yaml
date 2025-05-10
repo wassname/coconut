@@ -39,12 +39,13 @@ train_path: data/gsm_train.json
 val_path: data/gsm_valid.json
 reset_optimizer: False
 batch_size_training: 13
-max_size: 20000 # in verl 8k is enougth https://github.com/volcengine/verl/blob/main/examples/ppo_trainer/verl_getting_started.ipynb
+max_size: 5000 # in verl 8k is enougth https://github.com/volcengine/verl/blob/main/examples/ppo_trainer/verl_getting_started.ipynb
+# max_size: 100000
 debug: False
 grad_clip: 10.0
 gradient_accumulation_steps: 10
 
-lr: !!float "1e-4" 
+lr: !!float "3e-5" 
 # system_prompt: |
 #   Solve the math question by multiple short reasoning steps like `<<5*0+1*2=?>>` OR silently within `<|start-latent|><|end-latent|>`. Then return the final answer like `### 2`. No other preamble or comments are allowed.
 weight_decay: 0.0

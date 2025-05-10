@@ -13,7 +13,7 @@ import torch.optim as optim
 import yaml
 from tqdm import tqdm
 from trl import SFTConfig, SFTTrainer
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoModelForCausalLM, AutoTokenizer, get_constant_schedule_with_warmup
 import wandb
 from coconut.dataset import (
     CoconutCollator,
@@ -189,28 +189,29 @@ def main():
 
         if configs.bf16_weight:
             import optimi
-            return optimi.AdamW(
+            optimizer = optimi.AdamW(
                 model.parameters(),
                 lr=configs.lr,
                 weight_decay=configs.weight_decay,
             )
         elif configs.opt_8b:
             import bitsandbytes as bnb
-            return bnb.optim.Adam8bit(
+            optimizer = bnb.optim.Adam8bit(
                 model.parameters(),
                 lr=configs.lr,
                 weight_decay=configs.weight_decay,
             )
         else:
-            return optim.AdamW(
+            optimizer = optim.AdamW(
                 model.parameters(),
                 lr=configs.lr,
                 weight_decay=configs.weight_decay,
             )
+        if warmup is not None:
+            scheduler = get_constant_schedule_with_warmup(optimizer, num_warmup_steps=warmup)
+        return optimizer, scheduler
         
-    optimizer = create_optimizer(model, configs)
-    # scheduler = CosineAnnealingLR(optimizer, T_max=cfg.epochs)
-    print('optimizer', optimizer)
+    optimiser = None
     collator = CoconutCollator(tokenizer, latent_id=latent_id, label_pad_token_id=-100)
 
     """
@@ -310,9 +311,12 @@ def main():
                 no_bot_eot=no_bot_eot,
                 shuffle=True,
             )
-            if configs.reset_optimizer:
-                del optimizer
-                optimizer = create_optimizer(model, configs, warmup=(epoch==0 or epoch==(configs.cot_epochs+1)))
+            if configs.reset_optimizer or optimiser is None:
+                warmup_steps = None
+                if epoch==0 or epoch==(configs.cot_epochs+1):
+                    warmup_steps = len(dataset_train) // configs.gradient_accumulation_steps * 0.1
+
+                optimizer, scheduler = create_optimizer(model, configs, warmup=warmup_steps)
 
             train_dataloader = torch.utils.data.DataLoader(
                 dataset_train,
@@ -354,34 +358,34 @@ def main():
 
                 loss.backward()
 
-                # if scheduler is not None:
-                #     scheduler.step()
-
                 # # every N steps (or last batch) do optimizer step
                 is_last_step = step == len(train_dataloader) - 1
                 if (step + 1) % configs.gradient_accumulation_steps == 0 or is_last_step:
 
-                    # # Unscales the gradients of optimizer's assigned params in-place
                     if configs.grad_clip is not None:
                         norm = torch.nn.utils.clip_grad_norm_(
                             model.parameters(), configs.grad_clip
                         )
-                        if wandb_run:
-                            wandb_run.log({"train/grad_norm": norm})
-
+                    else:
+                        norm = None
 
                     optimizer.step()
                     optimizer.zero_grad()
+                    if scheduler is not None:
+                        scheduler.step()
                     
                     pbar.update(1)
 
 
                 if wandb_run:
+                    lr = torch.tensor([group["lr"] for group in optimizer.param_groups]).mean()
                     log_dict = {
                         "train/epoch": epoch,
                         "train/step": epoch * len(train_dataloader) + step,
                         "train/loss": loss.detach().float()
                         * configs.gradient_accumulation_steps,
+                        "train/lr": lr,
+                        "train/grad_norm": norm,
                     }
                     wandb_run.log(log_dict)
 
