@@ -20,6 +20,7 @@ dependencies = [
     "transformers==4.51.0",
     "wandb==0.18.7",
     "trl>=0.17.0",
+    "omegaconf>=2.3.0",
 ]
 
 [dependency-groups]

@@ -288,9 +288,9 @@ def get_cot_latent_dataset(
                     len(sample["steps_tokenized"]), configs.max_latent_stage
                 )
         
-        if configs.no_cot:
-            n_skip_steps = 100  # skip all step
-            n_latent_tokens = 0
+        # if configs.no_cot:
+        #     n_skip_steps = 100  # skip all step
+        #     n_latent_tokens = 0
 
         # for each reasoning step we use X tokens
         n_latent_tokens *= configs.c_thought

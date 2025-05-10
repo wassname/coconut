@@ -1,0 +1,92 @@
+from dataclasses import dataclass
+
+
+@dataclass
+class BaseConfig:
+    project: str = "coconut"
+    save_path: str = "outputs/"
+    name: str = "qwen3-0.6b"
+    model_id: str = "Qwen/Qwen3-0.6B"
+    
+    only_eval: bool = False
+    
+    # to resume set the two below
+    load_model_path: str = "" # set to checkpoint
+    resume_epochs: int = 0 # set to phase/epoch
+
+    # replacement_method: str = "-1" # or 0.5, or ie+supressed[0.5:] or hs+supressed[0.5:] or supressed[0.5:]
+    # replacement_method: str = "0.5"
+    replacement_method: str = "supressed[0.5:]"
+    # replacement_method: str = "hs+supressed[0.5:]"
+    # replacement_method: str = "ie+supressed[0.5:]"
+    
+  
+    # use bf16 for all model weights: should work but seems to fail ??
+    bf16: bool = True
+
+    # use bf16 for linear and conv weights (not emb or norm): highly experimental
+    bf16_weight: bool = False # experimental, doesn't seem to work
+
+    # use 8 bit opt gradients): experimental
+    opt_8b: bool = False
+    
+    cot_epochs: int = 6 # 6-10 in paper
+    epochs_per_stage: int = 5 # how many epochs to train for each stage
+    max_latent_stage: int = 3 # max number of thought tokens, unstable is >3?
+    num_epochs: int = 26 # 50 in coconut, but more capable model probobly need less
+
+    # effectve batch size should be 128
+    batch_size_training: int = 12
+    gradient_accumulation_steps: int = 10
+
+    lr: float = 1e-4 # 1e-4 in coconut, but 1e-6 in verl
+    weight_decay: float = 0.0 # 0.01 in coconut, 0 in verl
+
+    debug: bool = False
+
+    seed: int = 42
+
+    reset_optimizer: bool = True
+
+    loss_seq_vcr: bool = False # experimental loss, might help with intermediate state stabiliy
+
+
+
+    # # used to get a baseline, not used or broken now?
+    # no_cot: bool = False
+    # no_thoughts: bool = False
+    # coconut: bool = True
+    # cot: bool = False
+
+    max_size: int = 40000 # full ~40k in coconut
+    
+    # dataset: for each reasoning step we use X tokens
+    c_thought: int = 2
+
+    # dataset
+    pad_latent_to_max: bool = True
+
+    # dataset: with some prob, randomly sample earlier stage
+    uniform_prob: float = 0.0
+
+    train_path: str = "data/gsm_train.json"
+    val_path: str = "data/gsm_valid.json"
+
+    # this seems like it should help, but it seems to make it worse
+    system_prompt: str = ""
+    # system_prompt: str = "Solve the math question by multiple short reasoning steps like `<<5*0+1*2=?>>` OR silently within `<|start-latent|><|end-latent|>`. Then return the final answer like `### 2\n<|im_end|><|im_end|>`. No other preamble or comments are allowed."
+
+@dataclass
+class GSMQwenConfig(BaseConfig):
+    train_path: str = "data/gsm_train.json"
+    val_path: str = "data/gsm_valid.json"
+
+@dataclass
+class GsmQwen1_5b_H100(GSMQwenConfig):
+    name: str = "gsm-qwen-1.5b"
+    
+    bf16: bool = True
+    bf16_weight: bool = False
+    opt_8b: bool = False
+    batch_size_training: int = 32
+    gradient_accumulation_steps: int = 4
