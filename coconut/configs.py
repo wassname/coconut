@@ -41,6 +41,7 @@ class BaseConfig:
 
     lr: float = 1e-4 # 1e-4 in coconut, but 1e-6 in verl
     weight_decay: float = 0.0 # 0.01 in coconut, 0 in verl
+    grad_clip: float = 10.0
 
     debug: bool = False
 
@@ -77,12 +78,18 @@ class BaseConfig:
     # system_prompt: str = "Solve the math question by multiple short reasoning steps like `<<5*0+1*2=?>>` OR silently within `<|start-latent|><|end-latent|>`. Then return the final answer like `### 2\n<|im_end|><|im_end|>`. No other preamble or comments are allowed."
 
 @dataclass
-class GSMQwenConfig(BaseConfig):
+class GSMQwen(BaseConfig):
     train_path: str = "data/gsm_train.json"
     val_path: str = "data/gsm_valid.json"
 
+class Debug(GSMQwen):
+    model_id: str = "yujiepan/qwen3-tiny-random"
+
 @dataclass
-class GsmQwen1_5b_H100(GSMQwenConfig):
+class GsmQwen_H100(GSMQwen):
+    """
+    For running on a h100
+    """
     name: str = "gsm-qwen-1.5b"
     
     bf16: bool = True

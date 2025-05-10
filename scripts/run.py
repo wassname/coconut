@@ -102,30 +102,13 @@ def create_optimizer(model, configs, warmup_steps=False):
 
 
 def main():
+    from coconut import configs # this will be my dataclass files
+    experiments = configs.__dict__.keys()
     parser = argparse.ArgumentParser(description="coconut")
-    parser.add_argument("experiment", type=str, help="experiment name")
+    parser.add_argument("experiment", type=str, help=f"experiment names: [{experiments}]")
     args = parser.parse_args()
 
-    from coconut import configs # this will be my dataclass files
     conf = getattr(configs, args.experiment)
-
-    # TODO it would be nice to have configs with commenr and inheritance
-    # # load the configuration file
-    # from omegaconf import OmegaConf
-    # base_config = OmegaConf.structured(base_config_cls)
-    # # allow cli
-
-    # config_dict = OmegaConf.to_container(base_config, resolve=True)
-    # logger.info(f"Config: {config_dict}")
-    # configs = Config(config_dict)
-
-    # load the configuration file
-    # with open(args.config_file) as f:
-    #     config_dict = yaml.safe_load(f)
-
-    #     logger.info(f"Config: {config_dict}")
-
-    # conf = Config(**config_dict)
 
     timestamp = pd.Timestamp.now().strftime("%Y%m%d-%H%M%S")
     run_name = f"{conf.name}_{timestamp}"

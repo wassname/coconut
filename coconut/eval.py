@@ -57,11 +57,15 @@ def evaluate(dataloader, model, tokenizer, ds, max_new_tokens=64, device='cuda',
                 pad_token_id=tokenizer.eos_token_id,
             )
 
-        llm_text_outputs = tokenizer.batch_decode(outputs, skip_special_tokens=False)
-
         for i in range(len(llm_text_outputs)):
             test_idx = idx[i].item()
-            llm_text_output = llm_text_outputs[i]
+
+            # split into question and answer
+            q_toks = batch["input_ids"][i]
+            a_toks = outputs[i][q_toks.size(0):]
+            q_s = tokenizer.decode(q_toks, skip_special_tokens=False)
+            a_s = tokenizer.decode(a_toks, skip_special_tokens=False)
+            llm_text_output = tokenizer.decode(a_toks, skip_special_tokens=True)
 
             llm_answer_output = llm_text_output.split("#")[-1].replace(",", "").replace("<|im_end|>", "").strip()
             llm_cot_output = (
@@ -79,8 +83,9 @@ def evaluate(dataloader, model, tokenizer, ds, max_new_tokens=64, device='cuda',
                 correct = '✅' if llm_answer_output==answer else '❌'
                 logger.info(
                     f"""Q #{test_idx}: Question: `{indent(question)}`.
+Full question: `{indent(crop(q_s, maxl=2900))}`.
 Full llm output: `{indent(crop(llm_text_output, maxl=2900))}`. 
-Extracted llm Output: `{crop(llm_answer_output)}` (=? {answer}) {correct}.
+Extracted llm Output: `{crop(a_s)}` (=? {answer}) {correct}.
 Answer = '{answer}' ideal_CoT = '{indent(answer_cot)}'.
 """)                
 

@@ -22,30 +22,43 @@ def get_dataset(path, tokenizer, max_size=1000000000, drop_unused=True, system_p
     # pre_q = "<|im_start|>user\n"
     pre_q = ""
 
-    encode = tokenizer.encode
+    # encode = tokenizer.encode
     # encode = tokenizer.apply_chat_template
 
     # post_q = "<|im_end|>\n<|im_start|>assistant\n"
     post_q = ""
 
     def tokenize_sample(sample):
+        """We want parts of the quesiton tokenized separately, but we also want to use the chat template. Easiest way is chat_template to text -> split -> encode"""
 
-        question_tokenized = tokenizer.encode(
-            system_prompt+pre_q+sample["question"] + post_q, add_special_tokens=True
-        )
-        steps_tokenized = [
-            tokenizer.encode(s + "\n", add_special_tokens=False)
-            for s in sample["steps"]
+
+        sep = "<|split|>"
+
+        steps = f"\n{sep}".join(sample["steps"])+"\n"
+        ans = f"{sep}### {sample['answer']}\n"
+
+        messages_split = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": pre_q + sample["question"] + post_q},
+            {"role": "assistant", "content": sep+steps+ans},
         ]
-        answer_tokenized = tokenizer.encode(
-            "### " + sample["answer"] + "\n", add_special_tokens=False
-        ) + [tokenizer.eos_token_id]
+        text = tokenizer.apply_chat_template(messages_split, tokenize=False)
+        parts = text.split(sep)
+        parts_t = [tokenizer.encode(p, add_special_tokens=False) for p in parts]
+
+        n_steps = len(sample["steps"])
+        assert len(parts_t) == n_steps + 2, f"{len(parts_t)} != {n_steps+2} {text} {sample['steps']}"
+        question_tokenized = parts_t[0]
+        steps_tokenized = parts_t[1:n_steps+1]
+        answer_tokenized = parts_t[n_steps+1]
 
         sample = {
             "question_tokenized": question_tokenized,
             "steps_tokenized": steps_tokenized,
             "answer_tokenized": answer_tokenized,
             "idx": sample["idx"],
+            # "messages_split": messages_split,
+            # "text": text,
         }
         return sample
 
@@ -60,22 +73,12 @@ def get_dataset(path, tokenizer, max_size=1000000000, drop_unused=True, system_p
         desc=f'tokenize_sample: {path}'
     )
 
-    # # verify
-    # d = data[0]
-    # complete = system_prompt + pre_q + d["question"] + post_q + "\n".join(d["steps"]) + "\n### " + d["answer"]+ "\n"
-    # # or should we apply format?
-    # complete_tokenized = tokenizer.encode(complete, add_special_tokens=True) + [
-    #     tokenizer.eos_token_id
-    # ]
-    # s3 = (dataset_tok[0]["question_tokenized"]
-    #     + list(itertools.chain.from_iterable(dataset_tok[0]["steps_tokenized"]))
-    #     + dataset_tok[0]["answer_tokenized"])
-    # assert (
-    #     complete_tokenized
-    #     == s3
-    # ), f"{complete}\n!=\n{tokenizer.decode(s3)} != {tokenizer.decode(complete_tokenized)}"
-
-
+    row = dataset_tok[0]
+    print("Example row:")
+    print("question_tokenized", tokenizer.decode(row["question_tokenized"]))
+    for i, s in enumerate(row["steps_tokenized"]):
+        print(f"steps_tokenized[{i}]", tokenizer.decode(s))
+    print("answer_tokenized", tokenizer.decode(row["answer_tokenized"]))
 
     return dataset_tok
 
