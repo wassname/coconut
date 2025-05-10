@@ -1,6 +1,7 @@
 import torch
 from tqdm.auto import tqdm
 from loguru import logger
+import re
 
 
 def indent(s):
@@ -54,7 +55,10 @@ def evaluate(dataloader, model, tokenizer, ds, max_new_tokens=64, device='cuda',
                 **batch,
                 use_cache=False,
                 max_new_tokens=max_new_tokens,
-                pad_token_id=tokenizer.eos_token_id,
+                min_new_tokens=max_new_tokens,
+                early_stopping=False,
+                pad_token_id=tokenizer.pad_token_id,
+                pad_size='left',
             )
 
         for i in range(len(outputs)):
@@ -64,11 +68,18 @@ def evaluate(dataloader, model, tokenizer, ds, max_new_tokens=64, device='cuda',
             q_toks = batch["input_ids"][i]
             a_toks = outputs[i][q_toks.size(0):]
             q_s = tokenizer.decode(q_toks, skip_special_tokens=False)
-            a_s = tokenizer.decode(a_toks, skip_special_tokens=False)
-            a_s = tokenizer.backup_decode(a_toks, skip_special_tokens=False)
+            ans_tok_list = tokenizer.decode(a_toks, skip_special_tokens=False)
+            ans_tok_list = tokenizer.batch_decode(a_toks, skip_special_tokens=False)
             llm_text_output = tokenizer.decode(a_toks, skip_special_tokens=True)
 
-            llm_answer_output = llm_text_output.split("#")[-1].replace(",", "").replace("<|im_end|>", "").strip()
+            # TODO use regexp to find numbers group, can be float, after #
+            # llm_answer_output = llm_text_output.split("#")[-1]
+            llm_answer_output = re.match(
+                r".*#\s*([0-9.]+).*", llm_text_output
+            )
+            llm_answer_output = llm_answer_output.group(1) if llm_answer_output else None
+            if llm_answer_output is None:
+                 llm_answer_output = llm_text_output.split("#")[-1].replace(",", "").replace("<|im_end|>", "").strip()
             llm_cot_output = (
                 ("\n".join(llm_text_output.split("\n")[1:])).split("#")[0].strip()
             )
@@ -85,8 +96,8 @@ def evaluate(dataloader, model, tokenizer, ds, max_new_tokens=64, device='cuda',
                 logger.info(
                     f"""Q #{test_idx}: Question: `{indent(question)}`.
 Full question: `{indent(crop(q_s, maxl=2900))}`.
-Full llm output: `{indent(crop(llm_text_output, maxl=2900))}`. 
-Extracted llm Output: `{crop(a_s)}` (=? {answer}) {correct}.
+Full llm output: `{ans_tok_list}`. 
+Extracted llm Output: `{crop(llm_answer_output)}` (=? {answer}) {correct}.
 ideal_CoT = '{indent(answer_cot)}'.
 Answer = '{answer}' .
 """)                

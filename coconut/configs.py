@@ -30,16 +30,17 @@ class BaseConfig:
     # use 8 bit opt gradients): experimental
     opt_8b: bool = False
     
-    cot_epochs: int = 6 # 6-10 in paper
+    cot_epochs: int = 10 # 6-10 in paper
     epochs_per_stage: int = 5 # how many epochs to train for each stage
     max_latent_stage: int = 3 # max number of thought tokens, unstable is >3?
-    num_epochs: int = 26 # 50 in coconut, but more capable model probobly need less
+    num_epochs: int = 50 # 50 in coconut, but more capable model probobly need less
 
     # effectve batch size should be 128
     batch_size_training: int = 12
     gradient_accumulation_steps: int = 10
 
-    lr: float = 1e-4 # 1e-4 in coconut, but 1e-6 in verl
+    # https://github.com/QwenLM/Qwen3/blob/714df5bce80a67c698e37034e71dc2efa19ceaf3/examples/llama-factory/qwen2-7b-full-sft.yaml#L27
+    lr: float = 1e-5 # 1e-4 in coconut, but 1e-6 in verl
     weight_decay: float = 0.0 # 0.01 in coconut, 0 in verl
     grad_clip: float = 10.0
 
@@ -59,9 +60,9 @@ class BaseConfig:
     # coconut: bool = True
     # cot: bool = False
 
-    max_size: int = 40000 # full ~40k in coconut
+    max_size: int = 40000 # full ~400k in coconut
     
-    # dataset: for each reasoning step we use X tokens
+    # dataset: for each reasoning step we use X thought tokens (up to our max)
     c_thought: int = 2
 
     # dataset

@@ -72,6 +72,7 @@ def save_model(model, tokenizer, configs, save_dir: Path):
 
 
 def create_optimizer(model, configs, warmup_steps=False):
+    scheduler = None
     if configs.bf16_weight:
         import optimi
 
@@ -222,7 +223,7 @@ def main():
         wandb_run = None
 
     logger.info(
-        f"loading with optimisations: 8 bit gradients: {conf.opt_8b}, brainfloat 16 inputs: {conf.bf16_weight}, bf16 model weights with  Kahan Summation optimiser (experimental): {conf.bf16}"
+        f"loading with quants: \n- 8bit optimiser: {conf.opt_8b},\n- bf16 inputs: {conf.bf16},\n- bf16_weight:{conf.bf16_weight} (model weights with  Kahan Summation optimiser (experimental))"
     )
 
     optimiser = None
@@ -273,7 +274,7 @@ def main():
         else:
             max_new_tokens = 128
         if conf.debug:
-            max_new_tokens = 8
+            max_new_tokens = 16
             print("DEBUG MODE: max_new_tokens set to 8")
         valid_gen_dataloader = torch.utils.data.DataLoader(
             dataset_gen_val,

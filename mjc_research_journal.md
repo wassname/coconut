@@ -595,4 +595,23 @@ maybe warmup too
 
 
 
-without sys prompt but with template I get 0.17 loss after 334it. incoherent
+without sys prompt but with template I get 0.17 loss after 334it. incoherent. 0% CoT match
+and with, 1.2% CoT match
+
+
+yet it made almost no diff in the loss. strange
+
+
+fixme... why is it only generating 2 tokens when asked for 100? something is weird
+this is in eval
+
+
+
+did an overnight one 19 epochs
+outputs/qwen3-0.6b_20250510-205601/checkpoint_18 
+https://wandb.ai/wassname/coconut/runs/4iaa9wbb?nw=nwuserwassname
+loss went up a lot, hmm
+but it still had that 2 tocken gen. But I can eval all the checkpoints to check and fix
+but it did work with only 84% mem alloc!!
+seems like grad norm was good as it spiked up, so was warmup'
+I could add warmup for adding <start_latent> and adding latent too!
