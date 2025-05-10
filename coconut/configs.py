@@ -75,7 +75,7 @@ class BaseConfig:
 
     # this seems like it should help, but it seems to make it worse
     system_prompt: str = ""
-    # system_prompt: str = "Solve the math question by multiple short reasoning steps like `<<5*0+1*2=?>>` OR silently within `<|start-latent|><|end-latent|>`. Then return the final answer like `### 2\n<|im_end|><|im_end|>`. No other preamble or comments are allowed."
+    system_prompt: str = "Solve this math question with multiple steps like `<<5*0+1*2=?>>` OR silently within `<|start-latent|><|end-latent|>`. Then return the final answer like `### 2\n`. Save all comments until after the answer."
 
 @dataclass
 class GSMQwen(BaseConfig):

@@ -592,3 +592,7 @@ I might have to go back to Qwen 0.6, and then even 16b and 8b, and hope they wor
 - either smaller epochs for testing or ... yeah that's easier
 - I don't know the right lr... 1e-4 after 20k did not work. incoherent. loss of 1.5. 
 maybe warmup too
+
+
+
+without sys prompt but with template I get 0.17 loss after 334it. incoherent
