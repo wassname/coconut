@@ -3,6 +3,7 @@
 
 import random, torch, os
 import numpy as np
+import gc
 from argparse import Namespace
 
 
@@ -36,3 +37,19 @@ def convert_to_bfloat16(module, verbose=False):
                 print(f"Converted {child} to bfloat16")
         else:
             convert_to_bfloat16(child)
+
+
+def print_cuda_devices():
+    if torch.cuda.is_available():
+        for i in range(torch.cuda.device_count()):
+            torch.cuda.get_device_name(i)
+            logger.info(f"Device {i}: {torch.cuda.get_device_name(i)}")
+            logger.info(torch.cuda.get_device_capability(i))
+            logger.info(torch.cuda.get_device_properties(i))
+    else:
+        logger.warning("CUDA is not available")
+
+
+def clear_memory():
+    gc.collect()
+    torch.cuda.empty_cache()

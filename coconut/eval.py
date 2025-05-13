@@ -2,7 +2,9 @@ import torch
 from tqdm.auto import tqdm
 from loguru import logger
 import re
-
+from torch.nn import CrossEntropyLoss
+from tqdm.auto import tqdm
+import numpy as np
 
 def indent(s):
     return s.replace("\n", "\n\t")
@@ -17,7 +19,7 @@ def crop(s, maxl=30):
     return s
 
 @torch.no_grad()
-def evaluate(dataloader, model, tokenizer, ds, max_new_tokens=64, device='cuda', name="", dtype=torch.float32, quick=False):
+def evaluate(dataloader, model, tokenizer, ds, max_new_tokens=64, device='cuda', name="", dtype=torch.float32, quick=False, verbose=3):
 
 
     # get original answer
@@ -58,7 +60,7 @@ def evaluate(dataloader, model, tokenizer, ds, max_new_tokens=64, device='cuda',
                 min_new_tokens=max_new_tokens,
                 early_stopping=False,
                 pad_token_id=tokenizer.pad_token_id,
-                pad_size='left',
+                # pad_size='left',
             )
 
         for i in range(len(outputs)):
@@ -75,7 +77,7 @@ def evaluate(dataloader, model, tokenizer, ds, max_new_tokens=64, device='cuda',
             # TODO use regexp to find numbers group, can be float, after #
             # llm_answer_output = llm_text_output.split("#")[-1]
             llm_answer_output = re.match(
-                r".*#\s*([0-9.]+).*", llm_text_output
+                r".*#+\s*([0-9\.]+).*", llm_text_output
             )
             llm_answer_output = llm_answer_output.group(1) if llm_answer_output else None
             if llm_answer_output is None:
@@ -91,7 +93,7 @@ def evaluate(dataloader, model, tokenizer, ds, max_new_tokens=64, device='cuda',
             cor += llm_answer_output == answer
             cor_cot += llm_cot_output == answer_cot
 
-            if (batch_n < 3) and (i < 1):
+            if (batch_n < verbose) and (i < 1):
                 correct = '✅' if llm_answer_output==answer else '❌'
                 logger.info(
                     f"""Q #{test_idx}: Question: `{indent(question)}`.
@@ -114,3 +116,193 @@ Answer = '{answer}' .
     )
 
     return {"eval/acc": cor / total, "eval/cot_em": cor_cot / total}
+
+
+
+
+@torch.no_grad()
+def get_answer_perplexity(
+    model,
+    tokenizer,
+    valid_gen_dataloader,
+    device='cuda',
+    dtype=torch.float32,
+    verbose=False
+):
+    """
+    If I forward through the answer, then get the perplexity over the answer tokens, I can a more sensitive measure
+    """
+
+    model.eval()
+    with torch.no_grad():
+
+        token_preans = tokenizer.convert_tokens_to_ids("###")
+        nlls, counts = 0, 0
+        loss_fn = CrossEntropyLoss(reduction="none")
+
+        for batch_n, batch in enumerate(tqdm(valid_gen_dataloader, desc="PPX", colour="green", dynamic_ncols=True)):
+
+            if verbose and batch_n <1:
+                i = tokenizer.decode(batch['input_ids'][0], skip_special_tokens=False)
+                logger.info(f"Input: {i}")
+            
+            batch = {
+                k: v.to(device)
+                for k, v in batch.items()
+                if v != None and k not in ["idx", "position_ids"]
+            }
+            with torch.autocast(device_type=device, dtype=dtype):
+                output = model.forward(
+                    **batch)
+            logprobs = output.logits.log_softmax(-1)
+
+            B = logprobs.shape[0]
+            for i in range(B):
+                # find tokens after token_preans
+                input_ids_i = batch['input_ids'][i].cpu()
+                a=(input_ids_i==token_preans).float()
+                i_ans = a.argmax()+2
+                i_end = (input_ids_i[i_ans:]==tokenizer.eos_token_id).float().argmax() + i_ans
+                if i_end == i_ans:
+                    i_end = -1
+                if i_ans == 0:
+                    raise ValueError(
+                        f"Answer token {token_preans} not found in input_ids {input_ids_i} make sure you used get_cot_latent_dataset() to generate the dataset"
+                    )
+                
+                ans_mask = batch['attention_mask'][i, i_ans: i_end].cpu()
+                ans_tokens = input_ids_i[i_ans:i_end]
+                ans_logits = logprobs[i, i_ans:i_end].cpu()
+
+                if verbose and (batch_n < 1) and i < 1:
+                    g = ans_tokens * ans_mask
+                    g1 = tokenizer.decode(g)
+                    print(g1)
+                    g = g[g != 0]
+                    g2 = tokenizer.decode(g)
+                    print(f"ans: {g} `{g2}` a={i_ans} b={i_end} l={ans_mask.sum()} ans_tokens:{ans_tokens.shape} ans_logits:{ans_logits.shape}")
+
+                # calc ppx
+                # Compute loss on shifted sequences
+                shift_logits = ans_logits[:-1].contiguous()
+                shift_labels = ans_tokens[ 1:].contiguous()
+                shift_masks = ans_mask[ 1:].contiguous()
+
+
+                # Calculate NLL only for targeted tokens
+                loss = loss_fn(shift_logits, shift_labels)
+                # print(f"loss: loss.shape: {loss.shape}")
+                # print(f"shift_labels:shape: {shift_labels.shape}")
+                # print(f"shift_logits: shape: {shift_logits.shape}")
+                # print(f"shift_masks: e: {shift_masks.shape} {shift_masks.sum()}")
+                masked_loss = (loss * shift_masks).sum()
+                token_count = shift_masks.sum()
+
+                # Accumulate results
+                nlls += masked_loss.item()
+                counts += token_count.item()
+
+    # Return corpus-level perplexity
+    ppx =  np.exp(nlls / counts) if counts > 0 else float('inf')
+    return {
+        "eval/ppx": ppx,
+        "eval/ppx_count": counts,
+        "eval/ppx_nlls": nlls,
+    }
+
+
+
+
+@torch.no_grad()
+def get_answer_preference(
+    model,
+    tokenizer,
+    valid_gen_dataloader,
+    device='cuda',
+    dtype=torch.float32,
+    verbose=False
+):
+    """
+    If I forward through the answer, then get the perplexity over the answer tokens, I can a more sensitive measure
+    """
+
+    1/0
+    # Perplexity is not that great a measure since it might be measuring formatting rather than answer. Ideally we measure a chosen vs alternative answer
+
+    model.eval()
+    with torch.no_grad():
+
+        token_preans = tokenizer.convert_tokens_to_ids("###")
+        nlls, counts = 0, 0
+        loss_fn = CrossEntropyLoss(reduction="none")
+
+        for batch_n, batch in enumerate(tqdm(valid_gen_dataloader, desc="PPX", colour="green", dynamic_ncols=True)):
+
+            if verbose and batch_n <1:
+                i = tokenizer.decode(batch['input_ids'][0], skip_special_tokens=False)
+                logger.info(f"Input: {i}")
+            
+            batch = {
+                k: v.to(device)
+                for k, v in batch.items()
+                if v != None and k not in ["idx", "position_ids"]
+            }
+
+            with torch.autocast(device_type=device, dtype=dtype):
+                output = model.forward(
+                    **batch)
+            logprobs = output.logits.log_softmax(-1)
+
+            B = logprobs.shape[0]
+            for i in range(B):
+                # find tokens after token_preans
+                input_ids_i = batch['input_ids'][i].cpu()
+                a=(input_ids_i==token_preans).float()
+                i_ans = a.argmax()+2
+                i_end = (input_ids_i[i_ans:]==tokenizer.eos_token_id).float().argmax() + i_ans
+                if i_end == i_ans:
+                    i_end = -1
+                if i_ans == 0:
+                    raise ValueError(
+                        f"Answer token {token_preans} not found in input_ids {input_ids_i} make sure you used get_cot_latent_dataset() to generate the dataset"
+                    )
+                
+                ans_mask = batch['attention_mask'][i, i_ans: i_end].cpu()
+                ans_tokens = input_ids_i[i_ans:i_end]
+                ans_logits = logprobs[i, i_ans:i_end].cpu()
+
+                if verbose and (batch_n < 1) and i < 1:
+                    g = ans_tokens * ans_mask
+                    g1 = tokenizer.decode(g)
+                    print(g1)
+                    g = g[g != 0]
+                    g2 = tokenizer.decode(g)
+                    print(f"ans: {g} `{g2}` a={i_ans} b={i_end} l={ans_mask.sum()} ans_tokens:{ans_tokens.shape} ans_logits:{ans_logits.shape}")
+
+                # calc ppx
+                # Compute loss on shifted sequences
+                shift_logits = ans_logits[:-1].contiguous()
+                shift_labels = ans_tokens[ 1:].contiguous()
+                shift_masks = ans_mask[ 1:].contiguous()
+
+
+                # Calculate NLL only for targeted tokens
+                loss = loss_fn(shift_logits, shift_labels)
+                # print(f"loss: loss.shape: {loss.shape}")
+                # print(f"shift_labels:shape: {shift_labels.shape}")
+                # print(f"shift_logits: shape: {shift_logits.shape}")
+                # print(f"shift_masks: e: {shift_masks.shape} {shift_masks.sum()}")
+                masked_loss = (loss * shift_masks).sum()
+                token_count = shift_masks.sum()
+
+                # Accumulate results
+                nlls += masked_loss.item()
+                counts += token_count.item()
+
+    # Return corpus-level perplexity
+    ppx =  np.exp(nlls / counts) if counts > 0 else float('inf')
+    return {
+        "eval/ppx": ppx,
+        "eval/ppx_count": counts,
+        "eval/ppx_nlls": nlls,
+    }

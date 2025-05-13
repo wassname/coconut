@@ -14,16 +14,11 @@ from loguru import logger
 from torch import nn
 from tqdm import tqdm
 from transformers import (
-    AutoModelForCausalLM,
-    AutoTokenizer,
     get_constant_schedule_with_warmup,
 )
 
 import wandb
-from coconut.coconut import (
-    CoconutConfig,
-    CoconutQwen3ForCausalLM,
-)
+
 from coconut.dataset import (
     CoconutCollator,
     get_cot_latent_dataset,
@@ -31,7 +26,13 @@ from coconut.dataset import (
     get_question_only_latent_dataset,
 )
 from coconut.eval import evaluate
-from coconut.utils import Config, convert_to_bfloat16, set_seed
+from coconut.utils import Config, convert_to_bfloat16, set_seed, clear_memory, print_cuda_devices
+from coconut.load_model import (
+    load_new_model,
+    resume_model,
+    tie_embeddings,
+    save_model,
+)
 
 logger.remove()
 
@@ -46,29 +47,6 @@ os.environ["TOKENIZERS_PARALLELISM"] = "false"
 # setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.
 os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 
-
-def print_cuda_devices():
-    if torch.cuda.is_available():
-        for i in range(torch.cuda.device_count()):
-            torch.cuda.get_device_name(i)
-            logger.info(f"Device {i}: {torch.cuda.get_device_name(i)}")
-            logger.info(torch.cuda.get_device_capability(i))
-            logger.info(torch.cuda.get_device_properties(i))
-    else:
-        logger.warning("CUDA is not available")
-
-
-def clear_memory():
-    gc.collect()
-    torch.cuda.empty_cache()
-
-
-def save_model(model, tokenizer, configs, save_dir: Path):
-    tokenizer.save_pretrained(save_dir)
-    model.save_pretrained(save_dir)
-    with open(save_dir / "config.yaml", "w") as f:
-        yaml.dump(configs, f)
-    logger.info(f"saving model {save_dir}")
 
 
 def create_optimizer(model, configs, warmup_steps=False):
@@ -102,6 +80,8 @@ def create_optimizer(model, configs, warmup_steps=False):
     return optimizer, scheduler
 
 
+
+
 def main():
     from coconut import configs # this will be my dataclass files
     experiments = configs.__dict__.keys()
@@ -126,74 +106,23 @@ def main():
     # set devices
     print_cuda_devices()
     device = "cuda"  # if torch.cuda.is_available() else "cpu"
-    dtype = torch.bfloat16 if conf.bf16 else torch.float32
+    dtype = torch.bfloat16 if (conf.bf16 is True) else torch.float32
     logger.info(f"Using device: {device}, dtype: {dtype}")
 
-    if conf.resume_epochs:
-        f = Path("./" + conf.load_model_path)
-        assert f.exists(), f"Model path {f} does not exist"
-        model = CoconutQwen3ForCausalLM.from_pretrained(
-            conf.load_model_path, device_map="auto", torch_dtype=dtype
-        )
-        tokenizer = AutoTokenizer.from_pretrained(conf.load_model_path)
-        logger.warning(f"Loaded model from {conf.load_model_path}")
+    if conf.resume_epochs>0:
+        model, tokenizer = resume_model(conf, device, dtype)        
     else:
-        # load tokenizer
-        tokenizer = AutoTokenizer.from_pretrained(
-            conf.model_id,
-            padding_side="right",
-        )
-        tokenizer.pad_token = tokenizer.eos_token
-        tokenizer.pad_token_id = tokenizer.eos_token_id
-        if "<|latent|>" not in tokenizer.additional_special_tokens:
-            # model.generation_config.pad_token_id = tokenizer.pad_token_id
-            tokenizer.add_tokens("<|start-latent|>")
-            tokenizer.add_tokens("<|end-latent|>")
-            tokenizer.add_tokens("<|latent|>")
+        model, tokenizer = load_new_model(conf, device, dtype)
 
-        latent_id = tokenizer.convert_tokens_to_ids("<|latent|>")
-        bot_id = tokenizer.convert_tokens_to_ids("<|start-latent|>")
-        eot_id = tokenizer.convert_tokens_to_ids("<|end-latent|>")
-
-        # load base model
-        model_config = CoconutConfig.from_pretrained(
-            conf.model_id,
-            latent_token_id=latent_id,
-            bot_id=bot_id,
-            eot_id=eot_id,
-            eos_token_id=tokenizer.eos_token_id,
-            replacement_method=conf.replacement_method,
-        )
-        model = CoconutQwen3ForCausalLM.from_pretrained(
-            conf.model_id, config=model_config, device_map=device, torch_dtype=dtype
-        )
-
-        model.resize_token_embeddings(len(tokenizer))
-
-    latent_id = tokenizer.convert_tokens_to_ids("<|latent|>")
-    bot_id = tokenizer.convert_tokens_to_ids("<|start-latent|>")
-    eot_id = tokenizer.convert_tokens_to_ids("<|end-latent|>")
-
-    embeddings = model.get_input_embeddings()
-    target_id = tokenizer.convert_tokens_to_ids("<<")
-    # TODO check this is in vocab
-    for token_id in [latent_id, bot_id, eot_id]:
-        # tie embeddings for special tokens
-        target_embedding = embeddings.weight.data[target_id]
-        embeddings.weight.data[token_id] = target_embedding.clone()
-
-        # The input embeddings and lm heads are tied in GPT2. So the code below is not necessary
-        lm_head = model.lm_head
-        lm_head.weight.data[token_id] = lm_head.weight.data[target_id].clone()
-
+    tie_embeddings(model, tokenizer)
     model = model.to(device)
 
-    if conf.bf16_weight:
+    if conf.bf16_weight is True:
         convert_to_bfloat16(model)
 
     # setup eval
     logger.info(model)
-    max_size = 32 if conf.debug else (conf.max_size or 100000000)
+    max_size = 32 if conf.debug is True else (conf.max_size or 100000000)
     base_dataset_valid = get_dataset(
         conf.val_path,
         tokenizer,
@@ -201,12 +130,13 @@ def main():
         drop_unused=False,
         system_prompt=conf.system_prompt,
     )
-    # print(configs.get("system_prompt", ""), "system_prompt")
+    logger.info("System prompt: \n" + conf.system_prompt)
     # logger
 
     if not conf.only_eval:
         base_dataset_train = get_dataset(
-            conf.train_path, tokenizer, max_size=max_size
+            conf.train_path, tokenizer, max_size=max_size,
+            system_prompt=conf.system_prompt, verbose=True
         )
 
     # wandb
@@ -226,6 +156,9 @@ def main():
         f"loading with quants: \n- 8bit optimiser: {conf.opt_8b},\n- bf16 inputs: {conf.bf16},\n- bf16_weight:{conf.bf16_weight} (model weights with  Kahan Summation optimiser (experimental))"
     )
 
+    latent_id = tokenizer.convert_tokens_to_ids("<|latent|>")
+    bot_id = tokenizer.convert_tokens_to_ids("<|start-latent|>")
+    eot_id = tokenizer.convert_tokens_to_ids("<|end-latent|>")
     optimiser = None
     collator = CoconutCollator(tokenizer, latent_id=latent_id, label_pad_token_id=-100)
 
@@ -237,7 +170,7 @@ def main():
 
     res = []
 
-    if conf.resume_epochs:
+    if conf.resume_epochs>0:
         logger.warning(f"Resuming from epoch {conf.resume_epochs}")
 
     for epoch in tqdm(range(conf.resume_epochs, conf.num_epochs), unit="epoch"):
@@ -330,9 +263,12 @@ def main():
                 no_bot_eot=no_bot_eot,
                 shuffle=True,
             )
-            if conf.reset_optimizer or optimiser is None:
+            if (conf.reset_optimizer is True) or (optimiser is None):
                 warmup_steps = None
-                if epoch == 0 or epoch == (conf.cot_epochs + 1):
+                # we do warmup when the trainign dynamic changes, .e.g starting, adding <|start-latent|>, then adding <|latent|>
+                stage = (epoch-conf.cot_epochs) / conf.epochs_per_stage
+                stage_start = int(stage) == stage
+                if epoch == 0 or (stage>0 and stage_start):
                     warmup_steps = (
                         len(dataset_train) // conf.gradient_accumulation_steps * 0.1
                     )

@@ -14,7 +14,7 @@ from transformers import PreTrainedTokenizerBase
 from transformers.data.data_collator import pad_without_fast_tokenizer_warning
 
 
-def get_dataset(path, tokenizer, max_size=1000000000, drop_unused=True, system_prompt="", num_proc=32):
+def get_dataset(path, tokenizer, max_size=1000000000, drop_unused=True, system_prompt="", num_proc=32, verbose=True):
     if system_prompt:
         # system_prompt = "<|im_start|>system\n" + system_prompt.strip() + "<|im_end|>\n"
         system_prompt = system_prompt.strip() + "\n"
@@ -74,11 +74,12 @@ def get_dataset(path, tokenizer, max_size=1000000000, drop_unused=True, system_p
     )
 
     row = dataset_tok[0]
-    print("Example row:")
-    print("question_tokenized", tokenizer.decode(row["question_tokenized"]))
-    for i, s in enumerate(row["steps_tokenized"]):
-        print(f"steps_tokenized[{i}]", tokenizer.decode(s))
-    print("answer_tokenized", tokenizer.decode(row["answer_tokenized"]))
+    if verbose:
+        print("Example row:")
+        print("question_tokenized", tokenizer.decode(row["question_tokenized"]))
+        for i, s in enumerate(row["steps_tokenized"]):
+            print(f"steps_tokenized[{i}]", tokenizer.decode(s))
+        print("answer_tokenized", tokenizer.decode(row["answer_tokenized"]))
 
     return dataset_tok
 

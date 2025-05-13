@@ -284,6 +284,7 @@ class CoconutQwen3ForCausalLM(Qwen3ForCausalLM):
         input_ids,
         attention_mask,  # attention_mask is not used
         max_new_tokens=16,
+        min_new_tokens=1,
         output_embedding=False,
         **kwargs,
     ):
@@ -293,23 +294,28 @@ class CoconutQwen3ForCausalLM(Qwen3ForCausalLM):
         lyr_embed = self.get_input_embeddings()
 
         tokens = input_ids.detach()
+        T = input_ids.shape[1]
 
-        # reuse the forward pass from training to go through all the inputs before gen this include latent thoughts
-        outputs = self.forward(input_ids)
-        inputs_embeds = outputs.inputs_embeds
+        # reuse the forward pass from training to go through all the inputs before gen, this includes latent thoughts
+        outputs = self.forward(input_ids, attention_mask)
 
         # get the first token using the current hidden state
         next_token = outputs.logits[:, -1].argmax(-1).detach().unsqueeze(1)
         tokens = torch.cat((tokens, next_token), dim=1)
-        new_token_embed = lyr_embed(next_token)
-        new_inputs_embeds = torch.cat((inputs_embeds, new_token_embed), dim=1)
+        new_inputs_embeds = lyr_embed(next_token)
+        # new_inputs_embeds = torch.cat((inputs_embeds, new_token_embed), dim=1)
+        B = tokens.shape[0]
+        new_att_mask = torch.cat(
+            (attention_mask, torch.ones((B, 1), device=attention_mask.device)), dim=1
+        )
+
 
         # get other tokens
         kv_cache = outputs.past_key_values
         for _ in range(max_new_tokens - 1):
-            # FIXME here we use the base model forward, that means we DO NOT use latent thoughts after the preconfigured ones
-            # FIXME cache!
-            outputs = super().forward(inputs_embeds=new_inputs_embeds, past_key_values=kv_cache)
+            # here we use the base model forward, that means we DO NOT use latent thoughts after the preconfigured ones
+            check_input_lens(new_inputs_embeds, new_att_mask, kv_cache)
+            outputs = super().forward(inputs_embeds=new_inputs_embeds, past_key_values=kv_cache, attention_mask=new_att_mask)
             kv_cache = outputs.past_key_values
             self.gen_forward_cnt += 1
             next_token = outputs.logits[:, -1].argmax(-1).detach().unsqueeze(1)
@@ -317,10 +323,17 @@ class CoconutQwen3ForCausalLM(Qwen3ForCausalLM):
                 logger.error("Latent token generated, not implemented in gen")
 
             tokens = torch.cat((tokens, next_token), dim=1)
-            if (tokens == self.config.eos_token_id).any(1).all(0):
-                break
-            new_token_embed = lyr_embed(next_token)
-            new_inputs_embeds = torch.cat((new_inputs_embeds, new_token_embed), dim=1)
+
+            # Allow it to stop early if all batch have generated EOS
+            if (tokens[:, T:] == self.config.eos_token_id).any(1).all(0):
+                if _>min_new_tokens:
+                    logger.info("EOS token generated, stopping early")
+                    break
+
+            new_inputs_embeds = lyr_embed(next_token)
+            new_att_mask = torch.cat(
+                (new_att_mask, torch.ones((B, 1), device=new_att_mask.device)), dim=1
+            )
 
         if output_embedding:
             # for analysis purpose
@@ -328,3 +341,9 @@ class CoconutQwen3ForCausalLM(Qwen3ForCausalLM):
 
         else:
             return tokens
+
+def check_input_lens(input_ids, attention_mask, kv_cache):
+    len_c = kv_cache.key_cache[0].shape[2] if len(kv_cache.key_cache) else 0
+    len_ids = input_ids.shape[1]
+    len_att = attention_mask.shape[1]
+    assert len_c + len_ids == len_att, f"The length of the attention mask  {len_att} should cover the cache length {len_c} and the len of the input_ids {len_ids}"

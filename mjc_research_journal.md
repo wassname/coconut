@@ -615,3 +615,22 @@ but it still had that 2 tocken gen. But I can eval all the checkpoints to check 
 but it did work with only 84% mem alloc!!
 seems like grad norm was good as it spiked up, so was warmup'
 I could add warmup for adding <start_latent> and adding latent too!
+it got a lot slower at epoch 14
+2025-05-11 06:11:02.866 | INFO     | coconut.eval:evaluate:110 - Correct=4, CoT_correct=6, Total=500. eval_18                                                                   
+2025-05-11 06:11:02.866 | INFO     | coconut.eval:evaluate:111 - Accuracy on val:  4 / 500 =  0.8000%                                                                           
+2025-05-11 06:11:02.867 | INFO     | coconut.eval:evaluate:112 - CoT match on val: 6 / 500 =  1.2000%   
+
+this whole thing is token effecient...but not compuete effecient so who cares? or at least during train, what abput durng inf
+
+
+TODO:
+- fix eval. On thos saved models outputs/qwen3-0.6b_20250510-205601/checkpoint_18 
+
+
+# 2025-05-13 11:34:21
+
+Ok fixed eval. it didn't learn fast, didn't get up to 40%
+![alt text](img/mjc_research_journal-1747113708667-image.png)
+now try lr=1e-4 (10x)
+
+
