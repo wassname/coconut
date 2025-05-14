@@ -11,7 +11,7 @@ from coconut.utils import Config
 from loguru import logger
 from pathlib import Path
 import torch
-import strictyaml
+import toml
 
 def load_new_model(conf: Config, device, dtype):
     # load tokenizer
@@ -79,6 +79,6 @@ def tie_embeddings(model, tokenizer):
 def save_model(model, tokenizer, configs, save_dir: Path):
     tokenizer.save_pretrained(save_dir)
     model.save_pretrained(save_dir)
-    with open(save_dir / "coconut_config.yaml", "w") as f:
-        strictyaml.dump(configs, f)
+    with open(save_dir / "coconut_config.toml", "w") as f:
+        toml.dump(configs, f)
     logger.info(f"saving model {save_dir}")

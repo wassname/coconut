@@ -211,7 +211,113 @@ def get_answer_perplexity(
     }
 
 
+import random
 
+def corrupt_answer(ans_tokens, tokenizer):
+    num2tok = dict([(i,tokenizer.convert_tokens_to_ids(str(i))) for i in range(10)])
+    numtoks = list(num2tok.values())[1:] # not zero, as then we would get leading zeros
+    # corrupt the answer by randomly swapping digits
+    ans_tokens = ans_tokens.clone()
+
+    # number swap dict:
+    num_perm = dict(zip(numtoks, numtoks[::-1]))
+    # print('num_perm', num_perm)
+    # print(0, tokenizer.decode(ans_tokens))
+    for i in range(len(ans_tokens)):
+        t = ans_tokens[i].cpu().item()
+        if t in num_perm:
+            ans_tokens[i] = num_perm[t]
+    # print(1, tokenizer.decode(ans_tokens))
+    return ans_tokens
+
+
+
+
+def corrupt_batch_answers(input_ids, tokenizer):
+    input_ids = input_ids.clone()
+    token_preans = tokenizer.convert_tokens_to_ids("###")
+    for i in range(len(input_ids)):
+        input_ids_i = input_ids[i]
+        a=(input_ids_i==token_preans).float()
+        i_ans = a.argmax()-10 # we want to get the last CoT too as it states the answer
+        # print(0, input_ids[i][i_ans:i_ans+5])
+        input_ids_i[i_ans:] = corrupt_answer(input_ids_i[i_ans:], tokenizer)
+        input_ids[i] = input_ids_i
+        # print(1, input_ids[i][i_ans:i_ans+5])
+    return input_ids
+
+
+
+def calc_ans_nll(batch, model, tokenizer, device, dtype, verbose=False):
+    """
+    Perpexlity is not the best measure so here we prefer the likelihood of the answer over a corrupted answer
+    """
+    nlls, counts = 0, 0
+    loss_fn = CrossEntropyLoss(reduction="none")
+    token_preans = tokenizer.convert_tokens_to_ids("###")
+
+    with torch.autocast(device_type=device, dtype=dtype):
+        output = model.forward(
+            **batch)
+    logprobs = output.logits.log_softmax(-1)
+
+    B = logprobs.shape[0]
+    for i in range(B):
+        # find tokens after token_preans
+        input_ids_i = batch['input_ids'][i].cpu()
+
+        a=(input_ids_i==token_preans).float()
+        if a.max() == 0:
+            logger.warning(f"Answer token {token_preans} not found in input_ids {input_ids_i} make sure you used get_cot_latent_dataset() to generate the dataset")
+            continue
+        
+        # get the last instance of '###'
+        i_ans = a.flip(0).argmax()
+        i_ans = len(a)-i_ans
+        i_ans += 2 # skip ["###', ' ']
+
+        i_end = (input_ids_i[i_ans:]==tokenizer.eos_token_id).float().argmax() + i_ans
+        if i_end == i_ans:
+            i_end = -1
+        if i_ans == 0:
+            raise ValueError(
+                f"Answer token {token_preans} not found in input_ids {input_ids_i} make sure you used get_cot_latent_dataset() to generate the dataset"
+            )
+        
+        ans_mask = batch['attention_mask'][i, i_ans: i_end].cpu()
+        ans_tokens = input_ids_i[i_ans:i_end]
+        ans_logits = logprobs[i, i_ans:i_end].cpu()
+
+        if verbose and (i < 1):
+            g = ans_tokens * ans_mask
+            g1 = tokenizer.decode(g)
+            # print('ans before mask', g1)
+            g = g[g != 0]
+            g2 = tokenizer.decode(g)
+            print(f"ans: {g} `{g2}` a={i_ans} b={i_end} l={ans_mask.sum()} ans_tokens:{ans_tokens.shape} ans_logits:{ans_logits.shape}")
+
+        # calc ppx
+        # Compute loss on shifted sequences
+        shift_logits = ans_logits[:-1].contiguous()
+        shift_labels = ans_tokens[ 1:].contiguous()
+        shift_masks = ans_mask[ 1:].contiguous()
+
+
+        # Calculate NLL only for targeted tokens
+        loss = loss_fn(shift_logits, shift_labels)
+        masked_loss = (loss * shift_masks).sum()
+        token_count = shift_masks.sum()
+
+        # Accumulate results
+        nlls += masked_loss.item()
+        counts += token_count.item()
+    if counts == 0:
+        logger.warning("No tokens found for answer")
+        return 0    
+    ratio = nlls/(counts+.001)
+    if verbose:
+        logger.info(f"Answer NLL: {nlls} / {counts} = {ratio}")
+    return ratio
 
 @torch.no_grad()
 def get_answer_preference(
@@ -226,15 +332,12 @@ def get_answer_preference(
     If I forward through the answer, then get the perplexity over the answer tokens, I can a more sensitive measure
     """
 
-    1/0
     # Perplexity is not that great a measure since it might be measuring formatting rather than answer. Ideally we measure a chosen vs alternative answer
 
     model.eval()
     with torch.no_grad():
 
-        token_preans = tokenizer.convert_tokens_to_ids("###")
-        nlls, counts = 0, 0
-        loss_fn = CrossEntropyLoss(reduction="none")
+        ratios = []
 
         for batch_n, batch in enumerate(tqdm(valid_gen_dataloader, desc="PPX", colour="green", dynamic_ncols=True)):
 
@@ -248,61 +351,19 @@ def get_answer_preference(
                 if v != None and k not in ["idx", "position_ids"]
             }
 
-            with torch.autocast(device_type=device, dtype=dtype):
-                output = model.forward(
-                    **batch)
-            logprobs = output.logits.log_softmax(-1)
+            batch2 = {k: v.clone() for k, v in batch.items()}
+            random.seed(batch_n)
+            batch2['input_ids'] = corrupt_batch_answers(batch['input_ids'], tokenizer)
 
-            B = logprobs.shape[0]
-            for i in range(B):
-                # find tokens after token_preans
-                input_ids_i = batch['input_ids'][i].cpu()
-                a=(input_ids_i==token_preans).float()
-                i_ans = a.argmax()+2
-                i_end = (input_ids_i[i_ans:]==tokenizer.eos_token_id).float().argmax() + i_ans
-                if i_end == i_ans:
-                    i_end = -1
-                if i_ans == 0:
-                    raise ValueError(
-                        f"Answer token {token_preans} not found in input_ids {input_ids_i} make sure you used get_cot_latent_dataset() to generate the dataset"
-                    )
-                
-                ans_mask = batch['attention_mask'][i, i_ans: i_end].cpu()
-                ans_tokens = input_ids_i[i_ans:i_end]
-                ans_logits = logprobs[i, i_ans:i_end].cpu()
-
-                if verbose and (batch_n < 1) and i < 1:
-                    g = ans_tokens * ans_mask
-                    g1 = tokenizer.decode(g)
-                    print(g1)
-                    g = g[g != 0]
-                    g2 = tokenizer.decode(g)
-                    print(f"ans: {g} `{g2}` a={i_ans} b={i_end} l={ans_mask.sum()} ans_tokens:{ans_tokens.shape} ans_logits:{ans_logits.shape}")
-
-                # calc ppx
-                # Compute loss on shifted sequences
-                shift_logits = ans_logits[:-1].contiguous()
-                shift_labels = ans_tokens[ 1:].contiguous()
-                shift_masks = ans_mask[ 1:].contiguous()
+            nll_cho = calc_ans_nll(batch, model, tokenizer, device, dtype, verbose=batch_n < 1)
+            nll_ref = calc_ans_nll(batch2, model, tokenizer, device, dtype, verbose=batch_n < 1)
+            ratio = nll_cho - nll_ref
+            ratios.append(ratio)
 
 
-                # Calculate NLL only for targeted tokens
-                loss = loss_fn(shift_logits, shift_labels)
-                # print(f"loss: loss.shape: {loss.shape}")
-                # print(f"shift_labels:shape: {shift_labels.shape}")
-                # print(f"shift_logits: shape: {shift_logits.shape}")
-                # print(f"shift_masks: e: {shift_masks.shape} {shift_masks.sum()}")
-                masked_loss = (loss * shift_masks).sum()
-                token_count = shift_masks.sum()
-
-                # Accumulate results
-                nlls += masked_loss.item()
-                counts += token_count.item()
 
     # Return corpus-level perplexity
-    ppx =  np.exp(nlls / counts) if counts > 0 else float('inf')
+    ratios =  np.exp(ratios).mean()
     return {
-        "eval/ppx": ppx,
-        "eval/ppx_count": counts,
-        "eval/ppx_nlls": nlls,
+        "eval/ratios": ratios,
     }

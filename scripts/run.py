@@ -25,7 +25,7 @@ from coconut.dataset import (
     get_dataset,
     get_question_only_latent_dataset,
 )
-from coconut.eval import evaluate
+from coconut.eval import evaluate, get_answer_perplexity, get_answer_preference
 from coconut.utils import Config, convert_to_bfloat16, set_seed, clear_memory, print_cuda_devices
 from coconut.load_model import (
     load_new_model,
@@ -391,7 +391,45 @@ def main():
             dtype=dtype,
             device=device,
         )
-        r["phase"] = epoch
+
+
+        dataset_gen_val2 = get_cot_latent_dataset(
+            scheduled_stage,
+            base_dataset_valid,
+            conf,
+            bot_id,
+            latent_id,
+            eot_id,
+            no_bot_eot=no_bot_eot,
+            # drop_unused=False,
+        )
+
+
+        valid_gen_dataloader2 = torch.utils.data.DataLoader(
+            dataset_gen_val2,
+            num_workers=6,
+            pin_memory=True,
+            batch_size=conf.batch_size_training,
+            collate_fn=collator,
+        )
+        r2 = get_answer_preference(
+            model,
+            tokenizer,
+            valid_gen_dataloader2,
+            device=device,
+            dtype=dtype,
+        )
+        # r3 = get_answer_perplexity(
+        #     model,
+        #     tokenizer,
+        #     valid_gen_dataloader,
+        #     dtype=dtype,
+        #     device=device,
+        # )
+        # r['eval/ppx'] = r3['eval/ppx']
+        r['eval/ratios'] = r2['eval/ratios']
+        r["epoch"] = epoch
+        r["scheduled_stage"] = scheduled_stage
         r["minutes"] = (time.time() - start_time) / 60
         clear_memory()
         if wandb_run:

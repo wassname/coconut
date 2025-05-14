@@ -6,7 +6,8 @@ class BaseConfig:
     project: str = "coconut"
     save_path: str = "outputs/"
     name: str = "qwen3-0.6b"
-    model_id: str = "Qwen/Qwen3-0.6B"
+    # model_id: str = "Qwen/Qwen3-0.6B"
+    model_id: str = "suayptalha/Qwen3-0.6B-Math-Expert"
     
     only_eval: bool = False
     
@@ -16,9 +17,9 @@ class BaseConfig:
 
     # replacement_method: str = "-1" # or 0.5, or ie+supressed[0.5:] or hs+supressed[0.5:] or supressed[0.5:]
     # replacement_method: str = "0.5"
-    replacement_method: str = "supressed[0.5:]"
+    # replacement_method: str = "supressed[0.5:]"
     # replacement_method: str = "hs+supressed[0.5:]"
-    # replacement_method: str = "ie+supressed[0.5:]"
+    replacement_method: str = "ie+supressed[0.5:]"
     
   
     # use bf16 for all model weights: should work but seems to fail ??
@@ -30,7 +31,7 @@ class BaseConfig:
     # use 8 bit opt gradients): experimental
     opt_8b: bool = False
     
-    cot_epochs: int = 10 # 6-10 in paper
+    cot_epochs: int = 10 # 6-10 in paper but those were full length
     epochs_per_stage: int = 5 # how many epochs to train for each stage
     max_latent_stage: int = 3 # max number of thought tokens, unstable is >3?
     num_epochs: int = 50 # 50 in coconut, but more capable model probobly need less
@@ -41,7 +42,7 @@ class BaseConfig:
 
     # https://github.com/QwenLM/Qwen3/blob/714df5bce80a67c698e37034e71dc2efa19ceaf3/examples/llama-factory/qwen2-7b-full-sft.yaml#L27
     lr: float = 1e-4 # 1e-4 in coconut, but 1e-6 in verl
-    weight_decay: float = 0.0 # 0.01 in coconut, 0 in verl
+    weight_decay: float = 0.01 # 0.01 in coconut, 0 in verl
     grad_clip: float = 10.0
 
     debug: bool = False
@@ -60,7 +61,7 @@ class BaseConfig:
     # coconut: bool = True
     # cot: bool = False
 
-    max_size: int = 40000 # full ~400k in coconut
+    max_size: int = 60000 # full ~400k in coconut
     
     # dataset: for each reasoning step we use X thought tokens (up to our max)
     c_thought: int = 2
@@ -76,7 +77,7 @@ class BaseConfig:
 
     # this seems like it should help, but it seems to make it worse
     system_prompt: str = ""
-    system_prompt: str = "Solve this math question with multiple steps like `<<5*0+1*2=?>>` OR silently within `<|start-latent|><|end-latent|>`. Then return the final answer like `### 2\n`. Save all comments until after the answer."
+    # system_prompt: str = "Solve this math question with multiple steps like `<<5*0+1*2=?>>` OR silently within `<|start-latent|><|end-latent|>`. Then return the final answer like `### 2\n`. Save all comments until after the answer."
 
 @dataclass
 class GSMQwen(BaseConfig):

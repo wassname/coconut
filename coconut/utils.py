@@ -5,6 +5,7 @@ import random, torch, os
 import numpy as np
 import gc
 from argparse import Namespace
+from loguru import logger
 
 
 class Config(Namespace):
