@@ -89,13 +89,13 @@ class GSMQwen(BaseConfig):
 
 
 class GSMQwenResume(BaseConfig):
-    model_id:str = "outputs/qwen3-0.6b_20250514-194730/checkpoint_2"
-
-class Debug(GSMQwen):
-    model_id: str = "yujiepan/qwen3-tiny-random"
+    load_model_path :str = "outputs/qwen3-0.6b_20250514-194730/checkpoint_2"
     resume_epochs: int = 2
     cot_epochs: int = 2
     loss_seq_vcr: bool = True
+
+class Debug(GSMQwen):
+    model_id: str = "yujiepan/qwen3-tiny-random"
 
 @dataclass
 class GsmQwen_H100(GSMQwen):

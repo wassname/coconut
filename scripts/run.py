@@ -48,6 +48,48 @@ os.environ["TOKENIZERS_PARALLELISM"] = "false"
 os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 
 
+def run_ratio_eval(
+    model,
+    tokenizer,
+    base_dataset_valid,
+    conf,
+    scheduled_stage,
+    no_bot_eot=False,
+    device="cuda",
+    dtype=torch.bfloat16,
+):
+    """helper function as we run this multiple times and it needs a diff val ds/dl."""
+    latent_id = tokenizer.convert_tokens_to_ids("<|latent|>")
+    bot_id = tokenizer.convert_tokens_to_ids("<|start-latent|>")
+    eot_id = tokenizer.convert_tokens_to_ids("<|end-latent|>")
+    collator = CoconutCollator(tokenizer, latent_id=latent_id, label_pad_token_id=-100)
+    dataset_gen_val2 = get_cot_latent_dataset(
+        scheduled_stage,
+        base_dataset_valid,
+        conf,
+        bot_id,
+        latent_id,
+        eot_id,
+        no_bot_eot=no_bot_eot,
+        # drop_unused=False,
+    )
+    valid_gen_dataloader2 = torch.utils.data.DataLoader(
+        dataset_gen_val2,
+        num_workers=6,
+        pin_memory=True,
+        batch_size=conf.batch_size_training,
+        collate_fn=collator,
+    )
+    r2 = get_answer_preference(
+        model,
+        tokenizer,
+        valid_gen_dataloader2,
+        device=device,
+        dtype=dtype,
+    )
+    return r2
+
+
 
 def create_optimizer(model, configs, warmup_fraction=0.1, opt_steps=None, cycles=1):
     warmup_steps = opt_steps * warmup_fraction
@@ -121,8 +163,8 @@ def main():
     dtype = torch.bfloat16 if (conf.bf16 is True) else torch.float32
     logger.info(f"Using device: {device}, dtype: {dtype}")
 
-    if conf.resume_epochs>0:
-        model, tokenizer = resume_model(conf, device, dtype)        
+    if conf.resume_epochs>0:        
+        model, tokenizer = resume_model(conf, device, dtype)
     else:
         model, tokenizer = load_new_model(conf, device, dtype)
 
@@ -239,10 +281,22 @@ def main():
                 name=f"eval_{epoch}_start",
                 dtype=dtype,
                 device=device,
-                quick=True,
+                # quick=True,
+            )
+            # r = {f"eval/quick_{k}": v for k, v in r.items()}
+            r2 = run_ratio_eval(
+                model,
+                tokenizer,
+                base_dataset_valid,
+                conf,
+                scheduled_stage,
+                no_bot_eot=no_bot_eot,
+                device=device,
+                dtype=dtype,
             )
             if wandb_run:
                 wandb_run.log(r)
+                wandb_run.log(r2)
 
         logger.info(f"Prep data for epoch={epoch} stage={scheduled_stage}")
 
@@ -401,29 +455,13 @@ def main():
         )
 
 
-        dataset_gen_val2 = get_cot_latent_dataset(
-            scheduled_stage,
-            base_dataset_valid,
-            conf,
-            bot_id,
-            latent_id,
-            eot_id,
-            no_bot_eot=no_bot_eot,
-            # drop_unused=False,
-        )
-
-
-        valid_gen_dataloader2 = torch.utils.data.DataLoader(
-            dataset_gen_val2,
-            num_workers=6,
-            pin_memory=True,
-            batch_size=conf.batch_size_training,
-            collate_fn=collator,
-        )
-        r2 = get_answer_preference(
+        r2 = run_ratio_eval(
             model,
             tokenizer,
-            valid_gen_dataloader2,
+            base_dataset_valid,
+            conf,
+            scheduled_stage,
+            no_bot_eot=no_bot_eot,
             device=device,
             dtype=dtype,
         )

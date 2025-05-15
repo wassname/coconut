@@ -175,12 +175,25 @@ def get_answer_perplexity(
                 ans_logits = logprobs[i, i_ans:i_end].cpu()
 
                 if verbose and (batch_n < 1) and i < 1:
-                    g = ans_tokens * ans_mask
-                    g1 = tokenizer.decode(g)
-                    print(g1)
+
+                    parts =[ 
+                        input_ids_i[:i_ans],
+                        input_ids_i[i_ans+1:i_end],
+                        input_ids_i[i_end:],
+                    ]
+                    for j, part in enumerate(parts):
+                        part_s = tokenizer.batch_decode(part, skip_special_tokens=False)
+                        logger.debug(f"part {j}: `{part_s}`")
+                    
+                    g0 = ans_tokens
+                    g0s = tokenizer.decode(g0)
+                    g = g0 * ans_mask
                     g = g[g != 0]
-                    g2 = tokenizer.decode(g)
-                    print(f"ans: {g} `{g2}` a={i_ans} b={i_end} l={ans_mask.sum()} ans_tokens:{ans_tokens.shape} ans_logits:{ans_logits.shape}")
+                    g1s = tokenizer.decode(g)
+                    logger.debug(f"g (unmask): `{g0s}`, ans (masked): `{g1s}`")
+                    # TODO make a good QC thing here. I want to see where we sliced the string. where we masked it.
+
+                    # logger.info(f"
 
                 # calc ppx
                 # Compute loss on shifted sequences
@@ -272,29 +285,41 @@ def calc_ans_nll(batch, model, tokenizer, device, dtype, verbose=False):
             continue
         
         # get the last instance of '###'
-        i_ans = a.flip(0).argmax()
-        i_ans = len(a)-i_ans
-        i_ans += 2 # skip ["###', ' ']
+        idx_ans_start = a.flip(0).argmax()
+        idx_ans_start = len(a)-idx_ans_start
+        idx_ans_start += 1 # skip [' '] that is after ###
 
-        i_end = (input_ids_i[i_ans:]==tokenizer.eos_token_id).float().argmax() + i_ans
-        if i_end == i_ans:
-            i_end = -1
-        if i_ans == 0:
+        # find the end of the answer, denoted by eos_token
+        idx_ans_end = (input_ids_i[idx_ans_start:]==tokenizer.eos_token_id).float().argmax() + idx_ans_start
+        if idx_ans_end == idx_ans_start:
+            idx_ans_end = -1
+        
+        if idx_ans_start == 0:
             raise ValueError(
                 f"Answer token {token_preans} not found in input_ids {input_ids_i} make sure you used get_cot_latent_dataset() to generate the dataset"
             )
         
-        ans_mask = batch['attention_mask'][i, i_ans: i_end].cpu()
-        ans_tokens = input_ids_i[i_ans:i_end]
-        ans_logits = logprobs[i, i_ans:i_end].cpu()
+        ans_mask = batch['attention_mask'][i, idx_ans_start: idx_ans_end].cpu()
+        ans_tokens = input_ids_i[idx_ans_start:idx_ans_end]
+        ans_logits = logprobs[i, idx_ans_start:idx_ans_end].cpu()
 
         if verbose and (i < 1):
+
+            parts =[ 
+                input_ids_i[:idx_ans_start],
+                input_ids_i[idx_ans_start:idx_ans_end],
+                input_ids_i[idx_ans_end:],
+            ]
+            for j, part in enumerate(parts):
+                part_s = tokenizer.batch_decode(part, skip_special_tokens=False)
+                logger.debug(f"part {j}: `{part_s}`")
+
+
+            ans_s_premask = tokenizer.batch_decode(ans_tokens, skip_special_tokens=False)
             g = ans_tokens * ans_mask
-            g1 = tokenizer.decode(g)
-            # print('ans before mask', g1)
             g = g[g != 0]
-            g2 = tokenizer.decode(g)
-            print(f"ans: {g} `{g2}` a={i_ans} b={i_end} l={ans_mask.sum()} ans_tokens:{ans_tokens.shape} ans_logits:{ans_logits.shape}")
+            ans_s = tokenizer.batch_decode(g, skip_special_tokens=False)
+            logger.debug(f"extracted ans: `{ans_s_premask}` -masked-> `{ans_s}`")
 
         # calc ppx
         # Compute loss on shifted sequences

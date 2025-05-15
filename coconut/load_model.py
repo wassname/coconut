@@ -55,7 +55,7 @@ def resume_model(conf: Config, device="auto", dtype=torch.bfloat16):
         conf.load_model_path, device_map=device, torch_dtype=dtype
     )
     tokenizer = AutoTokenizer.from_pretrained(conf.load_model_path)
-    logger.warning(f"Loaded model from {conf.load_model_path}")
+    logger.warning(f"Resumed model from {conf.load_model_path}")
     return model, tokenizer
 
 def tie_embeddings(model, tokenizer):
