@@ -315,8 +315,6 @@ def calc_ans_nll(batch, model, tokenizer, device, dtype, verbose=False):
         logger.warning("No tokens found for answer")
         return 0    
     ratio = nlls/(counts+.001)
-    if verbose:
-        logger.info(f"Answer NLL: {nlls} / {counts} = {ratio}")
     return ratio
 
 @torch.no_grad()
@@ -364,6 +362,7 @@ def get_answer_preference(
 
     # Return corpus-level perplexity
     ratios =  np.exp(ratios).mean()
+    logger.info(f"ratio nll_ans/nll_corrupted_ans = {ratio:2.4f}")
     return {
         "eval/ratios": ratios,
     }

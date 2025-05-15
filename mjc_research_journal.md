@@ -634,3 +634,9 @@ Ok fixed eval. it didn't learn fast, didn't get up to 40%
 now try lr=1e-4 (10x)
 
 
+
+# 2025-05-15 09:20:41
+
+Ok it got up to 40% on epoch 2. Now I can run expeirments
+- try cosine lr on each epoch
+- eval/los goes up so might be too high

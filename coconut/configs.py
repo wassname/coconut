@@ -9,6 +9,8 @@ class BaseConfig:
     # model_id: str = "Qwen/Qwen3-0.6B"
     model_id: str = "suayptalha/Qwen3-0.6B-Math-Expert"
     
+    
+    
     only_eval: bool = False
     
     # to resume set the two below
@@ -31,7 +33,7 @@ class BaseConfig:
     # use 8 bit opt gradients): experimental
     opt_8b: bool = False
     
-    cot_epochs: int = 10 # 6-10 in paper but those were full length
+    cot_epochs: int = 2 # 6-10 in paper but those were full length
     epochs_per_stage: int = 5 # how many epochs to train for each stage
     max_latent_stage: int = 3 # max number of thought tokens, unstable is >3?
     num_epochs: int = 50 # 50 in coconut, but more capable model probobly need less
@@ -44,6 +46,7 @@ class BaseConfig:
     lr: float = 1e-4 # 1e-4 in coconut, but 1e-6 in verl
     weight_decay: float = 0.01 # 0.01 in coconut, 0 in verl
     grad_clip: float = 10.0
+    scheduler: str = "cosine" # "constant" or "cosine" or "linear"
 
     debug: bool = False
 
@@ -84,8 +87,15 @@ class GSMQwen(BaseConfig):
     train_path: str = "data/gsm_train.json"
     val_path: str = "data/gsm_valid.json"
 
+
+class GSMQwenResume(BaseConfig):
+    model_id:str = "outputs/qwen3-0.6b_20250514-194730/checkpoint_2"
+
 class Debug(GSMQwen):
     model_id: str = "yujiepan/qwen3-tiny-random"
+    resume_epochs: int = 2
+    cot_epochs: int = 2
+    loss_seq_vcr: bool = True
 
 @dataclass
 class GsmQwen_H100(GSMQwen):
@@ -99,3 +109,4 @@ class GsmQwen_H100(GSMQwen):
     opt_8b: bool = False
     batch_size_training: int = 32
     gradient_accumulation_steps: int = 4
+    reset_optimizer: bool = True

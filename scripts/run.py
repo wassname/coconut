@@ -14,7 +14,7 @@ from loguru import logger
 from torch import nn
 from tqdm import tqdm
 from transformers import (
-    get_constant_schedule_with_warmup,
+    get_constant_schedule_with_warmup, get_linear_schedule_with_warmup, get_cosine_schedule_with_warmup
 )
 
 import wandb
@@ -49,7 +49,8 @@ os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 
 
 
-def create_optimizer(model, configs, warmup_steps=False):
+def create_optimizer(model, configs, warmup_fraction=0.1, opt_steps=None, cycles=1):
+    warmup_steps = opt_steps * warmup_fraction
     scheduler = None
     if configs.bf16_weight:
         import optimi
@@ -74,9 +75,20 @@ def create_optimizer(model, configs, warmup_steps=False):
             weight_decay=configs.weight_decay,
         )
     if warmup_steps is not None:
-        scheduler = get_constant_schedule_with_warmup(
-            optimizer, num_warmup_steps=warmup_steps
-        )
+        if configs.scheduler == "linear":
+            scheduler = get_linear_schedule_with_warmup(
+                optimizer, num_warmup_steps=warmup_steps
+            )
+        elif configs.scheduler == "constant":
+            scheduler = get_constant_schedule_with_warmup(
+                optimizer, num_warmup_steps=warmup_steps
+            )
+        elif configs.scheduler == "cosine":
+            scheduler = get_cosine_schedule_with_warmup(
+                optimizer, num_warmup_steps=warmup_steps,
+                num_cycles=cycles/.2,
+                num_training_steps=opt_steps,
+            )
     return optimizer, scheduler
 
 
@@ -264,17 +276,13 @@ def main():
                 shuffle=True,
             )
             if (conf.reset_optimizer is True) or (optimiser is None):
-                warmup_steps = None
-                # we do warmup when the trainign dynamic changes, .e.g starting, adding <|start-latent|>, then adding <|latent|>
-                stage = (epoch-conf.cot_epochs) / conf.epochs_per_stage
-                stage_start = int(stage) == stage
-                if epoch == 0 or (stage>0 and stage_start):
-                    warmup_steps = (
-                        len(dataset_train) // conf.gradient_accumulation_steps * 0.1
-                    )
-
+                opt_steps=len(dataset_train) // conf.gradient_accumulation_steps
+                if not conf.reset_optimizer:
+                    opt_steps *= conf.num_epochs
+                epochs=1 if conf.reset_optimizer else conf.num_epochs
                 optimizer, scheduler = create_optimizer(
-                    model, conf, warmup_steps=warmup_steps
+                    model, conf, warmup_fraction=0.1, opt_steps=opt_steps,
+                    cycles=epochs
                 )
 
             train_dataloader = torch.utils.data.DataLoader(
@@ -430,7 +438,7 @@ def main():
         r['eval/ratios'] = r2['eval/ratios']
         r["epoch"] = epoch
         r["scheduled_stage"] = scheduled_stage
-        r["minutes"] = (time.time() - start_time) / 60
+        r["train/minutes"] = (time.time() - start_time) / 60
         clear_memory()
         if wandb_run:
             wandb_run.log(r)
