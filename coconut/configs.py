@@ -68,7 +68,7 @@ class BaseConfig:
     # coconut: bool = True
     # cot: bool = False
 
-    max_size: int = 60000 # full ~400k in coconut
+    max_size: int = 60_000 # full ~400k in coconut
     
     # dataset: for each reasoning step we use X thought tokens (up to our max)
     c_thought: int = 2
@@ -115,3 +115,4 @@ class GsmQwen_H100(GSMQwenResume):
     opt_8b: bool = False
     batch_size_training: int = 48
     gradient_accumulation_steps: int = 3
+    max_size: int = 60_000 # full ~400k in coconut
