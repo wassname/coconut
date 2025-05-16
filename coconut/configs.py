@@ -1,7 +1,9 @@
-from dataclasses import dataclass
+# from dataclasses import dataclass
+from pydantic.dataclasses import dataclass
+from pydantic import ConfigDict
 
 
-@dataclass
+@dataclass(config=ConfigDict(validate_assignment=True)) 
 class BaseConfig:
     project: str = "coconut"
     save_path: str = "outputs/"
@@ -22,6 +24,8 @@ class BaseConfig:
     # replacement_method: str = "supressed[0.5:]"
     # replacement_method: str = "hs+supressed[0.5:]"
     replacement_method: str = "ie+supressed[0.5:]"
+
+    use_position_ids: bool = True # experimental, might help the model mode switch to latent tokens
     
   
     # use bf16 for all model weights: should work but seems to fail ??
@@ -87,26 +91,27 @@ class GSMQwen(BaseConfig):
     train_path: str = "data/gsm_train.json"
     val_path: str = "data/gsm_valid.json"
 
-
+@dataclass
 class GSMQwenResume(BaseConfig):
-    load_model_path :str = "outputs/qwen3-0.6b_20250514-194730/checkpoint_2"
-    resume_epochs: int = 2
+    load_model_path: str = "outputs/qwen3-0.6b_20250514-194730/checkpoint_2"
+    resume_epochs: int = 3
     cot_epochs: int = 2
     loss_seq_vcr: bool = True
 
+@dataclass
 class Debug(GSMQwen):
     model_id: str = "yujiepan/qwen3-tiny-random"
+    loss_seq_vcr: bool = True
 
 @dataclass
-class GsmQwen_H100(GSMQwen):
+class GsmQwen_H100(GSMQwenResume):
     """
     For running on a h100
     """
-    name: str = "gsm-qwen-1.5b"
+    name: str = "gsm-qwen-0.6bh100"
     
     bf16: bool = True
     bf16_weight: bool = False
     opt_8b: bool = False
-    batch_size_training: int = 32
-    gradient_accumulation_steps: int = 4
-    reset_optimizer: bool = True
+    batch_size_training: int = 48
+    gradient_accumulation_steps: int = 3

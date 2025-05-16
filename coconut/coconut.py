@@ -27,7 +27,7 @@ from transformers import (
 )
 
 from coconut.hs2ie import hs2ie, get_supressed_activations
-from coconut.vcr_loss import calc_seq_vcr_loss, calc_distribution_loss
+from coconut.vcr_loss import VCRLoss
 
 
 Outputs = namedtuple(
@@ -42,21 +42,30 @@ MAX_N_LATENT = 8
 
 class CoconutConfig(Qwen3Config):
     def __init__(self, **kwargs):
-        self.replacement_method = kwargs.pop("replacement_method", "-1")
-        self.latent_token_id = kwargs.pop("latent_token_id", None)
-        self.eos_token_id = kwargs.pop("eos_token_id", None)
-        self.use_position_ids = kwargs.pop("use_position_ids", True)
-        self.loss_seq_vcr = kwargs.pop("loss_seq_vcr", False)
         super().__init__(**kwargs)
 
+        # to set extra attributes from kwargs they need to be set
+        self.replacement_method = None
+        self.latent_token_id = None
+        self.eos_token_id = None
+        self.use_position_ids = None
+        self.loss_seq_vcr = None
 
 class CoconutQwen3ForCausalLM(Qwen3ForCausalLM):
     def __init__(
         self,
-        config
+        config: CoconutConfig
     ):
         super().__init__(config)
+        assert self.config.latent_token_id is not None, "latent_token_id must be set in the config"
+        assert self.config.eos_token_id is not None, "eos_token_id must be set in the config"
+        assert self.config.use_position_ids is not None, "use_position_ids must be set in the config"
+        assert self.config.loss_seq_vcr is not None, "loss_seq_vcr must be set in the config"
+        assert self.config.replacement_method is not None, "replacement_method must be set in the config"
+
         self.gen_forward_cnt = 0
+        if self.config.loss_seq_vcr:
+            self.vcr_loss = VCRLoss(H=self.config.hidden_size)
 
 
     def forward(self, input_ids, attention_mask=None, labels=None, position_ids=None, **kwargs):
@@ -264,11 +273,11 @@ class CoconutQwen3ForCausalLM(Qwen3ForCausalLM):
         )
 
         # Seq-VCR loss
+        # in the paper they apply it to the last hidden state, we apply it to all
         extra = {}
         if self.config.loss_seq_vcr:
             with torch.autocast(device_type=input_ids.device.type):
                 loss_vcr, extra2 = self.vcr_loss(all_hs)
-            # TODO report diff losses to wandb
             extra['loss_ar'] = loss.item()
             extra.update(extra2)
             loss += loss_vcr

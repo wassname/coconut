@@ -34,6 +34,7 @@ def load_new_model(conf: Config, device, dtype):
     # load base model
     model_config = CoconutConfig.from_pretrained(
         conf.model_id,
+        use_position_ids=conf.use_position_ids,
         latent_token_id=latent_id,
         bot_id=bot_id,
         eot_id=eot_id,
@@ -43,6 +44,7 @@ def load_new_model(conf: Config, device, dtype):
     model = CoconutQwen3ForCausalLM.from_pretrained(
         conf.model_id, config=model_config, device_map=device, torch_dtype=dtype
     )
+    # apply_config(model, tokenizer, conf)
 
     model.resize_token_embeddings(len(tokenizer))
     return model, tokenizer
@@ -51,12 +53,42 @@ def resume_model(conf: Config, device="auto", dtype=torch.bfloat16):
     # load model
     f = Path("./" + conf.load_model_path)
     assert f.exists(), f"Model path {f} does not exist"
-    model = CoconutQwen3ForCausalLM.from_pretrained(
-        conf.load_model_path, device_map=device, torch_dtype=dtype
-    )
     tokenizer = AutoTokenizer.from_pretrained(conf.load_model_path)
+    latent_id = tokenizer.convert_tokens_to_ids("<|latent|>")
+    bot_id = tokenizer.convert_tokens_to_ids("<|start-latent|>")
+    eot_id = tokenizer.convert_tokens_to_ids("<|end-latent|>")
+    config = CoconutConfig.from_pretrained(
+        conf.load_model_path,
+        loss_seq_vcr=conf.loss_seq_vcr,
+        use_position_ids=conf.use_position_ids,
+        latent_token_id=latent_id,
+        bot_id=bot_id,
+        eot_id=eot_id,
+        eos_token_id=tokenizer.eos_token_id,
+        replacement_method=conf.replacement_method,
+    )
+    model = CoconutQwen3ForCausalLM.from_pretrained(
+        conf.load_model_path,
+        config=config,
+        # conf.load_model_path, 
+        device_map=device, torch_dtype=dtype, 
+
+
+    )
     logger.warning(f"Resumed model from {conf.load_model_path}")
+
+    # apply_config(model, tokenizer, conf)
+
+    # set the configuration
     return model, tokenizer
+
+
+# def apply_config(model, tokenizer, conf: Config):
+#     model.config.latent_token_id = tokenizer.convert_tokens_to_ids("<|latent|>")
+#     model.config.eos_token_id = tokenizer.convert_tokens_to_ids("<|end-latent|>")
+#     model.config.use_position_ids = conf.use_position_ids
+#     model.config.loss_seq_vcr = conf.loss_seq_vcr
+#     model.config.replacement_method = conf.replacement_method
 
 def tie_embeddings(model, tokenizer):
     latent_id = tokenizer.convert_tokens_to_ids("<|latent|>")

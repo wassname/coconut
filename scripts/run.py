@@ -128,7 +128,7 @@ def create_optimizer(model, configs, warmup_fraction=0.1, opt_steps=None, cycles
         elif configs.scheduler == "cosine":
             scheduler = get_cosine_schedule_with_warmup(
                 optimizer, num_warmup_steps=warmup_steps,
-                num_cycles=cycles/.2,
+                num_cycles=cycles/2,
                 num_training_steps=opt_steps,
             )
     return optimizer, scheduler
@@ -369,10 +369,6 @@ def main():
                 with torch.autocast(device_type=device, dtype=dtype):
                     outputs = model(**batch)
 
-                    for k in outputs.log:
-                        if wandb_run:
-                            wandb_run.log({f"train/{k}": outputs.log[k]})
-
                     loss = outputs.loss / conf.gradient_accumulation_steps
 
                 loss.backward()
@@ -406,6 +402,7 @@ def main():
                         * conf.gradient_accumulation_steps,
                         "train/lr": lr,
                         "train/grad_norm": norm,
+                        **{f'train/{k}': outputs.log[k] for k in outputs.log},
                     }
                     wandb_run.log(log_dict)
 
@@ -436,8 +433,10 @@ def main():
                 if wandb_run:
                     log_dict = {
                         "eval/loss": total_loss / len(valid_loss_dataloader),
+                        **{f'eval/{k}': outputs.log[k] for k in outputs.log},
                     }
                     wandb_run.log(log_dict)
+                    
                     print("eval loss", total_loss / len(valid_loss_dataloader))
 
             clear_memory()

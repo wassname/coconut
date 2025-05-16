@@ -25,6 +25,7 @@ dependencies = [
     "matplotlib>=3.10.3",
     "seaborn>=0.13.2",
     "toml>=0.10.2",
+    "pydantic>=2.11.4",
 ]
 
 [dependency-groups]
