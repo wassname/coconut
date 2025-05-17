@@ -11,8 +11,8 @@ import torch.nn.functional as F
 def calc_seq_vcr_loss(
     hs: Float[Tensor, "b t h"],
     η: float = 1e-3,
-    λ1: float = 0.1,
-    λ2: float = 0.01,
+    λ1: float = 0.001,
+    λ2: float = 0.0001,
 ) -> Tuple[Float[Tensor, ""], Dict[str, float]]:
     """
     Fully-vectorized Seq-VCR loss: no Python for‐loop.

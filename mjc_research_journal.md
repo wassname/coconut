@@ -647,5 +647,61 @@ maybe I should rename no schedule stage of stage=0
 t
 
 ry lower lr or longer epochst
-ry to debug coesne learning in scratch nb
+ry to debug coesne learning in scr
+atch nb
 try float 32
+
+
+So now I'd like to experim,ent with a single epoch of each type of hidden states, and see the loss/acc after. Also 32b, vs8b grad, 16b weights
+
+Loss, Acc, Ratio for
+
+| method | loss | acc | ratio |
+|--------|------|-----|-------|
+| none lr=6e-3 | 9.4  | 0. | 1.002 |
+| none lr=6e-4 | 0.5  | 0.16 | 0.94  |
+| none lr=6e-5 | 0.65 | 0.19 | 0.951 |
+| hs[-1]  | 22  | 0 |  0.926 |
+
+ok none whould work! lets turn of or fix lr and seq_vcr
+lr frp, 6e-3 to 6e-4
+16% aac. 94$ ratio
+0.5 loss
+
+now try 6e-5
+19.2% acc
+0.951 ratio
+0.65 loss
+
+
+The weird thing is that the initial eal is not good
+
+- hs[-1]
+- supr[0.5:-1]
+- hs[-2]
+- supr[0.5:]+hs[-1]
+- supr[0.5:]+ie
+
+and
+- hs: b16_w
+- hs: 8b grad
+- hs: 32b
+
+Start again as I had it messed up
+
+
+|  method      |   eval/acc |   eval/cot_em |   epoch |   stage |   eval/ratios |   train/minutes |   train/loss |   eval/loss |
+|---          :|-----------:|--------------:|--------:|-  -----:|  ------------:|----------------:| ------------:|------------:|
+|  load        |      0.449 |         0.107 |      -1 |      -1 |         0.933 |       nan       |     nan      |   nan       |
+|  1vr,lr=1e-6 |      0.454 |         0.112 |       1 |      -1 |         0.934 |           2.291 |        3.595 |       3.277 |
+|  1vr,lr=1e-5 |      0.438 |         0.111 |       1 |      -1 |         0.934 |           2.262 |        3.185 |       2.912 |
+|  1vr,le=1e-4 |      0.375 |         0.100 |       1 |      -1 |         0.912 |           2.311 |        0.848 |       0.966 |
+|  0sqr,1e-4   |     0.4796 |        0.1115 |       1 |      -1 |        0.9277 |          1.9772 |    0.0611213 |       0.222 |
+|  vcrv2 1e-4  |     0.461  |        0.1264 |       1 |      -1 |        0.9229 |          2.3131 |    0.0891597 |      0.2365 |
+|  vcr2,1e-5   |     0.4201 |        0.119  |       1 |      -1 |        0.9334 |          2.2748 |     0.118035 |      0.2439 |
+|  vcr2,1e-4   |     0.1152 |        0.0297 |       1 |      -1 |        0.9324 |           2.262 |     0.190808 |      0.3211 |
+
+for v3 I lowered the lambda for seq-vcr by 1/100 and they still go down but so dos the normal ar loss
+t
+ry lr 1e-5
+try 1e-3

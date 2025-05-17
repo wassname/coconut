@@ -19,11 +19,11 @@ class BaseConfig:
     load_model_path: str = "" # set to checkpoint
     resume_epochs: int = 0 # set to phase/epoch
 
-    # replacement_method: str = "-1" # or 0.5, or ie+supressed[0.5:] or hs+supressed[0.5:] or supressed[0.5:]
+    replacement_method: str = "hs[-1]" # or 0.5, or ie+supressed[0.5:] or hs+supressed[0.5:] or supressed[0.5:]
     # replacement_method: str = "0.5"
     # replacement_method: str = "-3"
     # replacement_method: str = "supressed[0.5:]"
-    replacement_method: str = "hs+supressed[0.5:]"
+    # replacement_method: str = "hs+supressed[0.5:]"
     # replacement_method: str = "ie+supressed[0.5:]"
     # ETHER hs[-2]
 
@@ -49,7 +49,7 @@ class BaseConfig:
     gradient_accumulation_steps: int = 10
 
     # https://github.com/QwenLM/Qwen3/blob/714df5bce80a67c698e37034e71dc2efa19ceaf3/examples/llama-factory/qwen2-7b-full-sft.yaml#L27
-    lr: float = 6e-3 # 1e-4 in coconut, but 1e-6 in verl
+    lr: float = 1e-4 # 1e-4 in coconut, but 1e-6 in verl
     weight_decay: float = 0.01 # 0.01 in coconut, 0 in verl
     grad_clip: float = 10.0
     scheduler: str = "cosine" # "constant" or "cosine" or "linear"
@@ -96,9 +96,11 @@ class GSMQwen(BaseConfig):
 @dataclass
 class GSMQwenResume(BaseConfig):
     load_model_path: str = "outputs/qwen3-0.6b_20250514-194730/checkpoint_2"
-    resume_epochs: int = 3
     cot_epochs: int = 2
-    loss_seq_vcr: bool = True
+    epochs_per_stage: int = 8
+    resume_epochs: int = 1
+    # loss_seq_vcr: bool = True
+
 
 
 
@@ -112,9 +114,21 @@ class GsmQwen_H100(GSMQwenResume):
     bf16: bool = True
     bf16_weight: bool = False
     opt_8b: bool = False
+
     batch_size_training: int = 48
     gradient_accumulation_steps: int = 3
     max_size: int = 60_000 # full ~400k in coconut
+
+
+@dataclass
+class EpochSingle(GsmQwen_H100):
+    load_model_path: str = "outputs/qwen3-0.6b_20250514-194730/checkpoint_2"
+    cot_epochs: int = 2
+    epochs_per_stage: int = 1
+    resume_epochs: int = 1
+    # loss_seq_vcr: bool = True
+    num_epochs: int = 2
+    max_size: int = 8_000 # full ~400k in coconut
 
 @dataclass
 class Debug(GSMQwenResume):

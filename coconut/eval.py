@@ -19,7 +19,7 @@ def crop(s, maxl=30):
     return s
 
 @torch.no_grad()
-def evaluate(dataloader, model, tokenizer, ds, max_new_tokens=64, device='cuda', name="", dtype=torch.float32, quick=False, verbose=3):
+def evaluate(dataloader, model, tokenizer, ds, max_new_tokens=64, device='cuda', name="", dtype=torch.float32, quick=False, verbose=1):
 
 
     # get original answer
@@ -95,7 +95,7 @@ def evaluate(dataloader, model, tokenizer, ds, max_new_tokens=64, device='cuda',
 
             if (batch_n < verbose) and (i < 1):
                 correct = '✅' if llm_answer_output==answer else '❌'
-                logger.info(
+                logger.debug(
                     f"""Q #{test_idx}: Question: `{indent(question)}`.
 Full question: `{indent(crop(q_s, maxl=2900))}`.
 Full llm output: `{ans_tok_list}`. 
@@ -387,7 +387,7 @@ def get_answer_preference(
 
     # Return corpus-level perplexity
     ratios =  np.exp(ratios).mean()
-    logger.info(f"ratio nll_ans/nll_corrupted_ans = {ratio:2.4f}")
+    logger.info(f"ratio nll_ans/nll_corrupted_ans = {ratios:2.4f}")
     return {
         "eval/ratios": ratios,
     }

@@ -53,7 +53,7 @@ def run_ratio_eval(
     tokenizer,
     base_dataset_valid,
     conf,
-    scheduled_stage,
+    stage,
     device="cuda",
     dtype=torch.bfloat16,
 ):
@@ -63,7 +63,7 @@ def run_ratio_eval(
     eot_id = tokenizer.convert_tokens_to_ids("<|end-latent|>")
     collator = CoconutCollator(tokenizer, latent_id=latent_id, label_pad_token_id=-100)
     dataset_gen_val2 = get_cot_latent_dataset(
-        scheduled_stage,
+        stage,
         base_dataset_valid,
         conf,
         bot_id,
@@ -136,13 +136,17 @@ def create_optimizer(model, configs, warmup_fraction=0.1, opt_steps=None, cycles
 
 
 def main():
+    import tyro
     from coconut import configs # this will be my dataclass files
     experiments = configs.__dict__.keys()
-    parser = argparse.ArgumentParser(description="coconut")
-    parser.add_argument("experiment", type=str, help=f"experiment names: [{experiments}]")
-    args = parser.parse_args()
+    print(f"Available experiments: {experiments}")
+    # parser = argparse.ArgumentParser(description="coconut")
+    # parser.add_argument("experiment", type=str, help=f"experiment names: [{experiments}]")
+    # args = parser.parse_args()
 
-    conf = getattr(configs, args.experiment)()
+    print(os.sys.argv)
+    ConfigCls = getattr(configs, os.sys.argv[1])
+    conf = tyro.cli(ConfigCls, args=os.sys.argv[2:])
     config_dict = asdict(conf)
     logger.info(f"Config: {config_dict}")
 
@@ -163,19 +167,19 @@ def main():
     dtype = torch.bfloat16 if (conf.bf16 is True) else torch.float32
     logger.info(f"Using device: {device}, dtype: {dtype}")
 
-    if conf.resume_epochs>0:        
+    if conf.resume_epochs>0:    
+        logger.warning(f"Resuming from epoch {conf.resume_epochs}")    
         model, tokenizer = resume_model(conf, device, dtype)
     else:
         model, tokenizer = load_new_model(conf, device, dtype)
-
-    tie_embeddings(model, tokenizer)
+        tie_embeddings(model, tokenizer)
     model = model.to(device)
 
     if conf.bf16_weight is True:
         convert_to_bfloat16(model)
 
     # setup eval
-    logger.info(model)
+    logger.debug(model)
     max_size = 32 if conf.debug is True else (conf.max_size or 100000000)
     base_dataset_valid = get_dataset(
         conf.val_path,
@@ -233,19 +237,19 @@ def main():
         max_latent_epoch = conf.max_latent_stage * conf.epochs_per_stage
 
         if epoch <= conf.cot_epochs:
-            scheduled_stage = -1
+            stage = -1
         elif epoch < max_latent_epoch:
-            scheduled_stage = (epoch - conf.cot_epochs) // conf.epochs_per_stage
+            stage = (epoch - conf.cot_epochs) // conf.epochs_per_stage
         else:
-            scheduled_stage = conf.max_latent_stage
+            stage = conf.max_latent_stage
 
         logger.info(
-            f"scheduled_stage={scheduled_stage}, c_thought={conf.c_thought}, max_latent_stage={conf.max_latent_stage}"
+            f"scheduled_stage={stage}, c_thought={conf.c_thought}, max_latent_stage={conf.max_latent_stage}"
         )
 
         # initial eval
         dataset_gen_val = get_question_only_latent_dataset(
-            scheduled_stage,
+            stage,
             base_dataset_valid,
             conf,
             bot_id,
@@ -267,7 +271,7 @@ def main():
             batch_size=conf.batch_size_training,
             collate_fn=collator,
         )
-        if epoch == 0:
+        if epoch == 0 or conf.resume_epochs>0:
             # quick QC to see how well untouched model does at the task
             r = evaluate(
                 valid_gen_dataloader,
@@ -286,18 +290,23 @@ def main():
                 tokenizer,
                 base_dataset_valid,
                 conf,
-                scheduled_stage,
+                stage,
                 device=device,
                 dtype=dtype,
             )
             if wandb_run:
                 wandb_run.log(r)
                 wandb_run.log(r2)
+            
+            r["epoch"] = -1
+            r["stage"] = stage
+            r['eval/ratios'] = r2['eval/ratios']
+            res.append(r)
 
-        logger.info(f"Prep data for epoch={epoch} stage={scheduled_stage}")
+        logger.info(f"Prep data for epoch={epoch} stage={stage}")
 
         dataset_loss_val = get_cot_latent_dataset(
-            scheduled_stage,
+            stage,
             base_dataset_valid,
             conf,
             bot_id,
@@ -315,7 +324,7 @@ def main():
 
         if not conf.only_eval:
             dataset_train = get_cot_latent_dataset(
-                scheduled_stage,
+                stage,
                 base_dataset_train,
                 conf,
                 bot_id,
@@ -425,11 +434,11 @@ def main():
                     total_loss += loss.item()
 
                 if wandb_run:
-                    log_dict = {
+                    eval_log_dict = {
                         "eval/loss": total_loss / len(valid_loss_dataloader),
                         **{f'eval/{k}': outputs.log[k] for k in outputs.log},
                     }
-                    wandb_run.log(log_dict)
+                    wandb_run.log(eval_log_dict)
                     
                     print("eval loss", total_loss / len(valid_loss_dataloader))
 
@@ -453,7 +462,7 @@ def main():
             tokenizer,
             base_dataset_valid,
             conf,
-            scheduled_stage,
+            stage,
             device=device,
             dtype=dtype,
         )
@@ -467,11 +476,14 @@ def main():
         # r['eval/ppx'] = r3['eval/ppx']
         r['eval/ratios'] = r2['eval/ratios']
         r["epoch"] = epoch
-        r["scheduled_stage"] = scheduled_stage
+        r["stage"] = stage
         r["train/minutes"] = (time.time() - start_time) / 60
         clear_memory()
         if wandb_run:
             wandb_run.log(r)
+
+        r["train/loss"] =log_dict["train/loss"]
+        r['eval/loss'] = eval_log_dict["eval/loss"]
         res.append(r)
 
         save_model(model, tokenizer, config_dict, save_dir / f"checkpoint_{epoch}")
@@ -480,7 +492,7 @@ def main():
     print(config_dict)
     df_res = pd.DataFrame(res)
     df_res.to_csv(save_dir / "results.csv")
-    print(df_res.to_markdown())
+    print(df_res.round(4).to_markdown())
 
 
 if __name__ == "__main__":
