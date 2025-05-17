@@ -119,7 +119,13 @@ class GsmQwen_H100(GSMQwenResume):
 @dataclass
 class Debug(GSMQwenResume):
     model_id: str = "yujiepan/qwen3-tiny-random"
-    loss_seq_vcr: bool = True
+
     max_size: int = 1000 # full ~400k in coconut
-    batch_size_training: int = 16
+    debug: bool = True
+
+    batch_size_training: int = 8
     gradient_accumulation_steps: int = 2
+
+    cot_epochs: int = 1
+    epochs_per_stage: int = 1
+    resume_epochs: int = 3

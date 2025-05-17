@@ -13,9 +13,9 @@
       "program": "./scripts/run.py",
       "console": "integratedTerminal",
       "args": [
-        "GSMQwenResume"
+        "Debug"
       ],
-      "justMyCode": false,
+      // "justMyCode": false,
       // "autoReload": {
       //  "enable": true
       // },

@@ -33,12 +33,22 @@ def lloc(spec: str, n_layers: int) -> Union[int, slice]:
     """
     if ":" in spec:
         start_str, end_str = spec.split(":", 1)
-        return slice(
-            _parse_frac_part(start_str, n_layers),
-            _parse_frac_part(end_str,   n_layers),
-        )
+        a = _parse_frac_part(start_str, n_layers)
+        b = _parse_frac_part(end_str,   n_layers)
+        if a is None and b is None:
+            return slice(None)
+        elif a is None:
+            return slice(None, b)
+        elif b is None:
+            return slice(a, None)
+        else:
+            return slice(a, b)
     else:
-        return _parse_frac_part(spec, n_layers)
+        a =_parse_frac_part(spec, n_layers)
+        if a is None:
+            return slice(None)
+        else:
+            return slice(a, a + 1)
 
 global _w_out_inv
 _w_out_inv = None
@@ -88,9 +98,21 @@ def get_supressed_activations(hs: Float[Tensor, 'l b t h'], w_out=None) -> Float
 
 
 def hs2ie(hidden_states: HiddenStates, inputs_embeds: HiddenState, w_out=None, method='-1') -> HiddenState:
-    """hidden states to inputs_embeds"""
+    """
+    hidden states to inputs_embeds
+
+    We take in a method string which can be
+    - hs[-1] (last layer)
+    - hs[0.5:] (halfway through onwards)
+    - hs[0.5] (halfway through)
+    - supressed[-1:] (last layer onwards)
+    - supressed[0.5:] (halfway through onwards)
+    - ie+supressed[-1:] (last layer onwards plus input embeddings)
+    - hs[-1]+supressed[-1:] (hs last layer plus last layer supressed)    
+    """
     n = len(hidden_states)
-    To = hidden_states[-1].shape[1]
+    hs = rearrange(list(hidden_states), 'l b t h -> l b t h')
+    To = hs.shape[2]
     Ti = inputs_embeds.shape[1]
 
     if '+' in method:
@@ -98,31 +120,56 @@ def hs2ie(hidden_states: HiddenStates, inputs_embeds: HiddenState, w_out=None, m
     else:
         methods = [method]
 
+
     outs = []
     for method in methods:
         if '[' in method:
             # turn into slice
             spec = method.split('[')[1].split(']')[0]
             method = method.split('[')[0]
-            sloc = lloc(spec, n)
+            lyr_slc = lloc(spec, n)
         else:
-            sloc = slice(None)
+            lyr_slc = slice(None)
         
         if method == 'ie':
-            x = inputs_embeds[:, :To][sloc]
+            # This extends into future tokens at times. Also there only one layer so no need to slice
+            print(inputs_embeds.shape, hs.shape)
+            x = inputs_embeds[:, :To][:, -1]
         elif method == 'hs':
-            x = hidden_states[-1][sloc]
+            x = hs[lyr_slc, :, -1].sum(dim=0)
         elif method == 'supressed':
-            hs = rearrange(list(hidden_states), 'l b t h -> l b t h')
-            supressed_act = get_supressed_activations(hs, w_out)[sloc]
-            x = reduce(supressed_act, 'l b 1 h -> b 1 h', 'sum')
-            x = repeat(x, 'b 1 h -> b t h', t=Ti)
+            supressed_act = get_supressed_activations(hs, w_out)[lyr_slc]
+            x = reduce(supressed_act, 'l b t h -> b t h', 'sum')
+            x = x[:, -1] # last token
+            # x = repeat(x, 'b 1 h -> b t h', t=Ti)
         else:
             raise ValueError(f"Unknown method {method}")
         outs.append(x)
     
     # join the methods
+
+    print(f"outs = {[o.shape for o in outs]}")
     o = outs[0]
     for i in range(1, len(outs)):
         o = o + outs[i]
     return o
+
+
+# unit test
+if __name__ == '__main__':
+    # test hs2ie
+    L, B, T, H = 4, 2, 3, 5
+    hs = torch.randn(L, B, T, H) # l, b, t, h
+    inputs_embeds = torch.randn(B, T, H) # b, t, h
+    w_out = torch.randn(H, H) # h, h
+
+    for method in ['hs[-1]', 'hs[0.5:]', 'hs[0.5]', 'supressed[-1:]', 'supressed[0.5:]', 'ie+supressed[-1:]', 'hs[-1]+supressed[-1:]']:
+        print(f"method = {method}")
+        spec = method.split('[')[1].split(']')[0]
+        lyr_slc = lloc(spec, hs.shape[0])
+        print(f"lyr_slc({method}) = {lyr_slc}")
+
+        o = hs2ie(hs, inputs_embeds, w_out, method)
+        print(f"o({method}) = {o.shape}")
+        assert o.shape == (B, H), f"hs2ie({method}) = {o.shape} != (2, 5)"
+

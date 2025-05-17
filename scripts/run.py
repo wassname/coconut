@@ -144,6 +144,7 @@ def main():
 
     conf = getattr(configs, args.experiment)()
     config_dict = asdict(conf)
+    logger.info(f"Config: {config_dict}")
 
     timestamp = pd.Timestamp.now().strftime("%Y%m%d-%H%M%S")
     run_name = f"{conf.name}_{timestamp}"

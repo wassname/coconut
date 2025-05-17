@@ -7,6 +7,8 @@ import itertools
 import random
 from dataclasses import dataclass
 from typing import Optional
+import multiprocessing as mp
+import os
 
 import torch
 import torch.distributed as dist
@@ -14,8 +16,12 @@ from datasets import Dataset
 from transformers import PreTrainedTokenizerBase
 from transformers.data.data_collator import pad_without_fast_tokenizer_warning
 
+DEBUG = os.environ.get("DEBUG", False)
 
-def get_dataset(path, tokenizer, max_size=1000000000, drop_unused=True, system_prompt="", num_proc=32, verbose=True):
+default_num_proc = None if DEBUG else mp.cpu_count()//2 
+
+
+def get_dataset(path, tokenizer, max_size=1000000000, drop_unused=True, system_prompt="", num_proc=default_num_proc, verbose=True):
     if system_prompt:
         # system_prompt = "<|im_start|>system\n" + system_prompt.strip() + "<|im_end|>\n"
         system_prompt = system_prompt.strip() + "\n"
@@ -204,7 +210,7 @@ def get_question_only_latent_dataset(
     eot_id,
     no_bot_eot=False,
     drop_unused=True,
-    num_proc=32,
+    num_proc=default_num_proc,
 ):
     """    
     for testing, with no reasoning or ans
@@ -263,6 +269,7 @@ def get_cot_latent_dataset(
     eot_id,
     shuffle=False,
     drop_unused=True,
+    num_proc=default_num_proc,
 ):
     """chain of thought latent dataset for training
     
@@ -334,7 +341,7 @@ def get_cot_latent_dataset(
         }
 
     processed_dataset = base_dataset.map(
-        process_dataset, remove_columns=list(base_dataset.features) if drop_unused else None, num_proc=32,
+        process_dataset, remove_columns=list(base_dataset.features) if drop_unused else None, num_proc=num_proc,
         desc=f"process_dataset: cot_latent_{scheduled_stage}"
     )
     if shuffle:
