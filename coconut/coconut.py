@@ -216,7 +216,7 @@ class CoconutQwen3ForCausalLM(Qwen3ForCausalLM):
                 # print(tensor_list[batch_idx][token_idx].shape, recrv_embeds.shape, batch_idx, token_idx, token_idx - 1 - hidden_states_offset)
 
 
-                # modifiation. Hypothesis: if the model has a unique positional id for thinking token then it will more quickly learn to mode switch to the recusrsive thinking mode
+                # modification. Hypothesis: if the model has a unique positional id for thinking token then it will more quickly learn to mode switch to the recusrsive thinking mode
                 if self.config.use_position_ids:
                     thinking_base_position = 100000  # Well beyond normal context windows
                     position_ids[batch_idx][token_idx] = thinking_base_position + pass_idx

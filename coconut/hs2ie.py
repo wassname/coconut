@@ -133,14 +133,13 @@ def hs2ie(hidden_states: HiddenStates, inputs_embeds: HiddenState, w_out=None, m
         
         if method == 'ie':
             # This extends into future tokens at times. Also there only one layer so no need to slice
-            print(inputs_embeds.shape, hs.shape)
-            x = inputs_embeds[:, :To][:, -1]
+            x = inputs_embeds[:, :To]
         elif method == 'hs':
-            x = hs[lyr_slc, :, -1].sum(dim=0)
+            x = hs[lyr_slc].sum(dim=0)
         elif method == 'supressed':
             supressed_act = get_supressed_activations(hs, w_out)[lyr_slc]
             x = reduce(supressed_act, 'l b t h -> b t h', 'sum')
-            x = x[:, -1] # last token
+            # x = x[:, -1] # last token
             # x = repeat(x, 'b 1 h -> b t h', t=Ti)
         else:
             raise ValueError(f"Unknown method {method}")
@@ -148,7 +147,6 @@ def hs2ie(hidden_states: HiddenStates, inputs_embeds: HiddenState, w_out=None, m
     
     # join the methods
 
-    print(f"outs = {[o.shape for o in outs]}")
     o = outs[0]
     for i in range(1, len(outs)):
         o = o + outs[i]
@@ -171,5 +169,5 @@ if __name__ == '__main__':
 
         o = hs2ie(hs, inputs_embeds, w_out, method)
         print(f"o({method}) = {o.shape}")
-        assert o.shape == (B, H), f"hs2ie({method}) = {o.shape} != (2, 5)"
+        assert o.shape == (B, T, H), f"hs2ie({method}) = {o.shape} != (2, 5)"
 
