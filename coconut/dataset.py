@@ -2,6 +2,7 @@
 # All rights reserved.
 
 import json
+from loguru import logger
 import itertools
 import random
 from dataclasses import dataclass
@@ -213,6 +214,9 @@ def get_question_only_latent_dataset(
     args:
     - no_bot_eot: if True, don't include thought tokens 
     """
+
+    no_bot_eot = scheduled_stage < 0
+
     def process_dataset(sample):
 
         if configs.pad_latent_to_max:
@@ -225,6 +229,7 @@ def get_question_only_latent_dataset(
 
         # we increase the amount of thought steps as we progress throught the coconut epochs
         k = min(max_latent_stage, scheduled_stage)
+        k = max(0, k)
 
         
         k *= configs.c_thought
@@ -256,7 +261,6 @@ def get_cot_latent_dataset(
     bot_id,
     latent_id,
     eot_id,
-    no_bot_eot=False,
     shuffle=False,
     drop_unused=True,
 ):
@@ -264,6 +268,7 @@ def get_cot_latent_dataset(
     
     format: question, latent, reasoning, answer
     """
+    no_bot_eot = scheduled_stage < 0
     n_additional_tokens = 0 if no_bot_eot else 2
 
     def process_dataset(sample):
@@ -274,7 +279,7 @@ def get_cot_latent_dataset(
                 list(range(len(sample["steps_tokenized"]) + 1))
             )
         else:
-            scheduled_stage_to_train = scheduled_stage
+            scheduled_stage_to_train = max(0, scheduled_stage)
 
         # progressivly replace reasoning steps with latent tokens
         # n_skip_steps: number of reasoning steps to skip, replace with `c_thought` latent tokens

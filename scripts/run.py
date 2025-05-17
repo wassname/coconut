@@ -128,7 +128,7 @@ def create_optimizer(model, configs, warmup_fraction=0.1, opt_steps=None, cycles
         elif configs.scheduler == "cosine":
             scheduler = get_cosine_schedule_with_warmup(
                 optimizer, num_warmup_steps=warmup_steps,
-                num_cycles=cycles/2,
+                num_cycles=cycles/2.,
                 num_training_steps=opt_steps,
             )
     return optimizer, scheduler
@@ -233,16 +233,14 @@ def main():
         max_latent_epoch = conf.max_latent_stage * conf.epochs_per_stage
 
         if epoch <= conf.cot_epochs:
-            scheduled_stage = 0
-            no_bot_eot = True
+            scheduled_stage = -1
         elif epoch < max_latent_epoch:
             scheduled_stage = (epoch - conf.cot_epochs) // conf.epochs_per_stage
-            no_bot_eot = False
         else:
             scheduled_stage = conf.max_latent_stage
 
         logger.info(
-            f"scheduled_stage={scheduled_stage}, no_bot_eot={no_bot_eot}, c_thought={conf.c_thought}, max_latent_stage={conf.max_latent_stage}"
+            f"scheduled_stage={scheduled_stage}, c_thought={conf.c_thought}, max_latent_stage={conf.max_latent_stage}"
         )
 
         # initial eval
@@ -253,7 +251,6 @@ def main():
             bot_id,
             latent_id,
             eot_id,
-            no_bot_eot=no_bot_eot,
             # drop_unused=False,
         )
         if "gsm" in conf.val_path:
@@ -290,7 +287,6 @@ def main():
                 base_dataset_valid,
                 conf,
                 scheduled_stage,
-                no_bot_eot=no_bot_eot,
                 device=device,
                 dtype=dtype,
             )
@@ -307,7 +303,6 @@ def main():
             bot_id,
             latent_id,
             eot_id,
-            no_bot_eot=no_bot_eot,
         )
         valid_loss_dataloader = torch.utils.data.DataLoader(
             dataset_loss_val,
@@ -326,7 +321,6 @@ def main():
                 bot_id,
                 latent_id,
                 eot_id,
-                no_bot_eot=no_bot_eot,
                 shuffle=True,
             )
             if (conf.reset_optimizer is True) or (optimiser is None):
@@ -460,7 +454,6 @@ def main():
             base_dataset_valid,
             conf,
             scheduled_stage,
-            no_bot_eot=no_bot_eot,
             device=device,
             dtype=dtype,
         )
