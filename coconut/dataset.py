@@ -75,11 +75,11 @@ def get_dataset(path, tokenizer, max_size=1000000000, drop_unused=True, system_p
 
     row = dataset_tok[0]
     if verbose:
-        print("Example row:")
-        print("question_tokenized", tokenizer.decode(row["question_tokenized"]))
+        logger.info("Example row:")
+        logger.info("question_tokenized", tokenizer.decode(row["question_tokenized"]))
         for i, s in enumerate(row["steps_tokenized"]):
-            print(f"steps_tokenized[{i}]", tokenizer.decode(s))
-        print("answer_tokenized", tokenizer.decode(row["answer_tokenized"]))
+            logger.info(f"steps_tokenized[{i}] {tokenizer.decode(s).strip()}")
+        logger.info(f'answer_tokenized {tokenizer.decode(row["answer_tokenized"])}', )
 
     return dataset_tok
 
