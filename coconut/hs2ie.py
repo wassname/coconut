@@ -9,6 +9,37 @@ import torch.nn as nn
 HiddenState = Float[Tensor, 'b t h']
 HiddenStates = Tuple[Float[Tensor, 'b t h']]
 
+def _parse_frac_part(part: str, n: int) -> int:
+    """
+    turn “2” → 2, “-1” → -1, “0.5” → int(0.5 * n), “” → None
+    """
+    if part == "":
+        return None
+    if "." in part:
+        # fractional index
+        return int(float(part) * n)
+    return int(part)
+
+def lloc(spec: str, n_layers: int) -> Union[int, slice]:
+    """
+    spec examples:
+      “-1”       → last layer
+      “0.5”      → middle layer
+      “2”        → layer 2
+      “:”        → all layers
+      “0.25:”    → from 25% to end
+      “:0.75”    → from start to 75%
+      “0.25:0.75”→ 25%–75% slice
+    """
+    if ":" in spec:
+        start_str, end_str = spec.split(":", 1)
+        return slice(
+            _parse_frac_part(start_str, n_layers),
+            _parse_frac_part(end_str,   n_layers),
+        )
+    else:
+        return _parse_frac_part(spec, n_layers)
+
 global _w_out_inv
 _w_out_inv = None
 
@@ -58,44 +89,40 @@ def get_supressed_activations(hs: Float[Tensor, 'l b t h'], w_out=None) -> Float
 
 def hs2ie(hidden_states: HiddenStates, inputs_embeds: HiddenState, w_out=None, method='-1') -> HiddenState:
     """hidden states to inputs_embeds"""
-
     n = len(hidden_states)
-    i_half = int(n * 0.5)
-    if method == '-1':
-        return hidden_states[-1]
-    elif method == '-2':
-        return hidden_states[-2]
-    elif method == '0.5':
-        return hidden_states[i_half]
-    
-
-
-    # FIXME ok so this doesn't account for information being removed then added
-    # and it assumed removal == reduction in positive magnitude, but it could be negative. So I should refactor for all reduction in magnitude
-    hs = rearrange(list(hidden_states), 'l b t h -> l b t h')
-    supressed_act = get_supressed_activations(hs, w_out)
-
     To = hidden_states[-1].shape[1]
     Ti = inputs_embeds.shape[1]
 
-    if method == 'ie+supressed[-1]':
-        # need to make it more like the original hidden states, so prev input embedding plus the supressed tokens
-        return inputs_embeds[:, :To] + supressed_act[-1] # last layer, add dummy sequence dim
-    elif method == 'ie+supressed[0.5:]':
-        return inputs_embeds[:, :To] + supressed_act[i_half:].sum(dim=0)
-    elif method == 'hs+supressed[0.5:]':
-        return hidden_states[-1] + supressed_act[i_half:].sum(dim=0)
-    elif method == 'supressed[0.5:]':
-        # FIXME this need to be repeated along token dim
-        hs = supressed_act[i_half:].sum(dim=0)
-        return inputs_embeds[:, :To] + supressed_act[-1]
-    elif method == 'ie+supressed[0.5:]':
-        return inputs_embeds[:, :To] + supressed_act[i_half:].sum(dim=0)
-    elif method == 'hs+supressed[0.5:]':
-        return hidden_states[-1] + supressed_act[i_half:].sum(dim=0)
-    elif method == 'supressed[0.5:]':
-        hs = supressed_act[i_half:].sum(dim=0)
-        hs = repeat(hs, 'b 1 h -> b t h', t=Ti)
-        return hs
+    if '+' in method:
+        methods = method.split('+')
+    else:
+        methods = [method]
+
+    outs = []
+    for method in methods:
+        if '[' in method:
+            # turn into slice
+            spec = method.split('[')[1].split(']')[0]
+            method = method.split('[')[0]
+            sloc = lloc(spec, n)
+        else:
+            sloc = slice(None)
+        
+        if method == 'ie':
+            x = inputs_embeds[:, :To][sloc]
+        elif method == 'hs':
+            x = hidden_states[-1][sloc]
+        elif method == 'supressed':
+            hs = rearrange(list(hidden_states), 'l b t h -> l b t h')
+            supressed_act = get_supressed_activations(hs, w_out)[sloc]
+            x = reduce(supressed_act, 'l b 1 h -> b 1 h', 'sum')
+            x = repeat(x, 'b 1 h -> b t h', t=Ti)
+        else:
+            raise ValueError(f"Unknown method {method}")
+        outs.append(x)
     
-    ValueError(f"Unknown method {method}")
+    # join the methods
+    o = outs[0]
+    for i in range(1, len(outs)):
+        o = o + outs[i]
+    return o

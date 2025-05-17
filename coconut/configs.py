@@ -21,9 +21,11 @@ class BaseConfig:
 
     # replacement_method: str = "-1" # or 0.5, or ie+supressed[0.5:] or hs+supressed[0.5:] or supressed[0.5:]
     # replacement_method: str = "0.5"
+    # replacement_method: str = "-3"
     # replacement_method: str = "supressed[0.5:]"
-    # replacement_method: str = "hs+supressed[0.5:]"
-    replacement_method: str = "ie+supressed[0.5:]"
+    replacement_method: str = "hs+supressed[0.5:]"
+    # replacement_method: str = "ie+supressed[0.5:]"
+    # ETHER hs[-2]
 
     use_position_ids: bool = True # experimental, might help the model mode switch to latent tokens
     
@@ -38,7 +40,7 @@ class BaseConfig:
     opt_8b: bool = False
     
     cot_epochs: int = 2 # 6-10 in paper but those were full length
-    epochs_per_stage: int = 5 # how many epochs to train for each stage
+    epochs_per_stage: int = 8 # how many epochs to train for each stage
     max_latent_stage: int = 3 # max number of thought tokens, unstable is >3?
     num_epochs: int = 50 # 50 in coconut, but more capable model probobly need less
 
@@ -47,7 +49,7 @@ class BaseConfig:
     gradient_accumulation_steps: int = 10
 
     # https://github.com/QwenLM/Qwen3/blob/714df5bce80a67c698e37034e71dc2efa19ceaf3/examples/llama-factory/qwen2-7b-full-sft.yaml#L27
-    lr: float = 1e-4 # 1e-4 in coconut, but 1e-6 in verl
+    lr: float = 6e-3 # 1e-4 in coconut, but 1e-6 in verl
     weight_decay: float = 0.01 # 0.01 in coconut, 0 in verl
     grad_clip: float = 10.0
     scheduler: str = "cosine" # "constant" or "cosine" or "linear"
@@ -58,7 +60,7 @@ class BaseConfig:
 
     reset_optimizer: bool = True
 
-    loss_seq_vcr: bool = False # experimental loss, might help with intermediate state stabiliy
+    loss_seq_vcr: bool = True # experimental loss, might help with intermediate state stabiliy
 
 
 
@@ -98,10 +100,7 @@ class GSMQwenResume(BaseConfig):
     cot_epochs: int = 2
     loss_seq_vcr: bool = True
 
-@dataclass
-class Debug(GSMQwen):
-    model_id: str = "yujiepan/qwen3-tiny-random"
-    loss_seq_vcr: bool = True
+
 
 @dataclass
 class GsmQwen_H100(GSMQwenResume):
@@ -116,3 +115,11 @@ class GsmQwen_H100(GSMQwenResume):
     batch_size_training: int = 48
     gradient_accumulation_steps: int = 3
     max_size: int = 60_000 # full ~400k in coconut
+
+@dataclass
+class Debug(GSMQwenResume):
+    model_id: str = "yujiepan/qwen3-tiny-random"
+    loss_seq_vcr: bool = True
+    max_size: int = 1000 # full ~400k in coconut
+    batch_size_training: int = 16
+    gradient_accumulation_steps: int = 2

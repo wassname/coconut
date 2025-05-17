@@ -640,3 +640,12 @@ now try lr=1e-4 (10x)
 Ok it got up to 40% on epoch 2. Now I can run expeirments
 - try cosine lr on each epoch
 - eval/los goes up so might be too high
+
+
+hmm mine can learn well for one token but not two, interesting
+maybe I should rename no schedule stage of stage=0
+t
+
+ry lower lr or longer epochst
+ry to debug coesne learning in scratch nb
+try float 32
