@@ -34,12 +34,13 @@ def load_new_model(conf: Config, device, dtype):
     # load base model
     model_config = CoconutConfig.from_pretrained(
         conf.model_id,
-        use_position_ids=conf.use_position_ids,
         latent_token_id=latent_id,
         bot_id=bot_id,
         eot_id=eot_id,
         eos_token_id=tokenizer.eos_token_id,
+        use_position_ids=conf.use_position_ids,
         replacement_method=conf.replacement_method,
+        loss_seq_vcr=conf.loss_seq_vcr,
     )
     model = CoconutQwen3ForCausalLM.from_pretrained(
         conf.model_id, config=model_config, device_map=device, torch_dtype=dtype
@@ -59,12 +60,12 @@ def resume_model(conf: Config, device="auto", dtype=torch.bfloat16):
     eot_id = tokenizer.convert_tokens_to_ids("<|end-latent|>")
     config = CoconutConfig.from_pretrained(
         conf.load_model_path,
-        loss_seq_vcr=conf.loss_seq_vcr,
-        use_position_ids=conf.use_position_ids,
         latent_token_id=latent_id,
         bot_id=bot_id,
         eot_id=eot_id,
         eos_token_id=tokenizer.eos_token_id,
+        use_position_ids=conf.use_position_ids,
+        loss_seq_vcr=conf.loss_seq_vcr,
         replacement_method=conf.replacement_method,
     )
     model = CoconutQwen3ForCausalLM.from_pretrained(
