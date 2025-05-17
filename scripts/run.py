@@ -54,7 +54,6 @@ def run_ratio_eval(
     base_dataset_valid,
     conf,
     scheduled_stage,
-    no_bot_eot=False,
     device="cuda",
     dtype=torch.bfloat16,
 ):
@@ -70,7 +69,7 @@ def run_ratio_eval(
         bot_id,
         latent_id,
         eot_id,
-        no_bot_eot=no_bot_eot,
+        # no_bot_eot=no_bot_eot,
         # drop_unused=False,
     )
     valid_gen_dataloader2 = torch.utils.data.DataLoader(
