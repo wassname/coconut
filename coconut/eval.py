@@ -303,23 +303,23 @@ def calc_ans_nll(batch, model, tokenizer, device, dtype, verbose=False):
         ans_tokens = input_ids_i[idx_ans_start:idx_ans_end]
         ans_logits = logprobs[i, idx_ans_start:idx_ans_end].cpu()
 
-        if verbose and (i < 1):
+        # if verbose and (i < 1):
 
-            parts =[ 
-                input_ids_i[:idx_ans_start],
-                input_ids_i[idx_ans_start:idx_ans_end],
-                input_ids_i[idx_ans_end:],
-            ]
-            for j, part in enumerate(parts):
-                part_s = tokenizer.batch_decode(part, skip_special_tokens=False)
-                logger.debug(f"part {j}: `{part_s}`")
+        #     parts =[ 
+        #         input_ids_i[:idx_ans_start],
+        #         input_ids_i[idx_ans_start:idx_ans_end],
+        #         input_ids_i[idx_ans_end:],
+        #     ]
+        #     for j, part in enumerate(parts):
+        #         part_s = tokenizer.batch_decode(part, skip_special_tokens=False)
+        #         logger.debug(f"part {j}: `{part_s}`")
 
 
-            ans_s_premask = tokenizer.batch_decode(ans_tokens, skip_special_tokens=False)
-            g = ans_tokens * ans_mask
-            g = g[g != 0]
-            ans_s = tokenizer.batch_decode(g, skip_special_tokens=False)
-            logger.debug(f"extracted ans: `{ans_s_premask}` -masked-> `{ans_s}`")
+        #     ans_s_premask = tokenizer.batch_decode(ans_tokens, skip_special_tokens=False)
+        #     g = ans_tokens * ans_mask
+        #     g = g[g != 0]
+        #     ans_s = tokenizer.batch_decode(g, skip_special_tokens=False)
+        #     logger.debug(f"extracted ans: `{ans_s_premask}` -masked-> `{ans_s}`")
 
         # calc ppx
         # Compute loss on shifted sequences
