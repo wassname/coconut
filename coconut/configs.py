@@ -19,7 +19,7 @@ class BaseConfig:
     load_model_path: str = "" # set to checkpoint
     resume_epochs: int = 0 # set to phase/epoch
 
-    replacement_method: str = "hs[-1]" # or 0.5, or ie+supressed[0.5:] or hs+supressed[0.5:] or supressed[0.5:]
+    replacement_method: str = "supressed[0.75:]" # or 0.5, or ie+supressed[0.5:] or hs+supressed[0.5:] or supressed[0.5:]
     # replacement_method: str = "0.5"
     # replacement_method: str = "-3"
     # replacement_method: str = "supressed[0.5:]"

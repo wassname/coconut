@@ -235,7 +235,7 @@ def main():
     for epoch in tqdm(range(conf.resume_epochs, conf.num_epochs), unit="epoch"):
         start_time = time.time()
 
-        max_latent_epoch = conf.max_latent_stage * conf.epochs_per_stage
+        max_latent_epoch = conf.cot_epochs + conf.max_latent_stage * conf.epochs_per_stage
 
         if epoch <= conf.cot_epochs:
             stage = -1

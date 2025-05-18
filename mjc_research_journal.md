@@ -173,11 +173,11 @@ plaguss/Qwen2.5-0.5B-Math-Shepherd-PRM-0.2 starts 0.97, 0.28 by 500, 0.18 by 0.5
 Qwen/Qwen2.5-Coder-0.5B 0.6, 0.3 by 500, 0.19 at 0.5 epochs
 So.. they are all about the same?
 
-| model_id | loss 0.5 | loss 500 | loss 0.5 epochs |
-|----------|----------|----------|-----------------|
-| Qwen          | 0.6      | 0.29     | 0.18            |
-| Math-PRM-0.2  | 0.97     | 0.28     | 0.18            |
-| Coder-0.5B    | 0.6      | 0.3      | 0.19            |
+| model_id     | loss 0.5 | loss 500 | loss 0.5 epochs |
+| ------------ | -------- | -------- | --------------- |
+| Qwen         | 0.6      | 0.29     | 0.18            |
+| Math-PRM-0.2 | 0.97     | 0.28     | 0.18            |
+| Coder-0.5B   | 0.6      | 0.3      | 0.19            |
 
 
 {'loss': 0.6079, 'grad_norm': 13.604103088378906, 'learning_rate': 6.222775357809583e-06, 'epoch': 0.0}                                                                          
@@ -363,12 +363,12 @@ yeah seems good
 # ok I did a long run with 0,5 no good
 
 coconut.utils.Config object at 0x79fe3a95e710>
-|    |   eval/acc |   eval/cot_em |   epoch |
-|---:|-----------:|--------------:|--------:|
-|  0 |   0.719212 |             0 |       0 |
-|  1 |   0.576355 |             0 |       1 |
-|  2 |   0.458128 |             0 |       2 |
-|  3 |   0.251232 |             0 |       3 |
+|      | eval/acc | eval/cot_em | epoch |
+| ---: | -------: | ----------: | ----: |
+|    0 | 0.719212 |           0 |     0 |
+|    1 | 0.576355 |           0 |     1 |
+|    2 | 0.458128 |           0 |     2 |
+|    3 | 0.251232 |           0 |     3 |
 
 
 TODO better eval (forward one token at a time)
@@ -376,21 +376,21 @@ TODO run eval using transformers
 
 nope can't even replicate wth
 this is with -1
-|    |   eval/acc |   eval/cot_em |   epoch |
-|---:|-----------:|--------------:|--------:|
-|  0 |   0.719212 |             0 |       0 |
-|  1 |   0.561576 |             0 |       1 |
-|  2 |   0.463054 |             0 |       2 |
-|  3 |   0.295567 |             0 |       3 |
+|      | eval/acc | eval/cot_em | epoch |
+| ---: | -------: | ----------: | ----: |
+|    0 | 0.719212 |           0 |     0 |
+|    1 | 0.561576 |           0 |     1 |
+|    2 | 0.463054 |           0 |     2 |
+|    3 | 0.295567 |           0 |     3 |
 
 
 OK I can't even replciate, probobly 16bit training is the problem!?
 Maybe I should use 0.5b and 32bit
 
-|    |   eval/acc |   eval/cot_em |   epoch |   minutes |
-|---:|-----------:|--------------:|--------:|----------:|
-|  0 |   0.246305 |             0 |       2 |   20.8777 |
-|  1 |   0.142857 |             0 |       3 |  175.502  |
+|      | eval/acc | eval/cot_em | epoch | minutes |
+| ---: | -------: | ----------: | ----: | ------: |
+|    0 | 0.246305 |           0 |     2 | 20.8777 |
+|    1 | 0.142857 |           0 |     3 | 175.502 |
 
 
 so even 0.5b 32b weight, 16b training it doesn't work. lets see after the long train...
@@ -400,12 +400,12 @@ so even 0.5b 32b weight, 16b training it doesn't work. lets see after the long t
 
 Wait it did start working!
     {'project': 'coconut', 'save_path': 'outputs/', 'name': 'gsm-qwen', 'only_eval': False, 'coconut': True, 'cot': False, 'no_thoughts': False, 'no_cot': False, 'c_thought': 2, 'epochs_per_stage': 1, 'max_latent_stage': 3, 'pad_latent_to_max': True, 'replacement_method': '-1', 'save_only_improve': True, 'uniform_prob': 0.0, 'model_id': 'plaguss/Qwen2.5-0.5B-Math-Shepherd-PRM-0.2', 'load_model_path': None, 'seed': 0, 'resume': 0, 'bf16': True, 'bf16_weight': False, 'train_path': 'data/gsm_train.json', 'val_path': 'data/gsm_valid.json', 'reset_optimizer': False, 'batch_size_training': 10, 'max_size': 10000, 'debug': False, 'gradient_accumulation_steps': 4, 'num_epochs': 5, 'lr': 0.0001, 'weight_decay': 0.01}
-    |    |   eval/acc |   eval/cot_em |   epoch |   minutes |
-    |---:|-----------:|--------------:|--------:|----------:|
-    |  0 |  0.267857  |             0 |       0 |   9.56295 |
-    |  1 |  0.196429  |             0 |       1 |  13.2542  |
-    |  2 |  0.0863095 |             0 |       2 |  14.6686  |
-    |  3 |  0.0714286 |             0 |       3 |  32.8783  |
+    |      |  eval/acc | eval/cot_em | epoch | minutes |
+    | ---: | --------: | ----------: | ----: | ------: |
+    |    0 |  0.267857 |           0 |     0 | 9.56295 |
+    |    1 |  0.196429 |           0 |     1 | 13.2542 |
+    |    2 | 0.0863095 |           0 |     2 | 14.6686 |
+    |    3 | 0.0714286 |           0 |     3 | 32.8783 |
     wandb: 🚀 View run gsm-qwen_20250201-071510 at: https://wandb.ai/wassname/coconut/runs/v49wpqas
 
 
@@ -419,19 +419,19 @@ TODO
 
 # Results: gsm-qwen_20250201-122443
 {'project': 'coconut', 'save_path': 'outputs/', 'name': 'gsm-qwen', 'only_eval': False, 'coconut': True, 'cot': False, 'no_thoughts': False, 'no_cot': False, 'c_thought': 2, 'epochs_per_stage': 1, 'max_latent_stage': 3, 'pad_latent_to_max': True, 'replacement_method': '-1', 'save_only_improve': True, 'uniform_prob': 0.0, 'model_id': 'plaguss/Qwen2.5-0.5B-Math-Shepherd-PRM-0.2', 'load_model_path': None, 'seed': 0, 'resume': 0, 'bf16': True, 'bf16_weight': False, 'train_path': 'data/gsm_train.json', 'val_path': 'data/gsm_valid.json', 'reset_optimizer': False, 'batch_size_training': 10, 'max_size': 10000, 'debug': False, 'gradient_accumulation_steps': 4, 'num_epochs': 20, 'lr': 0.0001, 'weight_decay': 0.01}
-|    |   eval/acc |   eval/cot_em |   epoch |   minutes |
-|---:|-----------:|--------------:|--------:|----------:|
-|  0 |  0.25      |             0 |     nan |  nan      |
-|  1 |  0.25      |             0 |       0 |   10.4013 |
-|  2 |  0.205357  |             0 |     nan |  nan      |
-|  3 |  0.205357  |             0 |       1 |   16.4774 |
-|  4 |  0.0684524 |             0 |     nan |  nan      |
-|  5 |  0.0684524 |             0 |       2 |   18.9123 |
-|  6 |  0.0535714 |             0 |     nan |  nan      |
-|  7 |  0.0684524 |             0 |     nan |  nan      |
-|  8 |  0.0327381 |             0 |     nan |  nan      |
-|  9 |  0.0416667 |             0 |       3 |   63.4671 |
- 18%|███████████████████████████▎                                                                                                                              | 754/4250 [1:03:28<4:54:17,  5.05s/it]
+|      |                     eval/acc |                           eval/cot_em | epoch | minutes |
+| ---: | ---------------------------: | ------------------------------------: | ----: | ------: |
+|    0 |                         0.25 |                                     0 |   nan |     nan |
+|    1 |                         0.25 |                                     0 |     0 | 10.4013 |
+|    2 |                     0.205357 |                                     0 |   nan |     nan |
+|    3 |                     0.205357 |                                     0 |     1 | 16.4774 |
+|    4 |                    0.0684524 |                                     0 |   nan |     nan |
+|    5 |                    0.0684524 |                                     0 |     2 | 18.9123 |
+|    6 |                    0.0535714 |                                     0 |   nan |     nan |
+|    7 |                    0.0684524 |                                     0 |   nan |     nan |
+|    8 |                    0.0327381 |                                     0 |   nan |     nan |
+|    9 |                    0.0416667 |                                     0 |     3 | 63.4671 |
+|  18% | ███████████████████████████▎ | 754/4250 [1:03:28<4:54:17,  5.05s/it] |
 wandb: 🚀 View run gsm-qwen_20250201-122443 at: https://wandb.ai/wassname/coconut/runs/al3d68tu
 
 
@@ -470,11 +470,11 @@ prefix = f"""Reason and solve the following math question in this format <|start
 
 Without prompt or chatml
 
-| model_id | loss 0.5 | loss 500 | loss 0.5 epochs |
-|----------|----------|----------|-----------------|
+| model_id          | loss 0.5 | loss 500 | loss 0.5 epochs |
+| ----------------- | -------- | -------- | --------------- |
 | Qwen 0.5b         | 0.6      | 0.29     | 0.18            |
-| 0.5b Math-PRM-0.2  | 0.97     | 0.28     | 0.18            |
-| Coder-0.5B    | 0.6      | 0.3      | 0.19            |
+| 0.5b Math-PRM-0.2 | 0.97     | 0.28     | 0.18            |
+| Coder-0.5B        | 0.6      | 0.3      | 0.19            |
 
 0.5b Math-PRM-0.2
 with prompt
@@ -656,12 +656,12 @@ So now I'd like to experim,ent with a single epoch of each type of hidden states
 
 Loss, Acc, Ratio for
 
-| method | loss | acc | ratio |
-|--------|------|-----|-------|
-| none lr=6e-3 | 9.4  | 0. | 1.002 |
+| method       | loss | acc  | ratio |
+| ------------ | ---- | ---- | ----- |
+| none lr=6e-3 | 9.4  | 0.   | 1.002 |
 | none lr=6e-4 | 0.5  | 0.16 | 0.94  |
 | none lr=6e-5 | 0.65 | 0.19 | 0.951 |
-| hs[-1]  | 22  | 0 |  0.926 |
+| hs[-1]       | 22   | 0    | 0.926 |
 
 ok none whould work! lets turn of or fix lr and seq_vcr
 lr frp, 6e-3 to 6e-4
@@ -708,12 +708,12 @@ python scripts/run.py EpochSingle --opt-8b --bff6_weight --lr=1e-5
 when I did it in 32bit it took twice as long, started better, and got worse?? 
 python scripts/run.py EpochSingle --no-bf16  --batch-size-training=32 --gradient-accumulation-steps=4 --lr=1e-6
 
-|          |   eval/acc |   eval/cot_em |   epoch |   stage |   eval/ratios |   train/minutes |   train/loss |   eval/loss |
-|---:      |-----------:|--------------:|--------:|--------:|--------------:|----------------:|-------------:|------------:|
-|  0       |     0.461  |         0.119 |      -1 |      -1 |        0.9321 |        nan      |  nan         |    nan      |
-|  lr 1e-4 |     0.3011 |         0.119 |       1 |      -1 |        0.9079 |          7.1669 |    0.0911841 |      0.2372 |
-|  1r 1e-5 |     0.4572 |         0.145 |       1 |      -1 |        0.9246 |          7.1446 |    0.0896801 |       0.238 |
-|  1e-6    |     0.4275 |        0.1264 |       1 |      -1 |        0.9314 |            7.13 |       0.1144 |      0.2468 |
+|         | eval/acc | eval/cot_em | epoch | stage | eval/ratios | train/minutes | train/loss | eval/loss |
+| ------: | -------: | ----------: | ----: | ----: | ----------: | ------------: | ---------: | --------: |
+|       0 |    0.461 |       0.119 |    -1 |    -1 |      0.9321 |           nan |        nan |       nan |
+| lr 1e-4 |   0.3011 |       0.119 |     1 |    -1 |      0.9079 |        7.1669 |  0.0911841 |    0.2372 |
+| 1r 1e-5 |   0.4572 |       0.145 |     1 |    -1 |      0.9246 |        7.1446 |  0.0896801 |     0.238 |
+|    1e-6 |   0.4275 |      0.1264 |     1 |    -1 |      0.9314 |          7.13 |     0.1144 |    0.2468 |
 for vcr2 I lowered the lambda for seq-vcr by 1/100 and they still go down but so dos the normal ar loss
 
 
@@ -743,3 +743,46 @@ So learning
 ![](img/ksnip_20250518-095710.png)
 
 https://wandb.ai/wassname/coconut/runs/xvwpx0dj
+
+```sh
+python scripts/run.py EpochSingleLatent  --replacement-method="hs[-1]"
+# /workspace/coconut/wandb/run-20250518_022740-nuq8u2c8
+python scripts/run.py EpochSingleLatent  --replacement-method="hs[-2]"
+python scripts/run.py EpochSingleLatent  --replacement-method="supressed[0.5:]"
+python scripts/run.py EpochSingleLatent  --replacement-method="ie+supressed[0.5:]"
+python scripts/run.py EpochSingleLatent  --replacement-method="hs[-2]+supressed[0.5:]"
+python scripts/run.py EpochSingleLatent  --replacement-method="supressed[0.75:]"
+python scripts/run.py EpochSingleLatent  --replacement-method="supressed[0.25:]"
+python scripts/run.py EpochSingleLatent  --replacement-method="hs[-3]"
+python scripts/run.py EpochSingleLatent  --replacement-method="supressed[0.9:]"
+python scripts/run.py EpochSingleLatent  --replacement-method="hs[-4]"
+```
+
+|        | eval/acc | eval/cot_em | epoch | stage | eval/ratios | train/minutes | train/loss | eval/loss |
+| -----: | -------: | ----------: | ----: | ----: | ----------: | ------------: | ---------: | --------: |
+|      0 |        0 |      0.0074 |    -1 |     3 |      0.7401 |           nan |        nan |       nan |
+| hs[-1] |    0.052 |      0.0074 |     3 |     3 |      0.6023 |       18.8816 |     0.7113 |    0.7133 |
+
+ah that was stage 3 due to a calc error, lets try stage 1
+
+6 mins instead of 20
+
+
+If we train for 1 epoch which replacement method is best/
+
+ Config: {'project': 'coconut', 'save_path': 'outputs/', 'name': 'gsm-qwen-0.6bh100', 'model_id': 'suayptalha/Qwen3-0.6B-Math-Expert', 'only_eval': False, 'load_model_path': 'outputs/qwen3-0.6b_20250514-194730/checkpoint_2', 'resume_epochs': 3, 'replacement_method': 'hs[-2]+supressed[0.5:]', 'use_position_ids': True, 'bf16': True, 'bf16_weight': False, 'opt_8b': False, 'cot_epochs': 2, 'epochs_per_stage': 1, 'max_latent_stage': 3, 'num_epochs': 4, 'batch_size_training': 48, 'gradient_accumulation_steps': 3, 'lr': 0.0001, 'weight_decay': 0.01, 'grad_clip': 10.0, 'scheduler': 'cosine', 'debug': False, 'seed': 42, 'reset_optimizer': True, 'loss_seq_vcr': True, 'max_size': 8000, 'c_thought': 2, 'pad_latent_to_max': True, 'uniform_prob': 0.0, 'train_path': 'data/gsm_train.json', 'val_path': 'data/gsm_valid.json', 'system_prompt': ''}
+
+|                        | eval/acc | eval/cot_em | epoch | stage | eval/ratios | train/minutes | train/loss | eval/loss |
+| ---------------------: | -------: | ----------: | ----: | ----: | ----------: | ------------: | ---------: | --------: |
+|       supressed[0.75:] |   0.3383 |      0.0074 |     3 |     1 |      0.9259 |       10.1804 |   0.421989 |    0.4588 |
+|       supressed[0.90:] |   0.2379 |      0.0112 |     3 |     1 |      0.9264 |        10.126 |   0.364225 |    0.4098 |
+|                 hs[-4] |   0.2342 |      0.0112 |     3 |     1 |      0.9199 |        8.4421 |   0.352921 |    0.3992 |
+|                 hs[-3] |   0.2268 |      0.0112 |     3 |     1 |      0.9202 |        8.3769 |   0.341455 |    0.3993 |
+|        supressed[0.5:] |    0.223 |      0.0112 |     3 |     1 |       0.924 |       10.2664 |   0.537695 |    0.5329 |
+|     ie+supressed[0.5:] |   0.2156 |      0.0112 |     3 |     1 |       0.924 |       10.3073 |   0.540861 |    0.5356 |
+|                 hs[-2] |   0.1896 |      0.0149 |     3 |     1 |      0.9175 |        8.4899 |   0.341802 |    0.3987 |
+| hs[-2]+supressed[0.5:] |   0.1784 |      0.0074 |     3 |     1 |      0.9456 |       10.3819 |   0.733456 |     0.582 |
+|                 hs[-1] |   0.1747 |      0.0112 |     3 |     1 |      0.9452 |        8.7211 |   0.420122 |    0.4459 |
+|       supressed[0.25:] |   0.1487 |           0 |     3 |     1 |      0.9287 |       10.6798 |   0.613252 |     0.587 |
+
+python scripts/run.py GsmQwen_H100

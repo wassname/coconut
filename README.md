@@ -28,6 +28,22 @@ Replication and extension of [*Training Large Language Models to Reason in a Con
 ![Accuracy vs. Tokens & Training Time](img/ksnip_20250518-095710.png)  
 Full logs on [Weights & Biases](https://wandb.ai/wassname/coconut/runs/xvwpx0dj)
 
+
+### Finding: The last hidden state is a poor choice for injection
+
+
+|                        | eval/acc | eval/cot_em | 
+| ---------------------: | -------: | ----------: | 
+|       supressed[0.75:] |   0.3383 |      0.0074 | 
+|       supressed[0.90:] |   0.2379 |      0.0112 | 
+|                 hs[-4] |   0.2342 |      0.0112 | 
+|                 hs[-3] |   0.2268 |      0.0112 | 
+|        supressed[0.5:] |    0.223 |      0.0112 | 
+|                 hs[-2] |   0.1896 |      0.0149 | 
+|                 hs[-1] |   0.1747 |      0.0112 | 
+
+In the table above we train for one epoch to see which method of hidden state injection works best. The first column is the method used, the second column is the accuracy on the eval set. The methods are `hs[-1]` (last hidden state), `hs[-2]` (second to last hidden state), and `supressed[0.5:]` (isolating the [suppressed activations](https://github.com/wassname/eliciting_suppressed_knowledge) in the last 50% of layers). As you can see the default `hs[-1]` is the worst performing method. The `supressed[0.75:]` method is the best performing method.
+
 ## Install
 
 ```bash
