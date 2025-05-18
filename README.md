@@ -1,4 +1,4 @@
-# Attempting to Replicate and Extending COCONUT  
+# Attempting to Replicate and Extend COCONUT  
 (Training Large Language Models to Reason in a Continuous Latent Space)
 
 Replication and extension of [*Training Large Language Models to Reason in a Continuous Latent Space*](https://arxiv.org/abs/2412.06769), with added features:
