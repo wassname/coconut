@@ -11,13 +11,14 @@ Replication and extension of [*Training Large Language Models to Reason in a Con
 
 ## Contributions
 
-- Added SEQ-VCR loss (see [coconut/vcr_loss.py])  
-- Implemented latent-token positional encoding  
-- Replicated on Qwen3-0.6B ([coconut/configs.py])  
-- Explored hidden-state reinjection strategies:  
-  - Suppressed neurons  
+- Explored hidden-state reinjection strategies (see the full table of one epoch results):  
+  - [suppressed activations](https://github.com/wassname/eliciting_suppressed_knowledge) (best)
   - Second-to-last layer  
   - Projections of the last hidden state  
+- Added SEQ-VCR loss (see [coconut/vcr_loss.py]). This didn't hurt and seemed to help, but I didn't have the gpu hours for a A/B test. I added this hoping that it would help and the sparsity would make the latent thoughts more interpreable. [This is becaus of concerns about latent thinking and deceptive alignment](https://www.lesswrong.com/posts/D2Aa25eaEhdBNeEEy/worries-about-latent-reasoning-in-llms)
+- Implemented latent-token positional encoding  
+- Replicated on Qwen3-0.6B ([coconut/configs.py])  
+
 - Refactored codebase for clarity and single-GPU debugging  
 
 ## Findings
