@@ -28,9 +28,9 @@ Replication and extension of [*Training Large Language Models to Reason in a Con
 
 In the below image I use the following stages:
 - stage = -1: Chain Of Thought Only
-- stage = 0: <start-latent><end-latent> but not actualy latent thoughts
-- stage = 1 <start-latent><latent><latent><end-latent> 2 latent tokens where the hidden states are reinjected into the embeddings of the next token
-- stage = 2<start-latent><latent><latent><latent><latent><end-latent>
+- stage = 0: <|start-latent}><|end-latent|> but not actualy latent thoughts
+- stage = 1 <|start-latent}><|latent|><|latent|><|end-latent|> 2 latent tokens where the hidden states are reinjected into the embeddings of the next token
+- stage = 2 <|start-latent}><|latent|><|latent|><|latent|><|latent|><|end-latent|>
 
 ![Accuracy vs. Tokens & Training Time](img/ksnip_20250518-095710.png)  
 Full logs on [Weights & Biases](https://wandb.ai/wassname/coconut/runs/xvwpx0dj)
