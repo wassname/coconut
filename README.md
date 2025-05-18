@@ -24,7 +24,7 @@ Replication and extension of [*Training Large Language Models to Reason in a Con
 ## Findings
 
 - Maintains accuracy with far fewer output tokens; more training will likely improve results.  
-- Training time grows exponentially with token count—consider partial backpropagation or gradient checkpointing to improve compute efficiency.
+- **Training time grows exponentially with token count**—consider partial backpropagation or gradient checkpointing to improve compute efficiency.
 
 ![Accuracy vs. Tokens & Training Time](img/ksnip_20250518-095710.png)  
 Full logs on [Weights & Biases](https://wandb.ai/wassname/coconut/runs/xvwpx0dj)
@@ -43,7 +43,7 @@ Full logs on [Weights & Biases](https://wandb.ai/wassname/coconut/runs/xvwpx0dj)
 |                 hs[-2] |   0.1896 |      0.0149 | 
 |                 hs[-1] |   0.1747 |      0.0112 | 
 
-In the table above we train for one epoch to see which method of hidden state injection works best. The first column is the method used, the second column is the accuracy on the eval set. The methods are `hs[-1]` (last hidden state), `hs[-2]` (second to last hidden state), and `supressed[0.5:]` (isolating the [suppressed activations](https://github.com/wassname/eliciting_suppressed_knowledge) in the last 50% of layers). As you can see the default `hs[-1]` is the worst performing method. The `supressed[0.75:]` method is the best performing method.
+In the table above we train for one epoch to see which method of hidden state injection works best. The first column is the method used, the second column is the accuracy on the eval set. The methods are `hs[-1]` (last hidden state), `hs[-2]` (second to last hidden state), and `supressed[0.5:]` (isolating the [suppressed activations](https://github.com/wassname/eliciting_suppressed_knowledge) in the last 50% of layers). As you can see the default `hs[-1]` is the worst performing method. **The `supressed[0.75:]` method is the best performing method.**
 
 ## Install
 
