@@ -2,10 +2,13 @@
 # All rights reserved.
 
 import json
+from loguru import logger
 import itertools
 import random
 from dataclasses import dataclass
 from typing import Optional
+import multiprocessing as mp
+import os
 
 import torch
 import torch.distributed as dist
@@ -13,25 +16,56 @@ from datasets import Dataset
 from transformers import PreTrainedTokenizerBase
 from transformers.data.data_collator import pad_without_fast_tokenizer_warning
 
+DEBUG = os.environ.get("DEBUG", False)
 
-def get_dataset(path, tokenizer, max_size=1000000000, drop_unused=True):
+default_num_proc = None if DEBUG else mp.cpu_count()//2 
+
+
+def get_dataset(path, tokenizer, max_size=1000000000, drop_unused=True, system_prompt="", num_proc=default_num_proc, verbose=True):
+    if system_prompt:
+        # system_prompt = "<|im_start|>system\n" + system_prompt.strip() + "<|im_end|>\n"
+        system_prompt = system_prompt.strip() + "\n"
+
+    # pre_q = "<|im_start|>user\n"
+    pre_q = ""
+
+    # encode = tokenizer.encode
+    # encode = tokenizer.apply_chat_template
+
+    # post_q = "<|im_end|>\n<|im_start|>assistant\n"
+    post_q = ""
+
     def tokenize_sample(sample):
-        question_tokenized = tokenizer.encode(
-            sample["question"] + "\n", add_special_tokens=True
-        )
-        steps_tokenized = [
-            tokenizer.encode(s + "\n", add_special_tokens=False)
-            for s in sample["steps"]
+        """We want parts of the quesiton tokenized separately, but we also want to use the chat template. Easiest way is chat_template to text -> split -> encode"""
+
+
+        sep = "<|split|>"
+
+        steps = f"\n{sep}".join(sample["steps"])+"\n"
+        ans = f"{sep}### {sample['answer']}\n"
+
+        messages_split = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": pre_q + sample["question"] + post_q},
+            {"role": "assistant", "content": sep+steps+ans},
         ]
-        answer_tokenized = tokenizer.encode(
-            "### " + sample["answer"], add_special_tokens=False
-        ) + [tokenizer.eos_token_id]
+        text = tokenizer.apply_chat_template(messages_split, tokenize=False)
+        parts = text.split(sep)
+        parts_t = [tokenizer.encode(p, add_special_tokens=False) for p in parts]
+
+        n_steps = len(sample["steps"])
+        assert len(parts_t) == n_steps + 2, f"{len(parts_t)} != {n_steps+2} {text} {sample['steps']}"
+        question_tokenized = parts_t[0]
+        steps_tokenized = parts_t[1:n_steps+1]
+        answer_tokenized = parts_t[n_steps+1]
 
         sample = {
             "question_tokenized": question_tokenized,
             "steps_tokenized": steps_tokenized,
             "answer_tokenized": answer_tokenized,
             "idx": sample["idx"],
+            # "messages_split": messages_split,
+            # "text": text,
         }
         return sample
 
@@ -46,24 +80,17 @@ def get_dataset(path, tokenizer, max_size=1000000000, drop_unused=True):
     dataset = Dataset.from_dict({k: [d[k] for d in data] for k in keys})
 
     dataset_tok = dataset.map(
-        tokenize_sample, remove_columns=list(dataset.features) if drop_unused else None, num_proc=32, 
-        desc=path
+        tokenize_sample, remove_columns=list(dataset.features) if drop_unused else None, num_proc=num_proc, 
+        desc=f'tokenize_sample: {path}'
     )
 
-    # verify
-    d = data[0]
-    complete = d["question"] + "\n" + "\n".join(d["steps"]) + "\n### " + d["answer"]
-    complete_tokenized = tokenizer.encode(complete, add_special_tokens=True) + [
-        tokenizer.eos_token_id
-    ]
-    assert (
-        complete_tokenized
-        == dataset_tok[0]["question_tokenized"]
-        + list(itertools.chain.from_iterable(dataset_tok[0]["steps_tokenized"]))
-        + dataset_tok[0]["answer_tokenized"]
-    )
-
-
+    row = dataset_tok[0]
+    if verbose:
+        logger.debug("Example row:")
+        logger.debug("question_tokenized", tokenizer.decode(row["question_tokenized"]))
+        for i, s in enumerate(row["steps_tokenized"]):
+            logger.debug(f"steps_tokenized[{i}] {tokenizer.decode(s).strip()}")
+        logger.debug(f'answer_tokenized {tokenizer.decode(row["answer_tokenized"])}', )
 
     return dataset_tok
 
@@ -187,6 +214,7 @@ def get_question_only_latent_dataset(
     eot_id,
     no_bot_eot=False,
     drop_unused=True,
+    num_proc=default_num_proc,
 ):
     """    
     for testing, with no reasoning or ans
@@ -196,6 +224,9 @@ def get_question_only_latent_dataset(
     args:
     - no_bot_eot: if True, don't include thought tokens 
     """
+
+    no_bot_eot = scheduled_stage < 0
+
     def process_dataset(sample):
 
         if configs.pad_latent_to_max:
@@ -208,6 +239,7 @@ def get_question_only_latent_dataset(
 
         # we increase the amount of thought steps as we progress throught the coconut epochs
         k = min(max_latent_stage, scheduled_stage)
+        k = max(0, k)
 
         
         k *= configs.c_thought
@@ -227,8 +259,8 @@ def get_question_only_latent_dataset(
         }
 
     return base_dataset_valid.map(
-        process_dataset, remove_columns=list(base_dataset_valid.features) if drop_unused else None, num_proc=32,
-         desc=f"q_latent_{scheduled_stage}"
+        process_dataset, remove_columns=list(base_dataset_valid.features) if drop_unused else None, num_proc=num_proc,
+         desc=f"process_dataset: q_latent_{scheduled_stage}"
     )
 
 
@@ -239,14 +271,15 @@ def get_cot_latent_dataset(
     bot_id,
     latent_id,
     eot_id,
-    no_bot_eot=False,
     shuffle=False,
     drop_unused=True,
+    num_proc=default_num_proc,
 ):
     """chain of thought latent dataset for training
     
     format: question, latent, reasoning, answer
     """
+    no_bot_eot = scheduled_stage < 0
     n_additional_tokens = 0 if no_bot_eot else 2
 
     def process_dataset(sample):
@@ -257,7 +290,7 @@ def get_cot_latent_dataset(
                 list(range(len(sample["steps_tokenized"]) + 1))
             )
         else:
-            scheduled_stage_to_train = scheduled_stage
+            scheduled_stage_to_train = max(0, scheduled_stage)
 
         # progressivly replace reasoning steps with latent tokens
         # n_skip_steps: number of reasoning steps to skip, replace with `c_thought` latent tokens
@@ -275,9 +308,9 @@ def get_cot_latent_dataset(
                     len(sample["steps_tokenized"]), configs.max_latent_stage
                 )
         
-        if configs.no_cot:
-            n_skip_steps = 100  # skip all step
-            n_latent_tokens = 0
+        # if configs.no_cot:
+        #     n_skip_steps = 100  # skip all step
+        #     n_latent_tokens = 0
 
         # for each reasoning step we use X tokens
         n_latent_tokens *= configs.c_thought
@@ -312,8 +345,8 @@ def get_cot_latent_dataset(
         }
 
     processed_dataset = base_dataset.map(
-        process_dataset, remove_columns=list(base_dataset.features) if drop_unused else None, num_proc=32,
-        desc=f"cot_latent_{scheduled_stage}"
+        process_dataset, remove_columns=list(base_dataset.features) if drop_unused else None, num_proc=num_proc,
+        desc=f"process_dataset: cot_latent_{scheduled_stage}"
     )
     if shuffle:
         processed_dataset = processed_dataset.shuffle()

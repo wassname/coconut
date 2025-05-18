@@ -171,6 +171,14 @@ Test accuracy: 0.13: 100%|██████████████████
 Qwen/Qwen2.5-0.5B starts with loss 0.6, loss 0.29 by step 500. 0.133 by end of epoch, .18 by 0.5 epochs
 plaguss/Qwen2.5-0.5B-Math-Shepherd-PRM-0.2 starts 0.97, 0.28 by 500, 0.18 by 0.5
 Qwen/Qwen2.5-Coder-0.5B 0.6, 0.3 by 500, 0.19 at 0.5 epochs
+So.. they are all about the same?
+
+| model_id     | loss 0.5 | loss 500 | loss 0.5 epochs |
+| ------------ | -------- | -------- | --------------- |
+| Qwen         | 0.6      | 0.29     | 0.18            |
+| Math-PRM-0.2 | 0.97     | 0.28     | 0.18            |
+| Coder-0.5B   | 0.6      | 0.3      | 0.19            |
+
 
 {'loss': 0.6079, 'grad_norm': 13.604103088378906, 'learning_rate': 6.222775357809583e-06, 'epoch': 0.0}                                                                          
 {'loss': 0.2347, 'grad_norm': 8.023530960083008, 'learning_rate': 1.2445550715619167e-05, 'epoch': 0.01}                                                                         
@@ -427,156 +435,354 @@ TODO
 wandb: 🚀 View run gsm-qwen_20250201-122443 at: https://wandb.ai/wassname/coconut/runs/al3d68tu
 
 
-# 2025-02-08 08:26:26
-
-Trying on h100 for speed.
-With bf16 (not sure if this will learn), batch of 48. 2min for first epoch, 8 for second, ? 3rd
+Hmm just try to replicate?
+Hmm just try with fp32?
 
 
-# Results: gsm-qwen-1.5b_20250208-082744
-{'project': 'coconut', 'save_path': 'outputs/', 'name': 'gsm-qwen-1.5b', 'only_eval': False, 'coconut': True, 'cot': False, 'no_thoughts': False, 'no_cot': False, 'c_thought': 2, 'epochs_per_stage': 2, 'max_latent_stage': 3, 'pad_latent_to_max': True, 'replacement_method': '-1', 'uniform_prob': 0.0, 'model_id': 'Qwen/Qwen2.5-Math-1.5B', 'load_model_path': None, 'resume': 0, 'seed': 0, 'bf16': True, 'bf16_weight': True, 'train_path': 'data/gsm_train.json', 'val_path': 'data/gsm_valid.json', 'batch_size_training': 42, 'max_size': 8000, 'debug': False, 'gradient_accumulation_steps': 1, 'num_epochs': 50, 'lr': 0.0001, 'weight_decay': 0.0}
-|      |   eval/acc | eval/cot_em | epoch | minutes |
-| ---: | ---------: | ----------: | ----: | ------: |
-|    0 | 0.00371747 |           0 |     0 | 3.67468 |
-|    1 |  0.0260223 |           0 |     1 | 3.26432 |
-|    2 |  0.0780669 |           0 |     2 | 7.86726 |
-|    3 |  0.0238095 |           0 |   nan |     nan |
-|    4 |   0.047619 |           0 |   nan |     nan |
-|    5 |   0.047619 |           0 |   nan |     nan |
-|    6 |          0 |           0 |   nan |     nan |
-|    7 |  0.0952381 |           0 |   nan |     nan |
-|    8 |   0.047619 |           0 |   nan |     nan |
-|    9 |  0.0714286 |           0 |   nan |     nan |
-|   10 |   0.047619 |           0 |   nan |     nan |
-|   11 |  0.0952381 |           0 |   nan |     nan |
-|   12 |  0.0714286 |           0 |   nan |     nan |
-|   13 |  0.0855019 |           0 |     3 |  70.464 |
+Note is the original should get 40% with gpt2
+used almost 400k samples, and 50 epochs!!
 
-A lot faster!
-and with fixed eval that's like 9.5%
-now lets check with 32b, does it make a difference by epoch 13 or so?
-
-hmm by stage 3 it's already 16% much better. but 16mins, so 2.2x slower.
-NOTE, I did change something else. I added the latent tokens slower, so this is phase 1 still. also this was with adam_bnb_8bit oops
-
-what about bf16 training and 32b weight? 
+also they did not use bf16
+they did not reset the optimiser. One big run of 25 epochs for CoT. Then 25 for tink
+no scheduler?
 
 
-on h100
-32b with adamw_8bit, bs=32
-32b, bs=26
-32b weights, bf16 train, 8bit grad, bs=42?
+So the RL experiment used a prompt and a tiny training. Why did that need 8k, but this needs 400k*50!!!. Maybe learning new fundemental behavious takes a long itme. Maybe the prompt helps?
+- try with prompt to help initial exploration
+- don't reset optimiser!!? how
+
+no no schedule?
+might help if I use chatml to tokenize?
 
 
-H100 at epoch 3
-| weight | train | grad | bs  | acc  | epoch | minutes |
-| ------ | ----- | ---- | --- | ---- | ----- | ------- |
-| 32b    | 32b   | 32b  | 26  | 0.25 | ?     | 19      |
-| 32b    | 32b   | 8b   | 32  | 0.16 | 3     | 16      |
-| 32b    | bf16  | 32b  | 42  | 0.23 | 3     | 8.8       |
-| 32b    | bf16  | 8b   | 42  | 0.26 | ?     | 8       |
-| bf16   | bf16  | 8b   | 42  | 0.09 | 3     | 8       |
+### prompts?
+
+https://github.com/Jiayi-Pan/TinyZero/blob/8a623926012ff785f2dc6f3639a821465eed07c4/examples/data_preprocess/countdown.py#L65
+
+"""<|im_start|>system\nFirst think about the reasoning process in the mind and then provides the user with the answer.<|im_end|>\n<|im_start|>user\n Using the numbers {numbers}, create an equation that equals {target}. You can use basic arithmetic operations (+, -, *, /) and each number can only be used once. Show your work in << and >> tags. And return the final answer after ### , for example <<(1 + 2) / 3 = 1>>\n## 1<|im_end|>\n<|im_start|>assistant\nLet me solve this step by step.\n"""
 
 
-https://wandb.ai/wassname/coconut/runs/nk4mg6oj/logs
-radient_accumulation_steps': 1, 'num_epochs': 150, 'lr': 0.0001, 'weight_decay': 0.0}
-|    |   eval/acc |   eval/cot_em |   epoch |   minutes |   scheduled_stage |
-|---:|-----------:|--------------:|--------:|----------:|------------------:|
-|  0 |  0.0148699 |             0 |       0 |  19.6995  |                 0 |
-|  1 |  0.0223048 |             0 |       1 |  18.4202  |                 0 |
-|  2 |  0.327138  |             0 |       2 |  18.7642  |                 1 |
-|  3 |  0.249071  |             0 |       3 |  19.7056  |                 1 |
-|  4 |  0.189591  |             0 |       4 |  20.806   |                 2 |
-|  5 |  0.249071  |             0 |       5 |  21.1867  |                 2 |
-|  6 |  0.230769  |             0 |     nan | nan       |               nan |
-|  7 |  0.211538  |             0 |     nan | nan       |               nan |
-|  8 |  0.211538  |             0 |     nan | nan       |               nan |
-|  9 |  0.173077  |             0 |     nan | nan       |               nan |
-| 10 |  0.211538  |             0 |     nan | nan       |               nan |
-| 11 |  0.211538  |             0 |     nan | nan       |               nan |
-| 12 |  0.173077  |             0 |     nan | nan       |               nan |
-| 13 |  0.134615  |             0 |     nan | nan       |               nan |
-| 14 |  0.153846  |             0 |     nan | nan       |               nan |
-| 15 |  0.25      |             0 |     nan | nan       |               nan |
-| 16 |  0.173077  |             0 |     nan | nan       |               nan |
-| 17 |  0.153846  |             0 |     nan | nan       |               nan |
-| 18 |  0.134615  |             0 |     nan | nan       |               nan |
-| 19 |  0.288462  |             0 |     nan | nan       |               nan |
-| 20 |  0.0961538 |             0 |     nan | nan       |               nan |
-| 21 |  0.153846  |             0 |     nan | nan       |               nan |
-| 22 |  0.173077  |             0 |     nan | nan       |               nan |
-| 23 |  0.192308  |             0 |     nan | nan       |               nan |
-| 24 |  0.0576923 |             0 |    **** nan | nan       |               nan |
-| 25 |  0.0576923 |             0 |     nan | nan       |               nan |
-| 26 |  0.134615  |             0 |     nan | nan       |               nan |
-| 27 |  0.0961538 |             0 |     nan | nan       |               nan |
-| 28 |  0.0769231 |             0 |     nan | nan       |               nan |
-| 29 |  0.0384615 |             0 |     nan | nan       |               nan |
-| 30 |  0.104089  |             0 |       6 | 477.331   |                 3 |
-| 31 |  0.104089  |             0 |       7 |   3.61633 |                 3 |
-  0%|                                                                                 
+prefix = f"""Reason about the math question then provide your answer. Show your work in <<< and >>> tags or think in <|start-latent|><|latent|><|end-latent|> tags. And return the final answer after ###, for example <<1+2=3>>\n### 3.
+
+prefix = f"""Reason about the math question in <<< and >>> tags or think silently in <|start-latent|><|latent|><|end-latent|> tags. And return the final answer after ###, for example <<1+2=3>>\n### 3.
+
+prefix = f"""Reason and solve the following math question in this format <|start-latent|><|latent|><|end-latent|><<1+2=3>>\n### 3"""
+
+Without prompt or chatml
+
+| model_id          | loss 0.5 | loss 500 | loss 0.5 epochs |
+| ----------------- | -------- | -------- | --------------- |
+| Qwen 0.5b         | 0.6      | 0.29     | 0.18            |
+| 0.5b Math-PRM-0.2 | 0.97     | 0.28     | 0.18            |
+| Coder-0.5B        | 0.6      | 0.3      | 0.19            |
+
+0.5b Math-PRM-0.2
+with prompt
+0steps 3.5
+step100, loss 0.5
+step 400, 0.2
 
 
-# tricks
-
-Hmm people are praising unsloths small model hacks https://colab.research.google.com/github/unslothai/notebooks/blob/main/nb/Qwen2.5_(3B)-GRPO.ipynb#scrollTo=cXk993X6C2ZZ
-special gradient checkpointing
-adam 8 bit
-lorra
-bs1
-grad accum 1
-max_grad_norm=0.1 (1)
-bf16
-cosien scheduler
-
-https://unsloth.ai/blog/r1-reasoning
-- > It's advised to apply GRPO to a model at least 1.5B in parameters to correctly generate thinking tokens as smaller models may not.  
-- > We enable -O3 in vLLM by default and enable prefix caching
+but acc was only 0.02, wth
 
 
-https://old.reddit.com/r/MachineLearning/comments/1ik3nkr/p_grpo_fits_in_8gb_vram_deepseek_r1s_zeros_recipe/
-
-https://substack.com/home/post/p-154490380
-- DPO online workerd etter (what is this?)
+![seems to help with loer loss](files/image.png)
 
 
-https://github.com/unslothai/unsloth/blob/53a773e4fbc53a1d96c7ba107e5fe75dab07027b/unsloth/models/rl.py#L419
-- replace samping with Replace with our vLLM engine
+# trying with smol model, but god it's so basd and slow
 
-# 2025-02-09 03:25:01
-
-Ok so all quant exept bf16 weights are good
-
-Now trying with a lower learning rate and another replacement method, can we get higher than 0.25
+I reckon I will need 1.5b+ to even work, so I should just rent some H100 or two
+- USD $2.00 per hour. 3.25 aud
+# 
+ok revisit 1. gpt2 2. seq-vcr 3. wich alyer 4 batch size
 
 
-Hmm next can we try adding the Seq-VCR loss and TopoNet? 
-toponets https://x.com/apurvaratan/status/1884805634400330002
-https://arxiv.org/abs/2501.16396
 
 
-https://x.com/gm8xx8/status/1888831941161451536
-https://huggingface.co/tomg-group-umd/huginn-0125
-https://arxiv.org/abs/2502.05171
+# 2025-05-06 19:26:30
 
-[Seq-VCR](https://arxiv.org/html/2411.02344v1#S5)
+Ok I think that if I add special positional encodings the model might learn faster that it's in another mode
 
-```py
-B=2
-T=3
-H=40000
-hs = torch.rand(B, T, H)
-P = 2048
-proj = nn.Linear(H, P)
-hs_p = proj(hs)
-hs_p = rearrange(hs, 'b t h -> (b t) h')
-torch.cov(hs_p)
+ok with smol2 it's 5:28 mins train, 3:06mins to test the first epoch
 
+eval_1 12mins
+
+
+TODO can we resume from a stage is saved or passed?
+outputs/gsm-smol_20250508-155834/checkpoint_0
+
+OK I'm running, on smol, with the proper number of epochs. Overnight
+So it shold do as well as gpt2 if not better that is. GSM9k, 42.9 with CoT, 21.6 without thought, 34.1 coconut. In fact this should do better as it has better pretrasining than gpt2 with the same size
+
+
+meant to do 25 epochs of CoT First
+ 
+# from the github
+
+https://github.com/facebookresearch/coconut/issues/11
+
+> Hi, thanks for the question.
+
+> We haven't got time to carefully tune the hyper-parameters for larger models like Llama. Generally it's better to use a smaller lr (e.g. 1e-5) and fewer epochs per stage to avoid overfitting.
+
+> We'd like to note that, since these larger models have been pre-trained extensively on language space rather than latent space, you may find coconut at a disadvantage in comparison with language CoT. Future work will explore pre-training in latent space to better unlock the potential of latent reasoning.
+
+https://github.com/facebookresearch/coconut/issues/3
+
+> Hi, thanks for the question. I've confirmed that the exact code can reproduce the reported number. We used 4 GPUs to train the model, which means the effective batch size is 32 * 4 = 128. In the wandb log you shared, the effective batch size seems to be 32?
+
+so changes I need to make
+
+
+- bs: 128
+- ls: 1e-5 with smol2 for speed
+- 25 to 50 epochs
+- should be around 40% with CoT
+- max size 1000000000 not (it's 3012 samples at 32 batch, 45mins)
+
+
+
+in the smol2 train they used 3e-4 !
+https://github.com/huggingface/alignment-handbook/blob/main/recipes/smollm2/sft/config.yaml
+presumably with linear (defualt) but maybe cosine
+https://github.com/huggingface/nanotron/blob/c737f00f01e65bc44e7624695351da7ed756ec31/examples/doremi/configs/config_280m_llama.yaml#L69
+weight_decay: 0.01
+
+
+ah butthen unsloth uses linear, and 5e-5 hmm
+but we are not continued pretrain we are CoT train
+https://colab.research.google.com/github/unslothai/notebooks/blob/main/nb/Mistral_(7B)-Text_Completion.ipynb#scrollTo=95_Nn-89DhsL
+another is cosine 5e-5 weight decay 0 huh
+
+
+
+https://github.com/huggingface/alignment-handbook/blob/main/recipes/smollm2/sft/config_smol.yaml
+wow smol has 1e-3??
+but this would just be at the start of all training since it's cosine so not so good for me hmm
+
+their recipy for fine tune is also 1e-3
+
+note they use trl sft
+and they just load args on top
+
+
+ok I think we could have 
+1e-3 with cosine
+or 3e-4 with linear
+
+
+hmm maybe I need to remove qwen
+maybe I need to apply chat template?'
+
+
+hmm I shoudl check the lods
+
+# 2025-05-10 07:04:36
+
+For some reason it doesn't seem to learn in bfloat16.
+With 9 epochs of CoT training smol2 model only has 0.6% acc. Weird. I'ts learnt some CoT but it's all wrong.
+This is using 1e-3 and no weight decay as reccmended by the model makers.
+I might have to go back to Qwen 0.6, and then even 16b and 8b, and hope they work or V100
+
+
+
+- Qwen
+- omegaconfig again?
+  - save config
+- either smaller epochs for testing or ... yeah that's easier
+- I don't know the right lr... 1e-4 after 20k did not work. incoherent. loss of 1.5. 
+maybe warmup too
+
+
+
+without sys prompt but with template I get 0.17 loss after 334it. incoherent. 0% CoT match
+and with, 1.2% CoT match
+
+
+yet it made almost no diff in the loss. strange
+
+
+fixme... why is it only generating 2 tokens when asked for 100? something is weird
+this is in eval
+
+
+
+did an overnight one 19 epochs
+outputs/qwen3-0.6b_20250510-205601/checkpoint_18 
+https://wandb.ai/wassname/coconut/runs/4iaa9wbb?nw=nwuserwassname
+loss went up a lot, hmm
+but it still had that 2 tocken gen. But I can eval all the checkpoints to check and fix
+but it did work with only 84% mem alloc!!
+seems like grad norm was good as it spiked up, so was warmup'
+I could add warmup for adding <start_latent> and adding latent too!
+it got a lot slower at epoch 14
+2025-05-11 06:11:02.866 | INFO     | coconut.eval:evaluate:110 - Correct=4, CoT_correct=6, Total=500. eval_18                                                                   
+2025-05-11 06:11:02.866 | INFO     | coconut.eval:evaluate:111 - Accuracy on val:  4 / 500 =  0.8000%                                                                           
+2025-05-11 06:11:02.867 | INFO     | coconut.eval:evaluate:112 - CoT match on val: 6 / 500 =  1.2000%   
+
+this whole thing is token effecient...but not compuete effecient so who cares? or at least during train, what abput durng inf
+
+
+TODO:
+- fix eval. On thos saved models outputs/qwen3-0.6b_20250510-205601/checkpoint_18 
+
+
+# 2025-05-13 11:34:21
+
+Ok fixed eval. it didn't learn fast, didn't get up to 40%
+![alt text](img/mjc_research_journal-1747113708667-image.png)
+now try lr=1e-4 (10x)
+
+
+
+# 2025-05-15 09:20:41
+
+Ok it got up to 40% on epoch 2. Now I can run expeirments
+- try cosine lr on each epoch
+- eval/los goes up so might be too high
+
+
+hmm mine can learn well for one token but not two, interesting
+maybe I should rename no schedule stage of stage=0
+t
+
+ry lower lr or longer epochst
+ry to debug coesne learning in scr
+atch nb
+try float 32
+
+
+So now I'd like to experim,ent with a single epoch of each type of hidden states, and see the loss/acc after. Also 32b, vs8b grad, 16b weights
+
+Loss, Acc, Ratio for
+
+| method       | loss | acc  | ratio |
+| ------------ | ---- | ---- | ----- |
+| none lr=6e-3 | 9.4  | 0.   | 1.002 |
+| none lr=6e-4 | 0.5  | 0.16 | 0.94  |
+| none lr=6e-5 | 0.65 | 0.19 | 0.951 |
+| hs[-1]       | 22   | 0    | 0.926 |
+
+ok none whould work! lets turn of or fix lr and seq_vcr
+lr frp, 6e-3 to 6e-4
+16% aac. 94$ ratio
+0.5 loss
+
+now try 6e-5
+19.2% acc
+0.951 ratio
+0.65 loss
+
+
+The weird thing is that the initial eal is not good
+
+- hs[-1]
+- supr[0.5:-1]
+- hs[-2]
+- supr[0.5:]+hs[-1]
+- supr[0.5:]+ie
+
+and
+- hs: b16_w
+- hs: 8b grad
+- hs: 32b
+
+Start again as I had it messed up
+
+
+|  method             |   eval/acc |   eval/cot_em |   epoch |   stage |   eval/ratios |   train/minutes |   train/loss |   eval/loss | commnt|
+|---          :       |-----------:|--------------:|--------:|-  -----:|  ------------:|----------------:| ------------:|-------------|   -----|
+|  load               |      0.449 |         0.107 |      -1 |      -1 |         0.933 |       nan       |     nan      |   nan       |        |
+|  1vr,lr=1e-6        |      0.454 |         0.112 |       1 |      -1 |         0.934 |           2.291 |        3.595 |       3.277 |        |
+|  1vr,lr=1e-5        |      0.438 |         0.111 |       1 |      -1 |         0.934 |           2.262 |        3.185 |       2.912 |        |
+|  1vr,le=1e-4        |      0.375 |         0.100 |       1 |      -1 |         0.912 |           2.311 |        0.848 |       0.966 |        |
+|  0sqr,1e-4          |     0.4796 |        0.1115 |       1 |      -1 |        0.9277 |          1.9772 |    0.0611213 |       0.222 |        |
+|  vcr2?,1e-4         |     0.1152 |        0.0297 |       1 |      -1 |        0.9324 |           2.262 |     0.190808 |      0.3211 |  |
+|  vcr2,1e-5          |     0.4201 |        0.119  |       1 |      -1 |        0.9334 |          2.2748 |     0.118035 |      0.2439 |        |
+|  vcrv2 1e-4         |     0.461  |        0.1264 |       1 |      -1 |        0.9229 |          2.3131 |    0.0891597 |      0.2365 | huh this was good       |
+|  vr2,opt8b          |     0.4535 |        0.1264 |       1 |      -1 |        0.9224 |          2.2454 |    0.0888447 |       0.236 | no diff |
+|vc2,1e-4,bf16w       |     0.4052 |        0.0855 |       1 |      -1 |        0.9077 |          2.2486 |    0.0798283 |      0.2391 |this hurt peft |
+
+python scripts/run.py EpochSingle --opt-8b --bff6_weight --lr=1e-5
+
+when I did it in 32bit it took twice as long, started better, and got worse?? 
+python scripts/run.py EpochSingle --no-bf16  --batch-size-training=32 --gradient-accumulation-steps=4 --lr=1e-6
+
+|         | eval/acc | eval/cot_em | epoch | stage | eval/ratios | train/minutes | train/loss | eval/loss |
+| ------: | -------: | ----------: | ----: | ----: | ----------: | ------------: | ---------: | --------: |
+|       0 |    0.461 |       0.119 |    -1 |    -1 |      0.9321 |           nan |        nan |       nan |
+| lr 1e-4 |   0.3011 |       0.119 |     1 |    -1 |      0.9079 |        7.1669 |  0.0911841 |    0.2372 |
+| 1r 1e-5 |   0.4572 |       0.145 |     1 |    -1 |      0.9246 |        7.1446 |  0.0896801 |     0.238 |
+|    1e-6 |   0.4275 |      0.1264 |     1 |    -1 |      0.9314 |          7.13 |     0.1144 |    0.2468 |
+for vcr2 I lowered the lambda for seq-vcr by 1/100 and they still go down but so dos the normal ar loss
+
+
+|  bf16_weight 1e-5|     0.3978 |        0.1264 |       1 |      -1 |        0.9315 |          2.2409 |     0.100122 |      0.2364 |
+|   bf16_weight1e-3 |     0.0074 |        0.0409 |       1 |      -1 |        0.926  |          2.3096 |     0.209068 |      0.3418 |
+python scripts/run.py EpochSingle --opt-8b --bf16_weight --lr=1e-5
+
+python scripts/run.py EpochSingle --weight_decay=0 --grad_clip=0 
+|  1ithout wd |     0.461  |        0.1264 |       1 |      -1 |        0.9229 |          2.2232 |    0.0891597 |      0.2365 |
+
+62% meme with bf16w and opt8b
+77% neither?
+82% opt8
+
+
+python scripts/run.py GsmQwen_H100
+
+next try one epoch of training, but with differen't methods
+
+
+# 2025-05-18 02:05:26 long run
+
+So learning
+- is maintain some of the acc
+- but it slowed exponentially as more latent tokens were added! so this is token effecient in test but not in train... which is not attractive
+- my methods do seem to work as it performs better with onyl a few samples
+![](img/ksnip_20250518-095710.png)
+
+https://wandb.ai/wassname/coconut/runs/xvwpx0dj
+
+```sh
+python scripts/run.py EpochSingleLatent  --replacement-method="hs[-1]"
+# /workspace/coconut/wandb/run-20250518_022740-nuq8u2c8
+python scripts/run.py EpochSingleLatent  --replacement-method="hs[-2]"
+python scripts/run.py EpochSingleLatent  --replacement-method="supressed[0.5:]"
+python scripts/run.py EpochSingleLatent  --replacement-method="ie+supressed[0.5:]"
+python scripts/run.py EpochSingleLatent  --replacement-method="hs[-2]+supressed[0.5:]"
+python scripts/run.py EpochSingleLatent  --replacement-method="supressed[0.75:]"
+python scripts/run.py EpochSingleLatent  --replacement-method="supressed[0.25:]"
+python scripts/run.py EpochSingleLatent  --replacement-method="hs[-3]"
+python scripts/run.py EpochSingleLatent  --replacement-method="supressed[0.9:]"
+python scripts/run.py EpochSingleLatent  --replacement-method="hs[-4]"
 ```
 
+|        | eval/acc | eval/cot_em | epoch | stage | eval/ratios | train/minutes | train/loss | eval/loss |
+| -----: | -------: | ----------: | ----: | ----: | ----------: | ------------: | ---------: | --------: |
+|      0 |        0 |      0.0074 |    -1 |     3 |      0.7401 |           nan |        nan |       nan |
+| hs[-1] |    0.052 |      0.0074 |     3 |     3 |      0.6023 |       18.8816 |     0.7113 |    0.7133 |
 
-ok in the mean time trying a run with
-- instruct model
-- lower lrless epochs
-- only suppressed activations... a yolo run
-- oh max 2 latent tokens
+ah that was stage 3 due to a calc error, lets try stage 1
+
+6 mins instead of 20
+
+
+If we train for 1 epoch which replacement method is best/
+
+ Config: {'project': 'coconut', 'save_path': 'outputs/', 'name': 'gsm-qwen-0.6bh100', 'model_id': 'suayptalha/Qwen3-0.6B-Math-Expert', 'only_eval': False, 'load_model_path': 'outputs/qwen3-0.6b_20250514-194730/checkpoint_2', 'resume_epochs': 3, 'replacement_method': 'hs[-2]+supressed[0.5:]', 'use_position_ids': True, 'bf16': True, 'bf16_weight': False, 'opt_8b': False, 'cot_epochs': 2, 'epochs_per_stage': 1, 'max_latent_stage': 3, 'num_epochs': 4, 'batch_size_training': 48, 'gradient_accumulation_steps': 3, 'lr': 0.0001, 'weight_decay': 0.01, 'grad_clip': 10.0, 'scheduler': 'cosine', 'debug': False, 'seed': 42, 'reset_optimizer': True, 'loss_seq_vcr': True, 'max_size': 8000, 'c_thought': 2, 'pad_latent_to_max': True, 'uniform_prob': 0.0, 'train_path': 'data/gsm_train.json', 'val_path': 'data/gsm_valid.json', 'system_prompt': ''}
+
+|                        | eval/acc | eval/cot_em | epoch | stage | eval/ratios | train/minutes | train/loss | eval/loss |
+| ---------------------: | -------: | ----------: | ----: | ----: | ----------: | ------------: | ---------: | --------: |
+|       supressed[0.75:] |   0.3383 |      0.0074 |     3 |     1 |      0.9259 |       10.1804 |   0.421989 |    0.4588 |
+|       supressed[0.90:] |   0.2379 |      0.0112 |     3 |     1 |      0.9264 |        10.126 |   0.364225 |    0.4098 |
+|                 hs[-4] |   0.2342 |      0.0112 |     3 |     1 |      0.9199 |        8.4421 |   0.352921 |    0.3992 |
+|                 hs[-3] |   0.2268 |      0.0112 |     3 |     1 |      0.9202 |        8.3769 |   0.341455 |    0.3993 |
+|        supressed[0.5:] |    0.223 |      0.0112 |     3 |     1 |       0.924 |       10.2664 |   0.537695 |    0.5329 |
+|     ie+supressed[0.5:] |   0.2156 |      0.0112 |     3 |     1 |       0.924 |       10.3073 |   0.540861 |    0.5356 |
+|                 hs[-2] |   0.1896 |      0.0149 |     3 |     1 |      0.9175 |        8.4899 |   0.341802 |    0.3987 |
+| hs[-2]+supressed[0.5:] |   0.1784 |      0.0074 |     3 |     1 |      0.9456 |       10.3819 |   0.733456 |     0.582 |
+|                 hs[-1] |   0.1747 |      0.0112 |     3 |     1 |      0.9452 |        8.7211 |   0.420122 |    0.4459 |
+|       supressed[0.25:] |   0.1487 |           0 |     3 |     1 |      0.9287 |       10.6798 |   0.613252 |     0.587 |
+
+python scripts/run.py GsmQwen_H100
