@@ -4,6 +4,7 @@
 import random, torch, os
 import numpy as np
 import gc
+import torch.nn as nn
 from argparse import Namespace
 from loguru import logger
 

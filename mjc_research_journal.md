@@ -690,18 +690,56 @@ and
 Start again as I had it messed up
 
 
-|  method      |   eval/acc |   eval/cot_em |   epoch |   stage |   eval/ratios |   train/minutes |   train/loss |   eval/loss |
-|---          :|-----------:|--------------:|--------:|-  -----:|  ------------:|----------------:| ------------:|------------:|
-|  load        |      0.449 |         0.107 |      -1 |      -1 |         0.933 |       nan       |     nan      |   nan       |
-|  1vr,lr=1e-6 |      0.454 |         0.112 |       1 |      -1 |         0.934 |           2.291 |        3.595 |       3.277 |
-|  1vr,lr=1e-5 |      0.438 |         0.111 |       1 |      -1 |         0.934 |           2.262 |        3.185 |       2.912 |
-|  1vr,le=1e-4 |      0.375 |         0.100 |       1 |      -1 |         0.912 |           2.311 |        0.848 |       0.966 |
-|  0sqr,1e-4   |     0.4796 |        0.1115 |       1 |      -1 |        0.9277 |          1.9772 |    0.0611213 |       0.222 |
-|  vcrv2 1e-4  |     0.461  |        0.1264 |       1 |      -1 |        0.9229 |          2.3131 |    0.0891597 |      0.2365 |
-|  vcr2,1e-5   |     0.4201 |        0.119  |       1 |      -1 |        0.9334 |          2.2748 |     0.118035 |      0.2439 |
-|  vcr2,1e-4   |     0.1152 |        0.0297 |       1 |      -1 |        0.9324 |           2.262 |     0.190808 |      0.3211 |
+|  method             |   eval/acc |   eval/cot_em |   epoch |   stage |   eval/ratios |   train/minutes |   train/loss |   eval/loss | commnt|
+|---          :       |-----------:|--------------:|--------:|-  -----:|  ------------:|----------------:| ------------:|-------------|   -----|
+|  load               |      0.449 |         0.107 |      -1 |      -1 |         0.933 |       nan       |     nan      |   nan       |        |
+|  1vr,lr=1e-6        |      0.454 |         0.112 |       1 |      -1 |         0.934 |           2.291 |        3.595 |       3.277 |        |
+|  1vr,lr=1e-5        |      0.438 |         0.111 |       1 |      -1 |         0.934 |           2.262 |        3.185 |       2.912 |        |
+|  1vr,le=1e-4        |      0.375 |         0.100 |       1 |      -1 |         0.912 |           2.311 |        0.848 |       0.966 |        |
+|  0sqr,1e-4          |     0.4796 |        0.1115 |       1 |      -1 |        0.9277 |          1.9772 |    0.0611213 |       0.222 |        |
+|  vcr2?,1e-4         |     0.1152 |        0.0297 |       1 |      -1 |        0.9324 |           2.262 |     0.190808 |      0.3211 |  |
+|  vcr2,1e-5          |     0.4201 |        0.119  |       1 |      -1 |        0.9334 |          2.2748 |     0.118035 |      0.2439 |        |
+|  vcrv2 1e-4         |     0.461  |        0.1264 |       1 |      -1 |        0.9229 |          2.3131 |    0.0891597 |      0.2365 | huh this was good       |
+|  vr2,opt8b          |     0.4535 |        0.1264 |       1 |      -1 |        0.9224 |          2.2454 |    0.0888447 |       0.236 | no diff |
+|vc2,1e-4,bf16w       |     0.4052 |        0.0855 |       1 |      -1 |        0.9077 |          2.2486 |    0.0798283 |      0.2391 |this hurt peft |
 
-for v3 I lowered the lambda for seq-vcr by 1/100 and they still go down but so dos the normal ar loss
-t
-ry lr 1e-5
-try 1e-3
+python scripts/run.py EpochSingle --opt-8b --bff6_weight --lr=1e-5
+
+when I did it in 32bit it took twice as long, started better, and got worse?? 
+python scripts/run.py EpochSingle --no-bf16  --batch-size-training=32 --gradient-accumulation-steps=4 --lr=1e-6
+
+|          |   eval/acc |   eval/cot_em |   epoch |   stage |   eval/ratios |   train/minutes |   train/loss |   eval/loss |
+|---:      |-----------:|--------------:|--------:|--------:|--------------:|----------------:|-------------:|------------:|
+|  0       |     0.461  |         0.119 |      -1 |      -1 |        0.9321 |        nan      |  nan         |    nan      |
+|  lr 1e-4 |     0.3011 |         0.119 |       1 |      -1 |        0.9079 |          7.1669 |    0.0911841 |      0.2372 |
+|  1r 1e-5 |     0.4572 |         0.145 |       1 |      -1 |        0.9246 |          7.1446 |    0.0896801 |       0.238 |
+|  1e-6    |     0.4275 |        0.1264 |       1 |      -1 |        0.9314 |            7.13 |       0.1144 |      0.2468 |
+for vcr2 I lowered the lambda for seq-vcr by 1/100 and they still go down but so dos the normal ar loss
+
+
+|  bf16_weight 1e-5|     0.3978 |        0.1264 |       1 |      -1 |        0.9315 |          2.2409 |     0.100122 |      0.2364 |
+|   bf16_weight1e-3 |     0.0074 |        0.0409 |       1 |      -1 |        0.926  |          2.3096 |     0.209068 |      0.3418 |
+python scripts/run.py EpochSingle --opt-8b --bf16_weight --lr=1e-5
+
+python scripts/run.py EpochSingle --weight_decay=0 --grad_clip=0 
+|  1ithout wd |     0.461  |        0.1264 |       1 |      -1 |        0.9229 |          2.2232 |    0.0891597 |      0.2365 |
+
+62% meme with bf16w and opt8b
+77% neither?
+82% opt8
+
+
+python scripts/run.py GsmQwen_H100
+
+next try one epoch of training, but with differen't methods
+
+
+# 2025-05-18 02:05:26 long run
+
+So learning
+- is maintain some of the acc
+- but it slowed exponentially as more latent tokens were added! so this is token effecient in test but not in train... which is not attractive
+- my methods do seem to work as it performs better with onyl a few samples
+![](img/ksnip_20250518-095710.png)
+
+https://wandb.ai/wassname/coconut/runs/xvwpx0dj

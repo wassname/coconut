@@ -99,7 +99,8 @@ def create_optimizer(model, configs, warmup_fraction=0.1, opt_steps=None, cycles
         optimizer = optimi.AdamW(
             model.parameters(),
             lr=configs.lr,
-            weight_decay=configs.weight_decay,
+            weight_decay=configs.weight_decay if configs.weight_decay else None,
+            kahan_sum=True,
         )
     elif configs.opt_8b:
         import bitsandbytes as bnb
@@ -382,7 +383,7 @@ def main():
                 if (
                     step + 1
                 ) % conf.gradient_accumulation_steps == 0 or is_last_step:
-                    if conf.grad_clip is not None:
+                    if (conf.grad_clip is not None) and (conf.grad_clip > 0):
                         norm = torch.nn.utils.clip_grad_norm_(
                             model.parameters(), conf.grad_clip
                         )

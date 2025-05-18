@@ -115,19 +115,30 @@ class GsmQwen_H100(GSMQwenResume):
     bf16_weight: bool = False
     opt_8b: bool = False
 
+    # note 48 ran out of ram at stage 3
     batch_size_training: int = 48
     gradient_accumulation_steps: int = 3
     max_size: int = 60_000 # full ~400k in coconut
 
 
 @dataclass
-class EpochSingle(GsmQwen_H100):
+class EpochSingleCoT(GsmQwen_H100):
     load_model_path: str = "outputs/qwen3-0.6b_20250514-194730/checkpoint_2"
     cot_epochs: int = 2
     epochs_per_stage: int = 1
     resume_epochs: int = 1
     # loss_seq_vcr: bool = True
     num_epochs: int = 2
+    max_size: int = 8_000 # full ~400k in coconut
+
+@dataclass
+class EpochSingleLatent(GsmQwen_H100):
+    load_model_path: str = "outputs/qwen3-0.6b_20250514-194730/checkpoint_2"
+    cot_epochs: int = 2
+    epochs_per_stage: int = 1
+    resume_epochs: int = 3
+    # loss_seq_vcr: bool = True
+    num_epochs: int = 4
     max_size: int = 8_000 # full ~400k in coconut
 
 @dataclass
