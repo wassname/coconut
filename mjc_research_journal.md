@@ -173,11 +173,11 @@ plaguss/Qwen2.5-0.5B-Math-Shepherd-PRM-0.2 starts 0.97, 0.28 by 500, 0.18 by 0.5
 Qwen/Qwen2.5-Coder-0.5B 0.6, 0.3 by 500, 0.19 at 0.5 epochs
 So.. they are all about the same?
 
-| model_id | loss 0.5 | loss 500 | loss 0.5 epochs |
-|----------|----------|----------|-----------------|
-| Qwen          | 0.6      | 0.29     | 0.18            |
-| Math-PRM-0.2  | 0.97     | 0.28     | 0.18            |
-| Coder-0.5B    | 0.6      | 0.3      | 0.19            |
+| model_id     | loss 0.5 | loss 500 | loss 0.5 epochs |
+| ------------ | -------- | -------- | --------------- |
+| Qwen         | 0.6      | 0.29     | 0.18            |
+| Math-PRM-0.2 | 0.97     | 0.28     | 0.18            |
+| Coder-0.5B   | 0.6      | 0.3      | 0.19            |
 
 
 {'loss': 0.6079, 'grad_norm': 13.604103088378906, 'learning_rate': 6.222775357809583e-06, 'epoch': 0.0}                                                                          
@@ -363,12 +363,12 @@ yeah seems good
 # ok I did a long run with 0,5 no good
 
 coconut.utils.Config object at 0x79fe3a95e710>
-|    |   eval/acc |   eval/cot_em |   epoch |
-|---:|-----------:|--------------:|--------:|
-|  0 |   0.719212 |             0 |       0 |
-|  1 |   0.576355 |             0 |       1 |
-|  2 |   0.458128 |             0 |       2 |
-|  3 |   0.251232 |             0 |       3 |
+|      | eval/acc | eval/cot_em | epoch |
+| ---: | -------: | ----------: | ----: |
+|    0 | 0.719212 |           0 |     0 |
+|    1 | 0.576355 |           0 |     1 |
+|    2 | 0.458128 |           0 |     2 |
+|    3 | 0.251232 |           0 |     3 |
 
 
 TODO better eval (forward one token at a time)
@@ -376,21 +376,21 @@ TODO run eval using transformers
 
 nope can't even replicate wth
 this is with -1
-|    |   eval/acc |   eval/cot_em |   epoch |
-|---:|-----------:|--------------:|--------:|
-|  0 |   0.719212 |             0 |       0 |
-|  1 |   0.561576 |             0 |       1 |
-|  2 |   0.463054 |             0 |       2 |
-|  3 |   0.295567 |             0 |       3 |
+|      | eval/acc | eval/cot_em | epoch |
+| ---: | -------: | ----------: | ----: |
+|    0 | 0.719212 |           0 |     0 |
+|    1 | 0.561576 |           0 |     1 |
+|    2 | 0.463054 |           0 |     2 |
+|    3 | 0.295567 |           0 |     3 |
 
 
 OK I can't even replciate, probobly 16bit training is the problem!?
 Maybe I should use 0.5b and 32bit
 
-|    |   eval/acc |   eval/cot_em |   epoch |   minutes |
-|---:|-----------:|--------------:|--------:|----------:|
-|  0 |   0.246305 |             0 |       2 |   20.8777 |
-|  1 |   0.142857 |             0 |       3 |  175.502  |
+|      | eval/acc | eval/cot_em | epoch | minutes |
+| ---: | -------: | ----------: | ----: | ------: |
+|    0 | 0.246305 |           0 |     2 | 20.8777 |
+|    1 | 0.142857 |           0 |     3 | 175.502 |
 
 
 so even 0.5b 32b weight, 16b training it doesn't work. lets see after the long train...
@@ -400,12 +400,12 @@ so even 0.5b 32b weight, 16b training it doesn't work. lets see after the long t
 
 Wait it did start working!
     {'project': 'coconut', 'save_path': 'outputs/', 'name': 'gsm-qwen', 'only_eval': False, 'coconut': True, 'cot': False, 'no_thoughts': False, 'no_cot': False, 'c_thought': 2, 'epochs_per_stage': 1, 'max_latent_stage': 3, 'pad_latent_to_max': True, 'replacement_method': '-1', 'save_only_improve': True, 'uniform_prob': 0.0, 'model_id': 'plaguss/Qwen2.5-0.5B-Math-Shepherd-PRM-0.2', 'load_model_path': None, 'seed': 0, 'resume': 0, 'bf16': True, 'bf16_weight': False, 'train_path': 'data/gsm_train.json', 'val_path': 'data/gsm_valid.json', 'reset_optimizer': False, 'batch_size_training': 10, 'max_size': 10000, 'debug': False, 'gradient_accumulation_steps': 4, 'num_epochs': 5, 'lr': 0.0001, 'weight_decay': 0.01}
-    |    |   eval/acc |   eval/cot_em |   epoch |   minutes |
-    |---:|-----------:|--------------:|--------:|----------:|
-    |  0 |  0.267857  |             0 |       0 |   9.56295 |
-    |  1 |  0.196429  |             0 |       1 |  13.2542  |
-    |  2 |  0.0863095 |             0 |       2 |  14.6686  |
-    |  3 |  0.0714286 |             0 |       3 |  32.8783  |
+    |      |  eval/acc | eval/cot_em | epoch | minutes |
+    | ---: | --------: | ----------: | ----: | ------: |
+    |    0 |  0.267857 |           0 |     0 | 9.56295 |
+    |    1 |  0.196429 |           0 |     1 | 13.2542 |
+    |    2 | 0.0863095 |           0 |     2 | 14.6686 |
+    |    3 | 0.0714286 |           0 |     3 | 32.8783 |
     wandb: 🚀 View run gsm-qwen_20250201-071510 at: https://wandb.ai/wassname/coconut/runs/v49wpqas
 
 
@@ -419,19 +419,19 @@ TODO
 
 # Results: gsm-qwen_20250201-122443
 {'project': 'coconut', 'save_path': 'outputs/', 'name': 'gsm-qwen', 'only_eval': False, 'coconut': True, 'cot': False, 'no_thoughts': False, 'no_cot': False, 'c_thought': 2, 'epochs_per_stage': 1, 'max_latent_stage': 3, 'pad_latent_to_max': True, 'replacement_method': '-1', 'save_only_improve': True, 'uniform_prob': 0.0, 'model_id': 'plaguss/Qwen2.5-0.5B-Math-Shepherd-PRM-0.2', 'load_model_path': None, 'seed': 0, 'resume': 0, 'bf16': True, 'bf16_weight': False, 'train_path': 'data/gsm_train.json', 'val_path': 'data/gsm_valid.json', 'reset_optimizer': False, 'batch_size_training': 10, 'max_size': 10000, 'debug': False, 'gradient_accumulation_steps': 4, 'num_epochs': 20, 'lr': 0.0001, 'weight_decay': 0.01}
-|    |   eval/acc |   eval/cot_em |   epoch |   minutes |
-|---:|-----------:|--------------:|--------:|----------:|
-|  0 |  0.25      |             0 |     nan |  nan      |
-|  1 |  0.25      |             0 |       0 |   10.4013 |
-|  2 |  0.205357  |             0 |     nan |  nan      |
-|  3 |  0.205357  |             0 |       1 |   16.4774 |
-|  4 |  0.0684524 |             0 |     nan |  nan      |
-|  5 |  0.0684524 |             0 |       2 |   18.9123 |
-|  6 |  0.0535714 |             0 |     nan |  nan      |
-|  7 |  0.0684524 |             0 |     nan |  nan      |
-|  8 |  0.0327381 |             0 |     nan |  nan      |
-|  9 |  0.0416667 |             0 |       3 |   63.4671 |
- 18%|███████████████████████████▎                                                                                                                              | 754/4250 [1:03:28<4:54:17,  5.05s/it]
+|      |                     eval/acc |                           eval/cot_em | epoch | minutes |
+| ---: | ---------------------------: | ------------------------------------: | ----: | ------: |
+|    0 |                         0.25 |                                     0 |   nan |     nan |
+|    1 |                         0.25 |                                     0 |     0 | 10.4013 |
+|    2 |                     0.205357 |                                     0 |   nan |     nan |
+|    3 |                     0.205357 |                                     0 |     1 | 16.4774 |
+|    4 |                    0.0684524 |                                     0 |   nan |     nan |
+|    5 |                    0.0684524 |                                     0 |     2 | 18.9123 |
+|    6 |                    0.0535714 |                                     0 |   nan |     nan |
+|    7 |                    0.0684524 |                                     0 |   nan |     nan |
+|    8 |                    0.0327381 |                                     0 |   nan |     nan |
+|    9 |                    0.0416667 |                                     0 |     3 | 63.4671 |
+|  18% | ███████████████████████████▎ | 754/4250 [1:03:28<4:54:17,  5.05s/it] |
 wandb: 🚀 View run gsm-qwen_20250201-122443 at: https://wandb.ai/wassname/coconut/runs/al3d68tu
 
 
@@ -470,11 +470,11 @@ prefix = f"""Reason and solve the following math question in this format <|start
 
 Without prompt or chatml
 
-| model_id | loss 0.5 | loss 500 | loss 0.5 epochs |
-|----------|----------|----------|-----------------|
+| model_id          | loss 0.5 | loss 500 | loss 0.5 epochs |
+| ----------------- | -------- | -------- | --------------- |
 | Qwen 0.5b         | 0.6      | 0.29     | 0.18            |
-| 0.5b Math-PRM-0.2  | 0.97     | 0.28     | 0.18            |
-| Coder-0.5B    | 0.6      | 0.3      | 0.19            |
+| 0.5b Math-PRM-0.2 | 0.97     | 0.28     | 0.18            |
+| Coder-0.5B        | 0.6      | 0.3      | 0.19            |
 
 0.5b Math-PRM-0.2
 with prompt
@@ -489,410 +489,300 @@ but acc was only 0.02, wth
 ![seems to help with loer loss](files/image.png)
 
 
-# 2025-10-11 17:11:39
+# trying with smol model, but god it's so basd and slow
 
-Some ideas on incorperating the ideas from the novel TRM paper mainly
+I reckon I will need 1.5b+ to even work, so I should just rent some H100 or two
+- USD $2.00 per hour. 3.25 aud
+# 
+ok revisit 1. gpt2 2. seq-vcr 3. wich alyer 4 batch size
 
-- because it does multiple non back prop recusrvive steps, it accumulated errors, which the final 2 grad enabled steps must fix. This stabilises things.
-- unfreeze first and last layers so it can learn to adapt
 
-    This might be **the key stabilizing mechanism**:
 
-    > "After many of its own steps, it will be filled with its own junk, it will have to learn to clean it up! And that cleaning step might be the element needed to make it stable and convergent!"
 
-    This explains why TRM doesn't need fixed-point assumptions:
-    - Step 1: Model produces h₁ (might contain errors)
-    - Step 2: Model sees h₁ + errors, learns to produce better h₂
-    - Step 3: Model sees h₂ + its own accumulated errors, learns to be **robust to its own mistakes**
+# 2025-05-06 19:26:30
 
-    It's like training a denoising autoencoder on its own outputs! The model learns an implicit "error correction" dynamic. Brilliant observation.
+Ok I think that if I add special positional encodings the model might learn faster that it's in another mode
 
-    ## Implementation Plan for TRM-style Deep Supervision in Coconut
+ok with smol2 it's 5:28 mins train, 3:06mins to test the first epoch
 
-    Here's a **concrete, actionable plan** to modify the repo:
+eval_1 12mins
 
-    ---
 
-    ### **Phase 1: Add Deep Supervision Infrastructure** (2-3 hours)
+TODO can we resume from a stage is saved or passed?
+outputs/gsm-smol_20250508-155834/checkpoint_0
 
-    #### **1.1: Extend Config** (`coconut/configs.py`)
+OK I'm running, on smol, with the proper number of epochs. Overnight
+So it shold do as well as gpt2 if not better that is. GSM9k, 42.9 with CoT, 21.6 without thought, 34.1 coconut. In fact this should do better as it has better pretrasining than gpt2 with the same size
 
-    ```python
-    @dataclass
-    class BaseConfig:
-        # ... existing fields ...
-        
-        # TRM-style deep supervision
-        use_deep_supervision: bool = False
-        K_recursions: int = 3  # Number of full recursion processes per supervision step
-        T_max_supervision: int = 3  # Number of supervision steps per example
-        detach_early_recursions: bool = True  # Only backprop through last recursion
-        
-        # For experimentation
-        backprop_all_recursions: bool = False  # Ablation: backprop through all K
-    ```
 
-    #### **1.2: Create Deep Supervision Module** (`coconut/deep_supervision.py`)
+meant to do 25 epochs of CoT First
+ 
+# from the github
 
-    ```python
-    import torch
-    import torch.nn as nn
-    from typing import Tuple, Optional
-    from jaxtyping import Float
-    from torch import Tensor
+https://github.com/facebookresearch/coconut/issues/11
 
-    class DeepSupervisionWrapper(nn.Module):
-        """
-        Wraps a Coconut model to add TRM-style deep supervision.
-        
-        Key idea:
-        - Do K-1 recursion cycles WITHOUT gradients (model improves h using learned dynamics)
-        - Do 1 recursion cycle WITH gradients (train the improvement dynamics)
-        - Repeat T_max times per training example
-        """
-        
-        def __init__(
-            self, 
-            base_model,
-            K: int = 3,
-            T_max: int = 3,
-            detach_early: bool = True
-        ):
-            super().__init__()
-            self.model = base_model
-            self.K = K  # Recursions per supervision step
-            self.T_max = T_max  # Supervision steps per example
-            self.detach_early = detach_early
-        
-        def forward_single_recursion(
-            self,
-            input_ids,
-            attention_mask,
-            position_ids,
-            h_state: Optional[Float[Tensor, "b t h"]] = None,
-            detach: bool = False
-        ) -> Tuple[Float[Tensor, "b t h"], dict]:
-            """
-            One full recursion through the model with current latent state h.
-            
-            Returns:
-            - Updated h_state
-            - outputs dict (loss, logits, etc.)
-            """
-            # This calls the existing Coconut forward pass
-            # but we maintain h_state across calls
-            
-            # If we have h_state, inject it into inputs_embeds at <latent> positions
-            if h_state is not None:
-                inputs_embeds = self._inject_h_state(input_ids, h_state)
-            else:
-                inputs_embeds = self.model.get_input_embeddings()(input_ids)
-            
-            outputs = self.model.forward(
-                inputs_embeds=inputs_embeds,
-                attention_mask=attention_mask,
-                position_ids=position_ids,
-                labels=input_ids,  # For loss computation
-                output_hidden_states=True
-            )
-            
-            # Extract new h_state from hidden states
-            # This is where your hs2ie logic goes
-            from coconut.hs2ie import hs2ie
-            new_h_state = hs2ie(
-                outputs.hidden_states,
-                inputs_embeds,
-                self.model.get_output_embeddings().weight,
-                method=self.model.config.replacement_method
-            )
-            
-            if detach:
-                new_h_state = new_h_state.detach()
-                outputs.loss = outputs.loss.detach()
-            
-            return new_h_state, outputs
-        
-        def forward_supervision_step(
-            self,
-            input_ids,
-            attention_mask,
-            position_ids,
-            h_state: Optional[Float[Tensor, "b t h"]] = None
-        ):
-            """
-            One supervision step:
-            - K-1 recursions without gradients
-            - 1 recursion with gradients
-            """
-            # K-1 blind recursions
-            for k in range(self.K - 1):
-                h_state, _ = self.forward_single_recursion(
-                    input_ids, attention_mask, position_ids,
-                    h_state=h_state,
-                    detach=True  # No gradients
-                )
-            
-            # Final recursion with gradients
-            h_state, outputs = self.forward_single_recursion(
-                input_ids, attention_mask, position_ids,
-                h_state=h_state,
-                detach=False  # WITH gradients
-            )
-            
-            return h_state, outputs
-        
-        def forward(
-            self,
-            input_ids,
-            attention_mask,
-            position_ids,
-            labels=None
-        ):
-            """
-            Full deep supervision forward:
-            - T_max supervision steps
-            - Each step: K recursions (K-1 detached, 1 with gradients)
-            """
-            h_state = None
-            total_loss = 0
-            
-            for t in range(self.T_max):
-                h_state, outputs = self.forward_supervision_step(
-                    input_ids, attention_mask, position_ids,
-                    h_state=h_state
-                )
-                
-                total_loss += outputs.loss
-                
-                # Detach h_state before next supervision step
-                # (prevents gradients flowing between supervision steps)
-                h_state = h_state.detach()
-            
-            # Average loss across supervision steps
-            outputs.loss = total_loss / self.T_max
-            
-            return outputs
-        
-        def _inject_h_state(self, input_ids, h_state):
-            """Helper to inject h_state at <latent> positions"""
-            # This is similar to existing Coconut logic
-            # but simplified for clarity
-            inputs_embeds = self.model.get_input_embeddings()(input_ids)
-            
-            latent_mask = (input_ids == self.model.config.latent_token_id)
-            
-            # For each latent position, replace embedding with h_state
-            # (This needs more careful implementation to match indices)
-            
-            return inputs_embeds
-    ```
+> Hi, thanks for the question.
 
-    ---
+> We haven't got time to carefully tune the hyper-parameters for larger models like Llama. Generally it's better to use a smaller lr (e.g. 1e-5) and fewer epochs per stage to avoid overfitting.
 
-    ### **Phase 2: Integrate into Training Loop** (`scripts/run.py`)
+> We'd like to note that, since these larger models have been pre-trained extensively on language space rather than latent space, you may find coconut at a disadvantage in comparison with language CoT. Future work will explore pre-training in latent space to better unlock the potential of latent reasoning.
 
-    #### **2.1: Wrap Model for Deep Supervision Training**
+https://github.com/facebookresearch/coconut/issues/3
 
-    ```python
-    def main():
-        # ... existing setup ...
-        
-        model, tokenizer = load_new_model(conf, device, dtype)
-        
-        # NEW: Wrap with deep supervision if enabled
-        if conf.use_deep_supervision:
-            from coconut.deep_supervision import DeepSupervisionWrapper
-            
-            model = DeepSupervisionWrapper(
-                model,
-                K=conf.K_recursions,
-                T_max=conf.T_max_supervision,
-                detach_early=conf.detach_early_recursions
-            )
-            logger.info(f"Wrapped model with deep supervision: K={conf.K_recursions}, T_max={conf.T_max_supervision}")
-        
-        model = model.to(device)
-        
-        # ... rest of training ...
-    ```
+> Hi, thanks for the question. I've confirmed that the exact code can reproduce the reported number. We used 4 GPUs to train the model, which means the effective batch size is 32 * 4 = 128. In the wandb log you shared, the effective batch size seems to be 32?
 
-    #### **2.2: Modify Training Loop**
+so changes I need to make
 
-    The existing training loop should mostly work, but you'll need to:
 
-    ```python
-    # In the training loop
-    for step, batch in enumerate(train_dataloader):
-        batch = {key: batch[key].to(device) for key in batch.keys() if key != "idx"}
-        
-        with torch.autocast(device_type=device, dtype=dtype):
-            if conf.use_deep_supervision:
-                # Deep supervision automatically does T_max steps
-                outputs = model(
-                    input_ids=batch['input_ids'],
-                    attention_mask=batch['attention_mask'],
-                    position_ids=batch.get('position_ids'),
-                    labels=batch['labels']
-                )
-            else:
-                # Original Coconut forward
-                outputs = model(**batch)
-            
-            loss = outputs.loss / conf.gradient_accumulation_steps
-        
-        loss.backward()
-        # ... rest of training ...
-    ```
+- bs: 128
+- ls: 1e-5 with smol2 for speed
+- 25 to 50 epochs
+- should be around 40% with CoT
+- max size 1000000000 not (it's 3012 samples at 32 batch, 45mins)
 
-    ---
 
-    ### **Phase 3: Add EMA for Stability** (1 hour)
 
-    TRM found EMA crucial for stability. Add to `coconut/utils.py`:
+in the smol2 train they used 3e-4 !
+https://github.com/huggingface/alignment-handbook/blob/main/recipes/smollm2/sft/config.yaml
+presumably with linear (defualt) but maybe cosine
+https://github.com/huggingface/nanotron/blob/c737f00f01e65bc44e7624695351da7ed756ec31/examples/doremi/configs/config_280m_llama.yaml#L69
+weight_decay: 0.01
 
-    ```python
-    class EMA:
-        """Exponential Moving Average of model weights"""
-        def __init__(self, model, decay=0.999):
-            self.model = model
-            self.decay = decay
-            self.shadow = {}
-            self.backup = {}
-            
-            # Initialize shadow weights
-            for name, param in model.named_parameters():
-                if param.requires_grad:
-                    self.shadow[name] = param.data.clone()
-        
-        def update(self):
-            """Update shadow weights"""
-            for name, param in self.model.named_parameters():
-                if param.requires_grad:
-                    self.shadow[name].mul_(self.decay).add_(
-                        param.data, alpha=1 - self.decay
-                    )
-        
-        def apply_shadow(self):
-            """Replace model weights with shadow weights"""
-            for name, param in self.model.named_parameters():
-                if param.requires_grad:
-                    self.backup[name] = param.data
-                    param.data = self.shadow[name]
-        
-        def restore(self):
-            """Restore original weights"""
-            for name, param in self.model.named_parameters():
-                if param.requires_grad:
-                    param.data = self.backup[name]
-            self.backup = {}
-    ```
 
-    **Integrate into training:**
+ah butthen unsloth uses linear, and 5e-5 hmm
+but we are not continued pretrain we are CoT train
+https://colab.research.google.com/github/unslothai/notebooks/blob/main/nb/Mistral_(7B)-Text_Completion.ipynb#scrollTo=95_Nn-89DhsL
+another is cosine 5e-5 weight decay 0 huh
 
-    ```python
-    # In main()
-    if conf.use_deep_supervision and conf.use_ema:
-        ema = EMA(model, decay=0.999)
 
-    # In training loop after optimizer.step()
-    if conf.use_deep_supervision and conf.use_ema:
-        ema.update()
 
-    # Before evaluation
-    if conf.use_deep_supervision and conf.use_ema:
-        ema.apply_shadow()
-        
-    # After evaluation
-    if conf.use_deep_supervision and conf.use_ema:
-        ema.restore()
-    ```
+https://github.com/huggingface/alignment-handbook/blob/main/recipes/smollm2/sft/config_smol.yaml
+wow smol has 1e-3??
+but this would just be at the start of all training since it's cosine so not so good for me hmm
 
-    ---
+their recipy for fine tune is also 1e-3
 
-    ### **Phase 4: Experiments** (Testing time)
+note they use trl sft
+and they just load args on top
 
-    #### **Experiment 1: Verify Deep Supervision Works**
 
-    ```python
-    @dataclass
-    class TRM_Experiment_1(BaseConfig):
-        name: str = "trm-exp1-verify"
-        model_id: str = "Qwen/Qwen2.5-0.5B"
-        
-        use_deep_supervision: bool = True
-        K_recursions: int = 3
-        T_max_supervision: int = 3
-        use_ema: bool = True
-        
-        batch_size_training: int = 16  # Smaller due to more forward passes
-        num_epochs: int = 5
-        lr: float = 1e-4
-    ```
+ok I think we could have 
+1e-3 with cosine
+or 3e-4 with linear
 
-    **Expected outcome:** Should maintain 40% accuracy like baseline but with fewer model parameters if you also reduce layers.
 
-    #### **Experiment 2: Test Recursion Depth**
+hmm maybe I need to remove qwen
+maybe I need to apply chat template?'
 
-    ```python
-    # Test K=1, 3, 5, 7
-    # Expect: Sweet spot around K=3-7, diminishing returns after
-    ```
 
-    #### **Experiment 3: Ablate Components**
+hmm I shoudl check the lods
 
-    ```python
-    # Test:
-    # - With/without EMA (expect: significant stability difference)
-    # - With/without detaching early recursions (expect: worse if no detach)
-    # - Different T_max values (expect: 3-7 optimal)
-    ```
+# 2025-05-10 07:04:36
 
-    ---
+For some reason it doesn't seem to learn in bfloat16.
+With 9 epochs of CoT training smol2 model only has 0.6% acc. Weird. I'ts learnt some CoT but it's all wrong.
+This is using 1e-3 and no weight decay as reccmended by the model makers.
+I might have to go back to Qwen 0.6, and then even 16b and 8b, and hope they work or V100
 
-    ### **Phase 5: Advanced: Try 2-Layer Tiny Network** (If Phase 1-4 works)
 
-    ```python
-    @dataclass  
-    class TRM_TinyNetwork(BaseConfig):
-        name: str = "trm-tiny-2layer"
-        model_id: str = "Qwen/Qwen2.5-0.5B"
-        
-        # Freeze all but first 2 layers
-        freeze_layers_except: list = field(default_factory=lambda: [0, 1, -1])
-        
-        use_deep_supervision: bool = True
-        K_recursions: int = 7
-        T_max_supervision: int = 7
-        
-        # More recursions compensate for fewer trainable layers
-    ```
 
-    ---
+- Qwen
+- omegaconfig again?
+  - save config
+- either smaller epochs for testing or ... yeah that's easier
+- I don't know the right lr... 1e-4 after 20k did not work. incoherent. loss of 1.5. 
+maybe warmup too
 
-    ## **Quick Wins to Try First** (Before full implementation)
 
-    ### **Minimal Test: Single Supervision Step with Detached Recursions**
 
-    Modify existing `coconut.py` to add just one feature:
+without sys prompt but with template I get 0.17 loss after 334it. incoherent. 0% CoT match
+and with, 1.2% CoT match
 
-    ```python
-    # In CoconutQwen3ForCausalLM.forward()
 
-    if self.config.use_mini_recursion:
-        # Do 2 extra passes with detached h_state
-        for _ in range(2):
-            hidden_states = self.forward(..., past_key_values=kv_cache).hidden_states
-            h_state = hs2ie(hidden_states, ...)
-            h_state = h_state.detach()  # No gradients
-            
-        # Final pass WITH gradients
-        outputs = self.forward(..., with_h_state=h_state)
-    ```
+yet it made almost no diff in the loss. strange
 
-    **Test this first** - if it helps even slightly, full deep supervision should help more.
 
-    ---
+fixme... why is it only generating 2 tokens when asked for 100? something is weird
+this is in eval
 
-Ok I'll try only backprop the last step...
 
-OK running a full experiment with that detach all but last 2 recursions thing. Hopefully it works. At the end we should have 3 thoughts per math step, 6  steps e.g <|start-latent|><|latent|><|latent|><|latent|><|latent|><|latent|><|latent|><|end-latent|>### 10.5`.
+
+did an overnight one 19 epochs
+outputs/qwen3-0.6b_20250510-205601/checkpoint_18 
+https://wandb.ai/wassname/coconut/runs/4iaa9wbb?nw=nwuserwassname
+loss went up a lot, hmm
+but it still had that 2 tocken gen. But I can eval all the checkpoints to check and fix
+but it did work with only 84% mem alloc!!
+seems like grad norm was good as it spiked up, so was warmup'
+I could add warmup for adding <start_latent> and adding latent too!
+it got a lot slower at epoch 14
+2025-05-11 06:11:02.866 | INFO     | coconut.eval:evaluate:110 - Correct=4, CoT_correct=6, Total=500. eval_18                                                                   
+2025-05-11 06:11:02.866 | INFO     | coconut.eval:evaluate:111 - Accuracy on val:  4 / 500 =  0.8000%                                                                           
+2025-05-11 06:11:02.867 | INFO     | coconut.eval:evaluate:112 - CoT match on val: 6 / 500 =  1.2000%   
+
+this whole thing is token effecient...but not compuete effecient so who cares? or at least during train, what abput durng inf
+
+
+TODO:
+- fix eval. On thos saved models outputs/qwen3-0.6b_20250510-205601/checkpoint_18 
+
+
+# 2025-05-13 11:34:21
+
+Ok fixed eval. it didn't learn fast, didn't get up to 40%
+![alt text](img/mjc_research_journal-1747113708667-image.png)
+now try lr=1e-4 (10x)
+
+
+
+# 2025-05-15 09:20:41
+
+Ok it got up to 40% on epoch 2. Now I can run expeirments
+- try cosine lr on each epoch
+- eval/los goes up so might be too high
+
+
+hmm mine can learn well for one token but not two, interesting
+maybe I should rename no schedule stage of stage=0
+t
+
+ry lower lr or longer epochst
+ry to debug coesne learning in scr
+atch nb
+try float 32
+
+
+So now I'd like to experim,ent with a single epoch of each type of hidden states, and see the loss/acc after. Also 32b, vs8b grad, 16b weights
+
+Loss, Acc, Ratio for
+
+| method       | loss | acc  | ratio |
+| ------------ | ---- | ---- | ----- |
+| none lr=6e-3 | 9.4  | 0.   | 1.002 |
+| none lr=6e-4 | 0.5  | 0.16 | 0.94  |
+| none lr=6e-5 | 0.65 | 0.19 | 0.951 |
+| hs[-1]       | 22   | 0    | 0.926 |
+
+ok none whould work! lets turn of or fix lr and seq_vcr
+lr frp, 6e-3 to 6e-4
+16% aac. 94$ ratio
+0.5 loss
+
+now try 6e-5
+19.2% acc
+0.951 ratio
+0.65 loss
+
+
+The weird thing is that the initial eal is not good
+
+- hs[-1]
+- supr[0.5:-1]
+- hs[-2]
+- supr[0.5:]+hs[-1]
+- supr[0.5:]+ie
+
+and
+- hs: b16_w
+- hs: 8b grad
+- hs: 32b
+
+Start again as I had it messed up
+
+
+|  method             |   eval/acc |   eval/cot_em |   epoch |   stage |   eval/ratios |   train/minutes |   train/loss |   eval/loss | commnt|
+|---          :       |-----------:|--------------:|--------:|-  -----:|  ------------:|----------------:| ------------:|-------------|   -----|
+|  load               |      0.449 |         0.107 |      -1 |      -1 |         0.933 |       nan       |     nan      |   nan       |        |
+|  1vr,lr=1e-6        |      0.454 |         0.112 |       1 |      -1 |         0.934 |           2.291 |        3.595 |       3.277 |        |
+|  1vr,lr=1e-5        |      0.438 |         0.111 |       1 |      -1 |         0.934 |           2.262 |        3.185 |       2.912 |        |
+|  1vr,le=1e-4        |      0.375 |         0.100 |       1 |      -1 |         0.912 |           2.311 |        0.848 |       0.966 |        |
+|  0sqr,1e-4          |     0.4796 |        0.1115 |       1 |      -1 |        0.9277 |          1.9772 |    0.0611213 |       0.222 |        |
+|  vcr2?,1e-4         |     0.1152 |        0.0297 |       1 |      -1 |        0.9324 |           2.262 |     0.190808 |      0.3211 |  |
+|  vcr2,1e-5          |     0.4201 |        0.119  |       1 |      -1 |        0.9334 |          2.2748 |     0.118035 |      0.2439 |        |
+|  vcrv2 1e-4         |     0.461  |        0.1264 |       1 |      -1 |        0.9229 |          2.3131 |    0.0891597 |      0.2365 | huh this was good       |
+|  vr2,opt8b          |     0.4535 |        0.1264 |       1 |      -1 |        0.9224 |          2.2454 |    0.0888447 |       0.236 | no diff |
+|vc2,1e-4,bf16w       |     0.4052 |        0.0855 |       1 |      -1 |        0.9077 |          2.2486 |    0.0798283 |      0.2391 |this hurt peft |
+
+python scripts/run.py EpochSingle --opt-8b --bff6_weight --lr=1e-5
+
+when I did it in 32bit it took twice as long, started better, and got worse?? 
+python scripts/run.py EpochSingle --no-bf16  --batch-size-training=32 --gradient-accumulation-steps=4 --lr=1e-6
+
+|         | eval/acc | eval/cot_em | epoch | stage | eval/ratios | train/minutes | train/loss | eval/loss |
+| ------: | -------: | ----------: | ----: | ----: | ----------: | ------------: | ---------: | --------: |
+|       0 |    0.461 |       0.119 |    -1 |    -1 |      0.9321 |           nan |        nan |       nan |
+| lr 1e-4 |   0.3011 |       0.119 |     1 |    -1 |      0.9079 |        7.1669 |  0.0911841 |    0.2372 |
+| 1r 1e-5 |   0.4572 |       0.145 |     1 |    -1 |      0.9246 |        7.1446 |  0.0896801 |     0.238 |
+|    1e-6 |   0.4275 |      0.1264 |     1 |    -1 |      0.9314 |          7.13 |     0.1144 |    0.2468 |
+for vcr2 I lowered the lambda for seq-vcr by 1/100 and they still go down but so dos the normal ar loss
+
+
+|  bf16_weight 1e-5|     0.3978 |        0.1264 |       1 |      -1 |        0.9315 |          2.2409 |     0.100122 |      0.2364 |
+|   bf16_weight1e-3 |     0.0074 |        0.0409 |       1 |      -1 |        0.926  |          2.3096 |     0.209068 |      0.3418 |
+python scripts/run.py EpochSingle --opt-8b --bf16_weight --lr=1e-5
+
+python scripts/run.py EpochSingle --weight_decay=0 --grad_clip=0 
+|  1ithout wd |     0.461  |        0.1264 |       1 |      -1 |        0.9229 |          2.2232 |    0.0891597 |      0.2365 |
+
+62% meme with bf16w and opt8b
+77% neither?
+82% opt8
+
+
+python scripts/run.py GsmQwen_H100
+
+next try one epoch of training, but with differen't methods
+
+
+# 2025-05-18 02:05:26 long run
+
+So learning
+- is maintain some of the acc
+- but it slowed exponentially as more latent tokens were added! so this is token effecient in test but not in train... which is not attractive
+- my methods do seem to work as it performs better with onyl a few samples
+![](img/ksnip_20250518-095710.png)
+
+https://wandb.ai/wassname/coconut/runs/xvwpx0dj
+
+```sh
+python scripts/run.py EpochSingleLatent  --replacement-method="hs[-1]"
+# /workspace/coconut/wandb/run-20250518_022740-nuq8u2c8
+python scripts/run.py EpochSingleLatent  --replacement-method="hs[-2]"
+python scripts/run.py EpochSingleLatent  --replacement-method="supressed[0.5:]"
+python scripts/run.py EpochSingleLatent  --replacement-method="ie+supressed[0.5:]"
+python scripts/run.py EpochSingleLatent  --replacement-method="hs[-2]+supressed[0.5:]"
+python scripts/run.py EpochSingleLatent  --replacement-method="supressed[0.75:]"
+python scripts/run.py EpochSingleLatent  --replacement-method="supressed[0.25:]"
+python scripts/run.py EpochSingleLatent  --replacement-method="hs[-3]"
+python scripts/run.py EpochSingleLatent  --replacement-method="supressed[0.9:]"
+python scripts/run.py EpochSingleLatent  --replacement-method="hs[-4]"
+```
+
+|        | eval/acc | eval/cot_em | epoch | stage | eval/ratios | train/minutes | train/loss | eval/loss |
+| -----: | -------: | ----------: | ----: | ----: | ----------: | ------------: | ---------: | --------: |
+|      0 |        0 |      0.0074 |    -1 |     3 |      0.7401 |           nan |        nan |       nan |
+| hs[-1] |    0.052 |      0.0074 |     3 |     3 |      0.6023 |       18.8816 |     0.7113 |    0.7133 |
+
+ah that was stage 3 due to a calc error, lets try stage 1
+
+6 mins instead of 20
+
+
+If we train for 1 epoch which replacement method is best/
+
+ Config: {'project': 'coconut', 'save_path': 'outputs/', 'name': 'gsm-qwen-0.6bh100', 'model_id': 'suayptalha/Qwen3-0.6B-Math-Expert', 'only_eval': False, 'load_model_path': 'outputs/qwen3-0.6b_20250514-194730/checkpoint_2', 'resume_epochs': 3, 'replacement_method': 'hs[-2]+supressed[0.5:]', 'use_position_ids': True, 'bf16': True, 'bf16_weight': False, 'opt_8b': False, 'cot_epochs': 2, 'epochs_per_stage': 1, 'max_latent_stage': 3, 'num_epochs': 4, 'batch_size_training': 48, 'gradient_accumulation_steps': 3, 'lr': 0.0001, 'weight_decay': 0.01, 'grad_clip': 10.0, 'scheduler': 'cosine', 'debug': False, 'seed': 42, 'reset_optimizer': True, 'loss_seq_vcr': True, 'max_size': 8000, 'c_thought': 2, 'pad_latent_to_max': True, 'uniform_prob': 0.0, 'train_path': 'data/gsm_train.json', 'val_path': 'data/gsm_valid.json', 'system_prompt': ''}
+
+|                        | eval/acc | eval/cot_em | epoch | stage | eval/ratios | train/minutes | train/loss | eval/loss |
+| ---------------------: | -------: | ----------: | ----: | ----: | ----------: | ------------: | ---------: | --------: |
+|       supressed[0.75:] |   0.3383 |      0.0074 |     3 |     1 |      0.9259 |       10.1804 |   0.421989 |    0.4588 |
+|       supressed[0.90:] |   0.2379 |      0.0112 |     3 |     1 |      0.9264 |        10.126 |   0.364225 |    0.4098 |
+|                 hs[-4] |   0.2342 |      0.0112 |     3 |     1 |      0.9199 |        8.4421 |   0.352921 |    0.3992 |
+|                 hs[-3] |   0.2268 |      0.0112 |     3 |     1 |      0.9202 |        8.3769 |   0.341455 |    0.3993 |
+|        supressed[0.5:] |    0.223 |      0.0112 |     3 |     1 |       0.924 |       10.2664 |   0.537695 |    0.5329 |
+|     ie+supressed[0.5:] |   0.2156 |      0.0112 |     3 |     1 |       0.924 |       10.3073 |   0.540861 |    0.5356 |
+|                 hs[-2] |   0.1896 |      0.0149 |     3 |     1 |      0.9175 |        8.4899 |   0.341802 |    0.3987 |
+| hs[-2]+supressed[0.5:] |   0.1784 |      0.0074 |     3 |     1 |      0.9456 |       10.3819 |   0.733456 |     0.582 |
+|                 hs[-1] |   0.1747 |      0.0112 |     3 |     1 |      0.9452 |        8.7211 |   0.420122 |    0.4459 |
+|       supressed[0.25:] |   0.1487 |           0 |     3 |     1 |      0.9287 |       10.6798 |   0.613252 |     0.587 |
+
+python scripts/run.py GsmQwen_H100

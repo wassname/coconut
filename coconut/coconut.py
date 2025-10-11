@@ -5,142 +5,67 @@ import torch
 import torch.nn as nn
 from torch.nn import CrossEntropyLoss
 from collections import namedtuple
-
+from collections import defaultdict
 from einops import rearrange, reduce, repeat
 from jaxtyping import Float, Int
 from typing import Tuple, List, Union, Optional, Dict
 from torch import Tensor
 
 from transformers import DynamicCache
-from transformers.models.gpt2 import GPT2LMHeadModel
+# from transformers.models.gpt2 import GPT2LMHeadModel
 
 from loguru import logger
 
 
 from transformers import (
-    Qwen2ForCausalLM,
+    Qwen2ForCausalLM, Qwen3ForCausalLM,
     DynamicCache,
     PreTrainedTokenizer,
-    Qwen2Config,
+    Qwen2Config, Qwen3Config,
+    LlamaConfig,
+    LlamaForCausalLM,
 )
 
+from coconut.hs2ie import hs2ie, get_supressed_activations
+from coconut.vcr_loss import VCRLoss
 
-Outputs = namedtuple("Outputs", ["loss", "inputs_embeds", "logits", "past_key_values"])
+
+Outputs = namedtuple(
+    "Outputs", ["loss", "inputs_embeds", "logits", "past_key_values", "hidden_states", "log", ] # loss_ar loss_vcr
+)
+
+# max during gen
 MAX_N_LATENT = 8
 
-HiddenState = Float[Tensor, 'b t h']
-HiddenStates = Tuple[Float[Tensor, 'b t h']]
-
-
-global _w_out_inv
-_w_out_inv = None
-
-@torch.no_grad()
-def get_cache_inv(w_out):
-
-    # FIXME this will change each update, so we shouldn't cache it for more than a step
-    global _w_out_inv
-
-    if _w_out_inv is None:
-        _w_out_inv = torch.pinverse(w_out.clone().float())
-    return _w_out_inv
 
 
 
-def get_supressed_activations(hs: Float[Tensor, 'l b t h'], w_out=None) -> Float[Tensor, 'l b t h']:
-    """
-    Novel experiment: Here we define a transform to isolate supressed activations, where we hypothesis that style/concepts/scratchpads and other internal only representations must be stored.
-
-    See the following references for more information:
-
-    - https://arxiv.org/pdf/2401.12181
-        - > Suppression neurons that are similar, except decrease the probability of a group of related tokens
-
-    - https://arxiv.org/html/2406.19384
-        - > Previous work suggests that networks contain ensembles of “prediction" neurons, which act as probability promoters [66, 24, 32] and work in tandem with suppression neurons (Section 5.4).
-
-    - https://arxiv.org/pdf/2401.12181
-        > We find a striking pattern which is remarkably consistent across the different seeds: after about the halfway point in the model, prediction neurons become increasingly prevalent until the very end of the network where there is a sudden shift towards a much larger number of suppression neurons.
-    """
-    with torch.no_grad():
-        # here we pass the hs through the last layer, take a diff, and then project it back to find which activation changes lead to supressed
-        hs2 = rearrange(hs[:, :, -1:], 'l b t h -> (l b t) h')
-        hs_out2 = torch.nn.functional.linear(hs2, w_out)
-        hs_out = rearrange(hs_out2, '(l b t) h -> l b t h', l=hs.shape[0], b=hs.shape[1], t=1)
-        diffs = hs_out[:, :, :].diff(dim=0)
-        diffs2 = rearrange(diffs, 'l b t h -> (l b t) h')
-        W_inv = get_cache_inv(w_out)
-        diffs_inv2 = torch.nn.functional.linear(diffs2, W_inv)
-        diffs_inv = rearrange(diffs_inv2, '(l b t) h -> l b t h', l=hs.shape[0]-1, b=hs.shape[1], t=1).to(w_out.dtype)
-        # TODO just return this?
-        eps = 1.e-1
-        supressed_mask = (diffs_inv < -eps).to(hs.dtype)
-        # supressed_mask = repeat(supressed_mask, 'l b 1 h -> l b t h', t=hs.shape[2])
-    supressed_act = hs[1:] * supressed_mask
-    return supressed_act
-
-
-
-def hs2ie(hidden_states: HiddenStates, inputs_embeds: HiddenState, w_out=None, method='-1') -> HiddenState:
-    """hidden states to inputs_embeds"""
-
-    n = len(hidden_states)
-    i_half = int(n * 0.5)
-    if method == '-1':
-        return hidden_states[-1]
-    elif method == '-2':
-        return hidden_states[-2]
-    elif method == '0.5':
-        return hidden_states[i_half]
-    
-
-
-    # FIXME ok so this doesn't account for information being removed then added
-    # and it assumed removal == reduction in positive magnitude, but it could be negative. So I should refactor for all reduction in magnitude
-    hs = rearrange(list(hidden_states), 'l b t h -> l b t h')
-    supressed_act = get_supressed_activations(hs, w_out)
-
-    if method == 'ie+supressed[-1]':
-        # need to make it more like the original hidden states, so prev input embedding plus the supressed tokens
-        return inputs_embeds + supressed_act[-1] # last layer, add dummy sequence dim
-    elif method == 'ie+supressed[0.5:]':
-        return inputs_embeds + supressed_act[i_half:].sum(dim=0)
-    elif method == 'hs+supressed[0.5:]':
-        return hidden_states[-1] + supressed_act[i_half:].sum(dim=0)
-    elif method == 'supressed[0.5:]':
-        # FIXME this need to be repeated along token dim
-        T = inputs_embeds.shape[1]
-        hs = supressed_act[i_half:].sum(dim=0)
-        return inputs_embeds + supressed_act[-1]
-    elif method == 'ie+supressed[0.5:]':
-        return inputs_embeds + supressed_act[i_half:].sum(dim=0)
-    elif method == 'hs+supressed[0.5:]':
-        return hidden_states[-1] + supressed_act[i_half:].sum(dim=0)
-    elif method == 'supressed[0.5:]':
-        T = inputs_embeds.shape[1]
-        hs = supressed_act[i_half:].sum(dim=0)
-        hs = repeat(hs, 'b 1 h -> b t h', t=T)
-        return hs
-    
-    ValueError(f"Unknown method {method}")
-
-
-class CoconutConfig(Qwen2Config):
+class CoconutConfig(Qwen3Config):
     def __init__(self, **kwargs):
-        self.replacement_method = kwargs.pop("replacement_method", "-1")
-        self.latent_token_id = kwargs.pop("latent_token_id", None)
-        self.eos_token_id = kwargs.pop("eos_token_id", None)
-        self.n_detached_recursions = kwargs.pop("n_detached_recursions", 0)  # 0=disabled, 2-3=test value
         super().__init__(**kwargs)
 
+        # to set extra attributes from kwargs they need to be set
+        self.replacement_method = None
+        self.latent_token_id = None
+        self.eos_token_id = None
+        self.use_position_ids = None
+        self.loss_seq_vcr = None
 
-class CoconutQwen2ForCausalLM(Qwen2ForCausalLM):
+class CoconutQwen3ForCausalLM(Qwen3ForCausalLM):
     def __init__(
         self,
-        config
+        config: CoconutConfig
     ):
         super().__init__(config)
+        assert self.config.latent_token_id is not None, "latent_token_id must be set in the config"
+        assert self.config.eos_token_id is not None, "eos_token_id must be set in the config"
+        assert self.config.use_position_ids is not None, "use_position_ids must be set in the config"
+        assert self.config.loss_seq_vcr is not None, "loss_seq_vcr must be set in the config"
+        assert self.config.replacement_method is not None, "replacement_method must be set in the config"
+
         self.gen_forward_cnt = 0
+        if self.config.loss_seq_vcr:
+            self.vcr_loss = VCRLoss(H=self.config.hidden_size)
 
 
     def forward(self, input_ids, attention_mask=None, labels=None, position_ids=None, **kwargs):
@@ -151,7 +76,8 @@ class CoconutQwen2ForCausalLM(Qwen2ForCausalLM):
         if position_ids is None:
             position_ids=torch.arange(
                 0, input_ids.shape[1], dtype=torch.long, device=input_ids.device
-            ).unsqueeze(0)
+            ).unsqueeze(0).expand(input_ids.shape[0], -1)
+
 
         logits = []
 
@@ -174,6 +100,13 @@ class CoconutQwen2ForCausalLM(Qwen2ForCausalLM):
             # before the earliest latent token position
 
         kv_cache = None
+
+        all_hs = []
+
+        # FIXME: this lags behind, but for efficiency we accept this limitation
+        Wo = self.get_output_embeddings().weight
+        # Wo_inv = torch.pinverse(Wo.clone().float()).detach()
+        # device_type = input_ids.device.type
 
         for pass_idx in range(max_n_latents):
             # TRM-style: detach gradients for early passes, keep gradients for last N passes
@@ -295,17 +228,21 @@ class CoconutQwen2ForCausalLM(Qwen2ForCausalLM):
                     ]
                     # print(tensor_list[batch_idx][token_idx].shape, recrv_embeds.shape, batch_idx, token_idx, token_idx - 1 - hidden_states_offset)
 
-                # assemble the new inputs_embeds
-                inputs_embeds = torch.stack(
-                    [
-                        torch.stack(tensor_list[batch_idx])
-                        for batch_idx in range(inputs_embeds.shape[0])
-                    ]
-                )
-            
-            # Detach inputs_embeds after detached passes to prevent gradients flowing back
-            if should_detach:
-                inputs_embeds = inputs_embeds.detach()
+
+                # modification. Hypothesis: if the model has a unique positional id for thinking token then it will more quickly learn to mode switch to the recusrsive thinking mode
+                if self.config.use_position_ids:
+                    thinking_base_position = 100000  # Well beyond normal context windows
+                    position_ids[batch_idx][token_idx] = thinking_base_position + pass_idx
+                    # TODO consider token_type_ids, or add a distinct thinking vector the embeddings, perhaps just embedding <latent> token back in and adding
+
+
+            # assemble the new inputs_embeds
+            inputs_embeds = torch.stack(
+                [
+                    torch.stack(tensor_list[batch_idx])
+                    for batch_idx in range(inputs_embeds.shape[0])
+                ]
+            )
 
         past_key_values=(
                         [
@@ -333,6 +270,11 @@ class CoconutQwen2ForCausalLM(Qwen2ForCausalLM):
 
         logits.append(outputs.logits)
 
+        # collect hs
+        hs = rearrange(list(outputs.hidden_states), "l b t h -> l b t h")
+        all_hs.append(hs)
+        all_hs = torch.concat(all_hs, dim=2)
+
         self.gen_forward_cnt += max_n_latents + 1
 
         logits = torch.cat(logits, dim=-2)
@@ -343,9 +285,20 @@ class CoconutQwen2ForCausalLM(Qwen2ForCausalLM):
             shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1)
         )
 
+        # Seq-VCR loss
+        # in the paper they apply it to the last hidden state, we apply it to all
+        extra = {}
+        if self.config.loss_seq_vcr:
+            with torch.autocast(device_type=input_ids.device.type):
+                loss_vcr, extra2 = self.vcr_loss(all_hs)
+            extra['loss_ar'] = loss.item()
+            extra.update(extra2)
+            loss += loss_vcr
+
         assert torch.isfinite(loss).all(), f"Loss is {loss}"
 
-        return Outputs(loss=loss, inputs_embeds=inputs_embeds, logits=logits, past_key_values=outputs.past_key_values)
+        return Outputs(loss=loss, inputs_embeds=inputs_embeds, logits=logits, past_key_values=outputs.past_key_values,
+                        hidden_states=list(all_hs), log=extra)
 
 
     def generate(
@@ -353,6 +306,7 @@ class CoconutQwen2ForCausalLM(Qwen2ForCausalLM):
         input_ids,
         attention_mask,  # attention_mask is not used
         max_new_tokens=16,
+        min_new_tokens=1,
         output_embedding=False,
         **kwargs,
     ):
@@ -362,23 +316,28 @@ class CoconutQwen2ForCausalLM(Qwen2ForCausalLM):
         lyr_embed = self.get_input_embeddings()
 
         tokens = input_ids.detach()
+        T = input_ids.shape[1]
 
-        # reuse the forward pass from training to go through all the inputs before gen this include latent thoughts
-        outputs = self.forward(input_ids)
-        inputs_embeds = outputs.inputs_embeds
+        # reuse the forward pass from training to go through all the inputs before gen, this includes latent thoughts
+        outputs = self.forward(input_ids, attention_mask)
 
         # get the first token using the current hidden state
         next_token = outputs.logits[:, -1].argmax(-1).detach().unsqueeze(1)
         tokens = torch.cat((tokens, next_token), dim=1)
-        new_token_embed = lyr_embed(next_token)
-        new_inputs_embeds = torch.cat((inputs_embeds, new_token_embed), dim=1)
+        new_inputs_embeds = lyr_embed(next_token)
+        # new_inputs_embeds = torch.cat((inputs_embeds, new_token_embed), dim=1)
+        B = tokens.shape[0]
+        new_att_mask = torch.cat(
+            (attention_mask, torch.ones((B, 1), device=attention_mask.device)), dim=1
+        )
+
 
         # get other tokens
         kv_cache = outputs.past_key_values
         for _ in range(max_new_tokens - 1):
-            # FIXME here we use the base model forward, that means we DO NOT use latent thoughts after the preconfigured ones
-            # FIXME cache!
-            outputs = super().forward(inputs_embeds=new_inputs_embeds, past_key_values=kv_cache)
+            # here we use the base model forward, that means we DO NOT use latent thoughts after the preconfigured ones
+            check_input_lens(new_inputs_embeds, new_att_mask, kv_cache)
+            outputs = super().forward(inputs_embeds=new_inputs_embeds, past_key_values=kv_cache, attention_mask=new_att_mask)
             kv_cache = outputs.past_key_values
             self.gen_forward_cnt += 1
             next_token = outputs.logits[:, -1].argmax(-1).detach().unsqueeze(1)
@@ -386,10 +345,17 @@ class CoconutQwen2ForCausalLM(Qwen2ForCausalLM):
                 logger.error("Latent token generated, not implemented in gen")
 
             tokens = torch.cat((tokens, next_token), dim=1)
-            if (tokens == self.config.eos_token_id).any(1).all(0):
-                break
-            new_token_embed = lyr_embed(next_token)
-            new_inputs_embeds = torch.cat((new_inputs_embeds, new_token_embed), dim=1)
+
+            # Allow it to stop early if all batch have generated EOS
+            if (tokens[:, T:] == self.config.eos_token_id).any(1).all(0):
+                if _>min_new_tokens:
+                    logger.info("EOS token generated, stopping early")
+                    break
+
+            new_inputs_embeds = lyr_embed(next_token)
+            new_att_mask = torch.cat(
+                (new_att_mask, torch.ones((B, 1), device=new_att_mask.device)), dim=1
+            )
 
         if output_embedding:
             # for analysis purpose
@@ -397,3 +363,9 @@ class CoconutQwen2ForCausalLM(Qwen2ForCausalLM):
 
         else:
             return tokens
+
+def check_input_lens(input_ids, attention_mask, kv_cache):
+    len_c = kv_cache.key_cache[0].shape[2] if len(kv_cache.key_cache) else 0
+    len_ids = input_ids.shape[1]
+    len_att = attention_mask.shape[1]
+    assert len_c + len_ids == len_att, f"The length of the attention mask  {len_att} should cover the cache length {len_c} and the len of the input_ids {len_ids}"
