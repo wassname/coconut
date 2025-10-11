@@ -41,6 +41,7 @@ def load_new_model(conf: Config, device, dtype):
         use_position_ids=conf.use_position_ids,
         replacement_method=conf.replacement_method,
         loss_seq_vcr=conf.loss_seq_vcr,
+        n_detached_recursions=conf.n_detached_recursions,
     )
     model = CoconutQwen3ForCausalLM.from_pretrained(
         conf.model_id, config=model_config, device_map=device, torch_dtype=dtype
@@ -67,6 +68,7 @@ def resume_model(conf: Config, device="auto", dtype=torch.bfloat16):
         use_position_ids=conf.use_position_ids,
         loss_seq_vcr=conf.loss_seq_vcr,
         replacement_method=conf.replacement_method,
+        n_detached_recursions=conf.n_detached_recursions,
     )
     model = CoconutQwen3ForCausalLM.from_pretrained(
         conf.load_model_path,

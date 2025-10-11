@@ -10,6 +10,13 @@ run_smol:
   . ./.venv/bin/activate
   python scripts/run.py GSMQwen 
 
+run_trm:
+  #!/bin/bash
+  export CUDA_DEVICE_ORDER=PCI_BUS_ID
+  export CUDA_VISIBLE_DEVICES=1
+  . ./.venv/bin/activate
+  python scripts/run.py TRMTest
+
 run3:
   #!/bin/bash
   export CUDA_DEVICE_ORDER=PCI_BUS_ID

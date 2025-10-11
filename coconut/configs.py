@@ -62,6 +62,9 @@ class BaseConfig:
 
     loss_seq_vcr: bool = True # experimental loss, might help with intermediate state stabiliy
 
+    # TRM-style: detach gradients for first N passes, only backprop through last few
+    n_detached_recursions: int = 0  # 0=disabled, 2=keep gradients only for last 2 passes
+
 
 
     # # used to get a baseline, not used or broken now?
@@ -154,3 +157,15 @@ class Debug(GSMQwenResume):
     cot_epochs: int = 1
     epochs_per_stage: int = 1
     resume_epochs: int = 3
+
+
+@dataclass
+class TRMTest(BaseConfig):
+    """
+    TRM-style detached recursions test.
+    
+    Detaches gradients for early recursive passes, only backprops through last N.
+    Forces model to learn to clean up its own accumulated errors.
+    """
+    # TRM experiment: only backprop last 2 passes out of 4 total
+    n_detached_recursions: int = 2

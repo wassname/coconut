@@ -50,6 +50,7 @@ class CoconutConfig(Qwen3Config):
         self.eos_token_id = None
         self.use_position_ids = None
         self.loss_seq_vcr = None
+        self.n_detached_recursions = None
 
 class CoconutQwen3ForCausalLM(Qwen3ForCausalLM):
     def __init__(
@@ -62,6 +63,7 @@ class CoconutQwen3ForCausalLM(Qwen3ForCausalLM):
         assert self.config.use_position_ids is not None, "use_position_ids must be set in the config"
         assert self.config.loss_seq_vcr is not None, "loss_seq_vcr must be set in the config"
         assert self.config.replacement_method is not None, "replacement_method must be set in the config"
+        assert self.config.n_detached_recursions is not None, "n_detached_recursions must be set in the config"
 
         self.gen_forward_cnt = 0
         if self.config.loss_seq_vcr:
@@ -236,13 +238,17 @@ class CoconutQwen3ForCausalLM(Qwen3ForCausalLM):
                     # TODO consider token_type_ids, or add a distinct thinking vector the embeddings, perhaps just embedding <latent> token back in and adding
 
 
-            # assemble the new inputs_embeds
-            inputs_embeds = torch.stack(
-                [
-                    torch.stack(tensor_list[batch_idx])
-                    for batch_idx in range(inputs_embeds.shape[0])
-                ]
-            )
+                # assemble the new inputs_embeds
+                inputs_embeds = torch.stack(
+                    [
+                        torch.stack(tensor_list[batch_idx])
+                        for batch_idx in range(inputs_embeds.shape[0])
+                    ]
+                )
+            
+            # Detach inputs_embeds after detached passes to prevent gradients flowing back
+            if should_detach:
+                inputs_embeds = inputs_embeds.detach()
 
         past_key_values=(
                         [
