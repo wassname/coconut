@@ -487,3 +487,412 @@ but acc was only 0.02, wth
 
 
 ![seems to help with loer loss](files/image.png)
+
+
+# 2025-10-11 17:11:39
+
+Some ideas on incorperating the ideas from the novel TRM paper mainly
+
+- because it does multiple non back prop recusrvive steps, it accumulated errors, which the final 2 grad enabled steps must fix. This stabilises things.
+- unfreeze first and last layers so it can learn to adapt
+
+    This might be **the key stabilizing mechanism**:
+
+    > "After many of its own steps, it will be filled with its own junk, it will have to learn to clean it up! And that cleaning step might be the element needed to make it stable and convergent!"
+
+    This explains why TRM doesn't need fixed-point assumptions:
+    - Step 1: Model produces h₁ (might contain errors)
+    - Step 2: Model sees h₁ + errors, learns to produce better h₂
+    - Step 3: Model sees h₂ + its own accumulated errors, learns to be **robust to its own mistakes**
+
+    It's like training a denoising autoencoder on its own outputs! The model learns an implicit "error correction" dynamic. Brilliant observation.
+
+    ## Implementation Plan for TRM-style Deep Supervision in Coconut
+
+    Here's a **concrete, actionable plan** to modify the repo:
+
+    ---
+
+    ### **Phase 1: Add Deep Supervision Infrastructure** (2-3 hours)
+
+    #### **1.1: Extend Config** (`coconut/configs.py`)
+
+    ```python
+    @dataclass
+    class BaseConfig:
+        # ... existing fields ...
+        
+        # TRM-style deep supervision
+        use_deep_supervision: bool = False
+        K_recursions: int = 3  # Number of full recursion processes per supervision step
+        T_max_supervision: int = 3  # Number of supervision steps per example
+        detach_early_recursions: bool = True  # Only backprop through last recursion
+        
+        # For experimentation
+        backprop_all_recursions: bool = False  # Ablation: backprop through all K
+    ```
+
+    #### **1.2: Create Deep Supervision Module** (`coconut/deep_supervision.py`)
+
+    ```python
+    import torch
+    import torch.nn as nn
+    from typing import Tuple, Optional
+    from jaxtyping import Float
+    from torch import Tensor
+
+    class DeepSupervisionWrapper(nn.Module):
+        """
+        Wraps a Coconut model to add TRM-style deep supervision.
+        
+        Key idea:
+        - Do K-1 recursion cycles WITHOUT gradients (model improves h using learned dynamics)
+        - Do 1 recursion cycle WITH gradients (train the improvement dynamics)
+        - Repeat T_max times per training example
+        """
+        
+        def __init__(
+            self, 
+            base_model,
+            K: int = 3,
+            T_max: int = 3,
+            detach_early: bool = True
+        ):
+            super().__init__()
+            self.model = base_model
+            self.K = K  # Recursions per supervision step
+            self.T_max = T_max  # Supervision steps per example
+            self.detach_early = detach_early
+        
+        def forward_single_recursion(
+            self,
+            input_ids,
+            attention_mask,
+            position_ids,
+            h_state: Optional[Float[Tensor, "b t h"]] = None,
+            detach: bool = False
+        ) -> Tuple[Float[Tensor, "b t h"], dict]:
+            """
+            One full recursion through the model with current latent state h.
+            
+            Returns:
+            - Updated h_state
+            - outputs dict (loss, logits, etc.)
+            """
+            # This calls the existing Coconut forward pass
+            # but we maintain h_state across calls
+            
+            # If we have h_state, inject it into inputs_embeds at <latent> positions
+            if h_state is not None:
+                inputs_embeds = self._inject_h_state(input_ids, h_state)
+            else:
+                inputs_embeds = self.model.get_input_embeddings()(input_ids)
+            
+            outputs = self.model.forward(
+                inputs_embeds=inputs_embeds,
+                attention_mask=attention_mask,
+                position_ids=position_ids,
+                labels=input_ids,  # For loss computation
+                output_hidden_states=True
+            )
+            
+            # Extract new h_state from hidden states
+            # This is where your hs2ie logic goes
+            from coconut.hs2ie import hs2ie
+            new_h_state = hs2ie(
+                outputs.hidden_states,
+                inputs_embeds,
+                self.model.get_output_embeddings().weight,
+                method=self.model.config.replacement_method
+            )
+            
+            if detach:
+                new_h_state = new_h_state.detach()
+                outputs.loss = outputs.loss.detach()
+            
+            return new_h_state, outputs
+        
+        def forward_supervision_step(
+            self,
+            input_ids,
+            attention_mask,
+            position_ids,
+            h_state: Optional[Float[Tensor, "b t h"]] = None
+        ):
+            """
+            One supervision step:
+            - K-1 recursions without gradients
+            - 1 recursion with gradients
+            """
+            # K-1 blind recursions
+            for k in range(self.K - 1):
+                h_state, _ = self.forward_single_recursion(
+                    input_ids, attention_mask, position_ids,
+                    h_state=h_state,
+                    detach=True  # No gradients
+                )
+            
+            # Final recursion with gradients
+            h_state, outputs = self.forward_single_recursion(
+                input_ids, attention_mask, position_ids,
+                h_state=h_state,
+                detach=False  # WITH gradients
+            )
+            
+            return h_state, outputs
+        
+        def forward(
+            self,
+            input_ids,
+            attention_mask,
+            position_ids,
+            labels=None
+        ):
+            """
+            Full deep supervision forward:
+            - T_max supervision steps
+            - Each step: K recursions (K-1 detached, 1 with gradients)
+            """
+            h_state = None
+            total_loss = 0
+            
+            for t in range(self.T_max):
+                h_state, outputs = self.forward_supervision_step(
+                    input_ids, attention_mask, position_ids,
+                    h_state=h_state
+                )
+                
+                total_loss += outputs.loss
+                
+                # Detach h_state before next supervision step
+                # (prevents gradients flowing between supervision steps)
+                h_state = h_state.detach()
+            
+            # Average loss across supervision steps
+            outputs.loss = total_loss / self.T_max
+            
+            return outputs
+        
+        def _inject_h_state(self, input_ids, h_state):
+            """Helper to inject h_state at <latent> positions"""
+            # This is similar to existing Coconut logic
+            # but simplified for clarity
+            inputs_embeds = self.model.get_input_embeddings()(input_ids)
+            
+            latent_mask = (input_ids == self.model.config.latent_token_id)
+            
+            # For each latent position, replace embedding with h_state
+            # (This needs more careful implementation to match indices)
+            
+            return inputs_embeds
+    ```
+
+    ---
+
+    ### **Phase 2: Integrate into Training Loop** (`scripts/run.py`)
+
+    #### **2.1: Wrap Model for Deep Supervision Training**
+
+    ```python
+    def main():
+        # ... existing setup ...
+        
+        model, tokenizer = load_new_model(conf, device, dtype)
+        
+        # NEW: Wrap with deep supervision if enabled
+        if conf.use_deep_supervision:
+            from coconut.deep_supervision import DeepSupervisionWrapper
+            
+            model = DeepSupervisionWrapper(
+                model,
+                K=conf.K_recursions,
+                T_max=conf.T_max_supervision,
+                detach_early=conf.detach_early_recursions
+            )
+            logger.info(f"Wrapped model with deep supervision: K={conf.K_recursions}, T_max={conf.T_max_supervision}")
+        
+        model = model.to(device)
+        
+        # ... rest of training ...
+    ```
+
+    #### **2.2: Modify Training Loop**
+
+    The existing training loop should mostly work, but you'll need to:
+
+    ```python
+    # In the training loop
+    for step, batch in enumerate(train_dataloader):
+        batch = {key: batch[key].to(device) for key in batch.keys() if key != "idx"}
+        
+        with torch.autocast(device_type=device, dtype=dtype):
+            if conf.use_deep_supervision:
+                # Deep supervision automatically does T_max steps
+                outputs = model(
+                    input_ids=batch['input_ids'],
+                    attention_mask=batch['attention_mask'],
+                    position_ids=batch.get('position_ids'),
+                    labels=batch['labels']
+                )
+            else:
+                # Original Coconut forward
+                outputs = model(**batch)
+            
+            loss = outputs.loss / conf.gradient_accumulation_steps
+        
+        loss.backward()
+        # ... rest of training ...
+    ```
+
+    ---
+
+    ### **Phase 3: Add EMA for Stability** (1 hour)
+
+    TRM found EMA crucial for stability. Add to `coconut/utils.py`:
+
+    ```python
+    class EMA:
+        """Exponential Moving Average of model weights"""
+        def __init__(self, model, decay=0.999):
+            self.model = model
+            self.decay = decay
+            self.shadow = {}
+            self.backup = {}
+            
+            # Initialize shadow weights
+            for name, param in model.named_parameters():
+                if param.requires_grad:
+                    self.shadow[name] = param.data.clone()
+        
+        def update(self):
+            """Update shadow weights"""
+            for name, param in self.model.named_parameters():
+                if param.requires_grad:
+                    self.shadow[name].mul_(self.decay).add_(
+                        param.data, alpha=1 - self.decay
+                    )
+        
+        def apply_shadow(self):
+            """Replace model weights with shadow weights"""
+            for name, param in self.model.named_parameters():
+                if param.requires_grad:
+                    self.backup[name] = param.data
+                    param.data = self.shadow[name]
+        
+        def restore(self):
+            """Restore original weights"""
+            for name, param in self.model.named_parameters():
+                if param.requires_grad:
+                    param.data = self.backup[name]
+            self.backup = {}
+    ```
+
+    **Integrate into training:**
+
+    ```python
+    # In main()
+    if conf.use_deep_supervision and conf.use_ema:
+        ema = EMA(model, decay=0.999)
+
+    # In training loop after optimizer.step()
+    if conf.use_deep_supervision and conf.use_ema:
+        ema.update()
+
+    # Before evaluation
+    if conf.use_deep_supervision and conf.use_ema:
+        ema.apply_shadow()
+        
+    # After evaluation
+    if conf.use_deep_supervision and conf.use_ema:
+        ema.restore()
+    ```
+
+    ---
+
+    ### **Phase 4: Experiments** (Testing time)
+
+    #### **Experiment 1: Verify Deep Supervision Works**
+
+    ```python
+    @dataclass
+    class TRM_Experiment_1(BaseConfig):
+        name: str = "trm-exp1-verify"
+        model_id: str = "Qwen/Qwen2.5-0.5B"
+        
+        use_deep_supervision: bool = True
+        K_recursions: int = 3
+        T_max_supervision: int = 3
+        use_ema: bool = True
+        
+        batch_size_training: int = 16  # Smaller due to more forward passes
+        num_epochs: int = 5
+        lr: float = 1e-4
+    ```
+
+    **Expected outcome:** Should maintain 40% accuracy like baseline but with fewer model parameters if you also reduce layers.
+
+    #### **Experiment 2: Test Recursion Depth**
+
+    ```python
+    # Test K=1, 3, 5, 7
+    # Expect: Sweet spot around K=3-7, diminishing returns after
+    ```
+
+    #### **Experiment 3: Ablate Components**
+
+    ```python
+    # Test:
+    # - With/without EMA (expect: significant stability difference)
+    # - With/without detaching early recursions (expect: worse if no detach)
+    # - Different T_max values (expect: 3-7 optimal)
+    ```
+
+    ---
+
+    ### **Phase 5: Advanced: Try 2-Layer Tiny Network** (If Phase 1-4 works)
+
+    ```python
+    @dataclass  
+    class TRM_TinyNetwork(BaseConfig):
+        name: str = "trm-tiny-2layer"
+        model_id: str = "Qwen/Qwen2.5-0.5B"
+        
+        # Freeze all but first 2 layers
+        freeze_layers_except: list = field(default_factory=lambda: [0, 1, -1])
+        
+        use_deep_supervision: bool = True
+        K_recursions: int = 7
+        T_max_supervision: int = 7
+        
+        # More recursions compensate for fewer trainable layers
+    ```
+
+    ---
+
+    ## **Quick Wins to Try First** (Before full implementation)
+
+    ### **Minimal Test: Single Supervision Step with Detached Recursions**
+
+    Modify existing `coconut.py` to add just one feature:
+
+    ```python
+    # In CoconutQwen3ForCausalLM.forward()
+
+    if self.config.use_mini_recursion:
+        # Do 2 extra passes with detached h_state
+        for _ in range(2):
+            hidden_states = self.forward(..., past_key_values=kv_cache).hidden_states
+            h_state = hs2ie(hidden_states, ...)
+            h_state = h_state.detach()  # No gradients
+            
+        # Final pass WITH gradients
+        outputs = self.forward(..., with_h_state=h_state)
+    ```
+
+    **Test this first** - if it helps even slightly, full deep supervision should help more.
+
+    ---
+
+Ok I'll try only backprop the last step...
+
+OK running a full experiment with that detach all but last 2 recursions thing. Hopefully it works. At the end we should have 3 thoughts per math step, 6  steps e.g <|start-latent|><|latent|><|latent|><|latent|><|latent|><|latent|><|latent|><|end-latent|>### 10.5`.

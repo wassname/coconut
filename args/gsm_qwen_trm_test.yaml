@@ -1,8 +1,8 @@
-# need 4 gpus
+# TRM minimal test: detached recursions
 
 project: coconut
 save_path: outputs/
-name: gsm-qwen
+name: gsm-qwen-trm-test
 
 only_eval: False
 
@@ -13,25 +13,21 @@ no_cot: False
 
 c_thought: 2
 epochs_per_stage: 1
-max_latent_stage: 3
+max_latent_stage: 4
 pad_latent_to_max: True
 
 replacement_method: "-1"
-# replacement_method: "-2"
-# replacement_method: "0.5"
-# replacement_method: "ie+supressed[0.5:]"
-# replacement_method: "hs+supressed[0.5:]"
-# replacement_method: "supressed[0.5:]"
-
 save_only_improve: True
 uniform_prob: 0.0
-# Qwen/Qwen2.5-0.5B-Instruct
-# model_id: fdyrd/QwenMath-0.5B
+
+# TRM experiment: 2 detached recursions before final gradient pass
+n_detached_recursions: 2
+
 model_id: Qwen/Qwen2.5-Coder-0.5B
-# model_id: plaguss/Qwen2.5-0.5B-Math-Shepherd-PRM-0.2
 load_model_path: null
 seed: 0
 resume: 0
+
 bf16: True
 bf16_weight: False
 
@@ -39,15 +35,16 @@ train_path: data/gsm_train.json
 val_path: data/gsm_valid.json
 
 reset_optimizer: False
-batch_size_training: 10
-max_size: 20000 # in verl this is enougth https://github.com/volcengine/verl/blob/main/examples/ppo_trainer/verl_getting_started.ipynb
+batch_size_training: 6  # Reduced from 10 due to memory
+max_size: 20000  # Quick test on subset
 debug: False
+
 gradient_accumulation_steps: 4
-num_epochs: 50
-lr: !!float "1e-4" # 1e-4
+num_epochs: 50  # Just a few epochs for quick test
+lr: 0.0001
+weight_decay: 0.01
 system_prompt: |
   Reason about the math question with CoT steps in << and >> tags or, if you are given <|start-latent|><|end-latent|> tags as part of the question, then you can think silently inside. Then return the final answer after ###, for example 
   <<5^0+1*2=?>>
   <<1+2=3>>
   ### 3
-weight_decay: 0.01

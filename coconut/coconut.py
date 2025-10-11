@@ -130,6 +130,7 @@ class CoconutConfig(Qwen2Config):
         self.replacement_method = kwargs.pop("replacement_method", "-1")
         self.latent_token_id = kwargs.pop("latent_token_id", None)
         self.eos_token_id = kwargs.pop("eos_token_id", None)
+        self.n_detached_recursions = kwargs.pop("n_detached_recursions", 0)  # 0=disabled, 2-3=test value
         super().__init__(**kwargs)
 
 
@@ -175,119 +176,136 @@ class CoconutQwen2ForCausalLM(Qwen2ForCausalLM):
         kv_cache = None
 
         for pass_idx in range(max_n_latents):
-            if kv_cache is None:
-                # first forward pass
-                outputs = super().forward(
-                    inputs_embeds=inputs_embeds[
-                        :, next_compute_range[0] : next_compute_range[1], :
-                    ],
-                    attention_mask=attention_mask[
-                        :, next_compute_range[0] : next_compute_range[1]
-                    ],
-                    position_ids=position_ids[
-                        :, next_compute_range[0] : next_compute_range[1]
-                    ],
-                    output_hidden_states=True,
-                    use_cache=True,
-                )
-                hidden_states_offset = 0
-
-            else:
-                # extract kv cache to reuse
-                past_key_values = [
-                    (
-                        k[:, :, : next_compute_range[0], :],
-                        v[:, :, : next_compute_range[0], :],
-                    )
-                    for k, v in kv_cache
-                ]
-
-                # Qwen needs this
-                past_key_values= DynamicCache.from_legacy_cache(past_key_values)
-
-                outputs = super().forward(
-                    inputs_embeds=inputs_embeds[
-                        :, next_compute_range[0] : next_compute_range[1], :
-                    ],
-                    attention_mask=attention_mask[:, : next_compute_range[1]],
-                    position_ids=position_ids[
-                        :, next_compute_range[0] : next_compute_range[1]
-                    ],
-                    past_key_values=past_key_values,
-                    output_hidden_states=True,
-                    use_cache=True,
-                )
-
-                hidden_states_offset = next_compute_range[0]
-                # when we use kv_cache for the first k tokens
-                # in `outputs.hidden_states`, [0, k) will be skipped
-                # so we need to keep this offset to correctly use the last hidden states
-
-            logits.append(outputs.logits)
-
-            next_compute_range = (
-                next_compute_range[1],
-                (
-                    input_ids.shape[1]
-                    if pass_idx + 1 >= max_n_latents
-                    else next_compute_range[1] + 1
-                ),
+            # TRM-style: detach gradients for early passes, keep gradients for last N passes
+            should_detach = (
+                self.training 
+                and self.config.n_detached_recursions > 0 
+                and pass_idx < (max_n_latents - self.config.n_detached_recursions)
             )
+            
+            if should_detach:
+                ctx = torch.no_grad()
+            else:
+                ctx = torch.enable_grad()
+            
+            with ctx:
+                if kv_cache is None:
+                    # first forward pass
+                    outputs = super().forward(
+                        inputs_embeds=inputs_embeds[
+                            :, next_compute_range[0] : next_compute_range[1], :
+                        ],
+                        attention_mask=attention_mask[
+                            :, next_compute_range[0] : next_compute_range[1]
+                        ],
+                        position_ids=position_ids[
+                            :, next_compute_range[0] : next_compute_range[1]
+                        ],
+                        output_hidden_states=True,
+                        use_cache=True,
+                    )
+                    hidden_states_offset = 0
 
-            hidden_states = outputs.hidden_states
-            assert hidden_states is not None
-            kv_cache = outputs.past_key_values
-            if isinstance(kv_cache, DynamicCache):
-                kv_cache = kv_cache.to_legacy_cache()
-            assert kv_cache is not None
+                else:
+                    # extract kv cache to reuse
+                    past_key_values = [
+                        (
+                            k[:, :, : next_compute_range[0], :],
+                            v[:, :, : next_compute_range[0], :],
+                        )
+                        for k, v in kv_cache
+                    ]
 
-            # feedback the continuous thoughts to the input_embeds
+                    # Qwen needs this
+                    past_key_values= DynamicCache.from_legacy_cache(past_key_values)
 
-            # first decide the positions to feedback
-            filling_indices = [
-                (instance_idx, mask_list[pass_idx])
-                for instance_idx, mask_list in enumerate(latent_lists)
-                if len(mask_list) > pass_idx
-            ]
+                    outputs = super().forward(
+                        inputs_embeds=inputs_embeds[
+                            :, next_compute_range[0] : next_compute_range[1], :
+                        ],
+                        attention_mask=attention_mask[:, : next_compute_range[1]],
+                        position_ids=position_ids[
+                            :, next_compute_range[0] : next_compute_range[1]
+                        ],
+                        past_key_values=past_key_values,
+                        output_hidden_states=True,
+                        use_cache=True,
+                    )
 
-            # to avoid in-place operations
-            # break down inputs_embeds (bs, len, hidden_size) into a list of list of 1-d tensors
-            tensor_list = [
-                [
-                    inputs_embeds[batch_idx, pos, :]
-                    for pos in range(inputs_embeds.shape[1])
+                    hidden_states_offset = next_compute_range[0]
+                    # when we use kv_cache for the first k tokens
+                    # in `outputs.hidden_states`, [0, k) will be skipped
+                    # so we need to keep this offset to correctly use the last hidden states
+
+                logits.append(outputs.logits)
+
+                next_compute_range = (
+                    next_compute_range[1],
+                    (
+                        input_ids.shape[1]
+                        if pass_idx + 1 >= max_n_latents
+                        else next_compute_range[1] + 1
+                    ),
+                )
+
+                hidden_states = outputs.hidden_states
+                assert hidden_states is not None
+                kv_cache = outputs.past_key_values
+                if isinstance(kv_cache, DynamicCache):
+                    kv_cache = kv_cache.to_legacy_cache()
+                assert kv_cache is not None
+
+                # feedback the continuous thoughts to the input_embeds
+
+                # first decide the positions to feedback
+                filling_indices = [
+                    (instance_idx, mask_list[pass_idx])
+                    for instance_idx, mask_list in enumerate(latent_lists)
+                    if len(mask_list) > pass_idx
                 ]
-                for batch_idx in range(inputs_embeds.shape[0])
-            ]
-            # tensor_shape = torch.stack([torch.stack([xx for xx in x]) for x in tensor_list]).shape
-            # # tensor_shapes = [[tuple(xx.shape) for xx in x] for x in tensor_list]
-            # print({'pass_idx':pass_idx, 
-            #        'inputs_embeds': inputs_embeds.shape, 
-            #        'tensor_shape': tensor_shape, 
-            #        'hidden_states_offset': hidden_states_offset})
 
-
-            # replace some of them with continuous thoughts
-            for idx_pair in filling_indices:
-                batch_idx, token_idx = idx_pair
-
-                # TODO experiment with transformers here, we are replacing. 
-                # replace it with the preceding last hidden states
-                Wo = self.get_output_embeddings().weight
-                recrv_embeds = hs2ie(hidden_states, inputs_embeds, Wo, method=self.config.replacement_method)
-                # print({'hs': torch.stack(hidden_states).shape, 'recrv_embeds': recrv_embeds.shape, 'tensor_list': tensor_list[batch_idx][token_idx].shape})
-                tensor_list[batch_idx][token_idx] = recrv_embeds[
-                    batch_idx, token_idx - 1 - hidden_states_offset, :
-                ]
-                # print(tensor_list[batch_idx][token_idx].shape, recrv_embeds.shape, batch_idx, token_idx, token_idx - 1 - hidden_states_offset)
-
-            # assemble the new inputs_embeds
-            inputs_embeds = torch.stack(
-                [
-                    torch.stack(tensor_list[batch_idx])
+                # to avoid in-place operations
+                # break down inputs_embeds (bs, len, hidden_size) into a list of list of 1-d tensors
+                tensor_list = [
+                    [
+                        inputs_embeds[batch_idx, pos, :]
+                        for pos in range(inputs_embeds.shape[1])
+                    ]
                     for batch_idx in range(inputs_embeds.shape[0])
                 ]
-            )
+                # tensor_shape = torch.stack([torch.stack([xx for xx in x]) for x in tensor_list]).shape
+                # # tensor_shapes = [[tuple(xx.shape) for xx in x] for x in tensor_list]
+                # print({'pass_idx':pass_idx, 
+                #        'inputs_embeds': inputs_embeds.shape, 
+                #        'tensor_shape': tensor_shape, 
+                #        'hidden_states_offset': hidden_states_offset})
+
+
+                # replace some of them with continuous thoughts
+                for idx_pair in filling_indices:
+                    batch_idx, token_idx = idx_pair
+
+                    # TODO experiment with transformers here, we are replacing. 
+                    # replace it with the preceding last hidden states
+                    Wo = self.get_output_embeddings().weight
+                    recrv_embeds = hs2ie(hidden_states, inputs_embeds, Wo, method=self.config.replacement_method)
+                    # print({'hs': torch.stack(hidden_states).shape, 'recrv_embeds': recrv_embeds.shape, 'tensor_list': tensor_list[batch_idx][token_idx].shape})
+                    tensor_list[batch_idx][token_idx] = recrv_embeds[
+                        batch_idx, token_idx - 1 - hidden_states_offset, :
+                    ]
+                    # print(tensor_list[batch_idx][token_idx].shape, recrv_embeds.shape, batch_idx, token_idx, token_idx - 1 - hidden_states_offset)
+
+                # assemble the new inputs_embeds
+                inputs_embeds = torch.stack(
+                    [
+                        torch.stack(tensor_list[batch_idx])
+                        for batch_idx in range(inputs_embeds.shape[0])
+                    ]
+                )
+            
+            # Detach inputs_embeds after detached passes to prevent gradients flowing back
+            if should_detach:
+                inputs_embeds = inputs_embeds.detach()
 
         past_key_values=(
                         [
