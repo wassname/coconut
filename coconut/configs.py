@@ -106,7 +106,6 @@ class GSMQwenResume(BaseConfig):
 
 
 
-
 @dataclass
 class GsmQwen_H100(GSMQwenResume):
     """
@@ -168,4 +167,15 @@ class TRMTest(BaseConfig):
     Forces model to learn to clean up its own accumulated errors.
     """
     # TRM experiment: only backprop last 2 passes out of 4 total
+    n_detached_recursions: int = 2
+
+@dataclass
+class TRM_H100(GsmQwen_H100):
+    """
+    TRM-style detached recursions test.
+    
+    Detaches gradients for early recursive passes, only backprops through last N.
+    Forces model to learn to clean up its own accumulated errors.
+    """
+    # TRM experiment: only backprop last 2 passes out of up to 8 total
     n_detached_recursions: int = 2

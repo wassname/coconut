@@ -785,4 +785,70 @@ If we train for 1 epoch which replacement method is best/
 |                 hs[-1] |   0.1747 |      0.0112 |     3 |     1 |      0.9452 |        8.7211 |   0.420122 |    0.4459 |
 |       supressed[0.25:] |   0.1487 |           0 |     3 |     1 |      0.9287 |       10.6798 |   0.613252 |     0.587 |
 
+
+
 python scripts/run.py GsmQwen_H100
+
+
+
+| TRM | 0.168 | 0.04 | 3 | 1 | 0.94 | 26 | ? | ? |
+
+# 2025-10-11 21:11:43
+
+    # TRM-Style Detached Recursions Implementation
+
+    ## Summary
+
+    Minimal implementation of TRM-style training where early recursive passes are detached (no gradients), and only the last N passes backpropagate gradients. This forces the model to learn to clean up its own accumulated errors.
+
+
+    ## How It Works
+
+    **Example**: If `max_n_latents=4` and `n_detached_recursions=2`:
+    - **Pass 0,1**: Run with `torch.no_grad()` 
+    - Model does "blind" recursions
+    - Accumulates its own errors/junk
+    - No gradient computation (faster, less memory)
+    
+    - **Pass 2,3**: Run with gradients enabled
+    - Model sees accumulated errors from passes 0,1
+    - Learns to clean up and be robust to its own mistakes
+    - Gradients flow back to update weights
+
+    ## Key Insight from TRM Paper
+
+    > "After many of its own steps, it will be filled with its own junk, it will have to learn to clean it up! And that cleaning step might be the element needed to make it stable and convergent!"
+
+    This is like training a denoising autoencoder on the model's own outputs - it learns an implicit error correction dynamic.
+
+    ## Testing
+
+    ### Using Config Classes (Recommended)
+
+    Run the TRM experiment:
+    ```bash
+    uv run python scripts/run.py TRMTest
+    ```
+
+    ## Expected Results
+
+    - **Memory**: Slightly lower during detached passes (no gradient storage)
+    - **Speed**: Slightly faster overall (fewer backward passes)
+    - **Stability**: Potentially more stable training (error correction mechanism)
+    - **Accuracy**: Should match or exceed baseline if hypothesis is correct
+
+    ## Next Steps
+
+    1. Run full experiment comparing n_detached_recursions=0,1,2,3
+    2. Monitor loss curves and accuracy
+    3. If promising, try with larger models on H100
+    4. Consider adding EMA (Exponential Moving Average) for extra stability
+
+
+# 2025-10-12 10:52:50
+
+Where are we at?
+
+
+I do the first few epochs and save a checkpoint, since it doesn't differ.
+This lets me do follow up experiments more quickly.
