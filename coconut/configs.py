@@ -101,7 +101,7 @@ class GSMQwenResume(BaseConfig):
     load_model_path: str = "outputs/qwen3-0.6b_20250514-194730/checkpoint_2"
     cot_epochs: int = 2
     epochs_per_stage: int = 8
-    resume_epochs: int = 1
+    resume_epochs: int = 10
     # loss_seq_vcr: bool = True
 
 
@@ -179,3 +179,5 @@ class TRM_H100(GsmQwen_H100):
     """
     # TRM experiment: only backprop last 2 passes out of up to 8 total
     n_detached_recursions: int = 2
+
+    # batch_size_training: int = 48 # migth be able to increase this since we only backprop last 2 passes

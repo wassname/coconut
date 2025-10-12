@@ -787,7 +787,7 @@ If we train for 1 epoch which replacement method is best/
 
 
 
-python scripts/run.py GsmQwen_H100
+
 
 
 
@@ -852,3 +852,30 @@ Where are we at?
 
 I do the first few epochs and save a checkpoint, since it doesn't differ.
 This lets me do follow up experiments more quickly.
+
+
+python scripts/run.py GsmQwen_H100
+python scripts/run.py TRM_H100
+
+
+# 2025-10-12 04:21:10
+
+TODO we start of stage 0, but should be stage 1!
+
+even epoch 7 is stage 0]
+
+
+but
+
+2025-10-12 03:21:47.540 | INFO     | __main__:main:152 - Config: {'project': 'coconut', 'save_path': 'outputs/', 'name': 'gsm-qwen-0.6bh100', 'model_id': 'suayptalha/Qwen3-0.6B-Math-Expert', 'only_eval': False, 'load_model_path': 'outputs/qwen3-0.6b_20250514-194730/checkpoint_2', 'resume_epochs': 1, 'replacement_method': 'supressed[0.75:]', 'use_position_ids': True, 'bf16': True, 'bf16_weight': False, 'opt_8b': False, 'cot_epochs': 2, 'epochs_per_stage': 8, 'max_latent_stage': 3, 'num_epochs': 50, 'batch_size_training': 48, 'gradient_accumulation_steps': 3, 'lr': 0.0001, 'weight_decay': 0.01, 'grad_clip': 10.0, 'scheduler': 'cosine', 'debug': False, 'seed': 42, 'reset_optimizer': True, 'loss_seq_vcr': True, 'n_detached_recursions': 2, 'max_size': 60000, 'c_thought': 2, 'pad_latent_to_max': True, 'uniform_prob': 0.0, 'train_path': 'data/gsm_train.json', 'val_path': 'data/gsm_valid.json', 'system_prompt': ''}
+2025-10-12 03:21:47.781 | INFO     | coconut.utils:print_cuda_devices:48 - Device 0: NVIDIA H100 NVL
+
+epochs_per_stage': 8, 'max_latent_stage': 3, 'num_epochs': 50,
+
+but resume_epochs should be 8?
+
+epoch=2 stage=-1
+epoch=7 stage=0
+
+
+fix resume_epoch to start at stage 1, not -1, or 1
