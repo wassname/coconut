@@ -44,6 +44,9 @@ class BaseConfig:
     max_latent_stage: int = 3 # max number of thought tokens, unstable is >3?
     num_epochs: int = 50 # 50 in coconut, but more capable model probobly need less
 
+    # dataset: for each reasoning step we use X thought tokens (up to our max)
+    c_thought: int = 2
+
     # effectve batch size should be 128
     batch_size_training: int = 12
     gradient_accumulation_steps: int = 10
@@ -60,7 +63,7 @@ class BaseConfig:
 
     reset_optimizer: bool = True
 
-    loss_seq_vcr: bool = True # experimental loss, might help with intermediate state stabiliy
+    loss_seq_vcr: bool = False # experimental loss, might help with intermediate state stabiliy
 
     # TRM-style: detach gradients for first N passes, only backprop through last few
     n_detached_recursions: int = 0  # 0=disabled, 2=keep gradients only for last 2 passes
@@ -75,8 +78,7 @@ class BaseConfig:
 
     max_size: int = 60_000 # full ~400k in coconut
     
-    # dataset: for each reasoning step we use X thought tokens (up to our max)
-    c_thought: int = 2
+    
 
     # dataset
     pad_latent_to_max: bool = True
@@ -100,48 +102,36 @@ class GSMQwen(BaseConfig):
 class GSMQwenResume(BaseConfig):
     load_model_path: str = "outputs/qwen3-0.6b_20250514-194730/checkpoint_2"
     cot_epochs: int = 2
-    epochs_per_stage: int = 8
-    resume_epochs: int = 10
+    epochs_per_stage: int = 6
+    # resume_epochs: int = 10
     # loss_seq_vcr: bool = True
 
+    resume_epochs: int = 2+6*2-1
+    num_epochs: int = 24
+    lr: float = 4e-4
 
 
-@dataclass
-class GsmQwen_H100(GSMQwenResume):
-    """
-    For running on a h100
-    """
-    name: str = "gsm-qwen-0.6bh100"
-    
-    bf16: bool = True
-    bf16_weight: bool = False
-    opt_8b: bool = False
-
-    # note 48 ran out of ram at stage 3
-    batch_size_training: int = 48
-    gradient_accumulation_steps: int = 3
-    max_size: int = 60_000 # full ~400k in coconut
 
 
-@dataclass
-class EpochSingleCoT(GsmQwen_H100):
-    load_model_path: str = "outputs/qwen3-0.6b_20250514-194730/checkpoint_2"
-    cot_epochs: int = 2
-    epochs_per_stage: int = 1
-    resume_epochs: int = 1
-    # loss_seq_vcr: bool = True
-    num_epochs: int = 2
-    max_size: int = 8_000 # full ~400k in coconut
+# @dataclass
+# class EpochSingleCoT(GsmQwen_H100):
+#     load_model_path: str = "outputs/qwen3-0.6b_20250514-194730/checkpoint_2"
+#     cot_epochs: int = 2
+#     epochs_per_stage: int = 1
+#     resume_epochs: int = 1
+#     # loss_seq_vcr: bool = True
+#     num_epochs: int = 2
+#     max_size: int = 8_000 # full ~400k in coconut
 
-@dataclass
-class EpochSingleLatent(GsmQwen_H100):
-    load_model_path: str = "outputs/qwen3-0.6b_20250514-194730/checkpoint_2"
-    cot_epochs: int = 2
-    epochs_per_stage: int = 1
-    resume_epochs: int = 3
-    # loss_seq_vcr: bool = True
-    num_epochs: int = 4
-    max_size: int = 8_000 # full ~400k in coconut
+# @dataclass
+# class EpochSingleLatent(GsmQwen_H100):
+#     load_model_path: str = "outputs/qwen3-0.6b_20250514-194730/checkpoint_2"
+#     cot_epochs: int = 2
+#     epochs_per_stage: int = 1
+#     resume_epochs: int = 3
+#     # loss_seq_vcr: bool = True
+#     num_epochs: int = 4
+#     max_size: int = 8_000 # full ~400k in coconut
 
 @dataclass
 class Debug(GSMQwenResume):
@@ -169,6 +159,24 @@ class TRMTest(BaseConfig):
     # TRM experiment: only backprop last 2 passes out of 4 total
     n_detached_recursions: int = 2
 
+
+@dataclass
+class GsmQwen_H100(GSMQwenResume):
+    """
+    For running on a h100
+    """
+    name: str = "gsm-qwen-0.6bh100"
+    
+    bf16: bool = True
+    bf16_weight: bool = False
+    opt_8b: bool = False
+
+    # note 48 ran out of ram at stage 3
+    batch_size_training: int = 42
+    gradient_accumulation_steps: int = 3
+    max_size: int = 60_000 # full ~400k in coconut
+
+
 @dataclass
 class TRM_H100(GsmQwen_H100):
     """
@@ -181,3 +189,27 @@ class TRM_H100(GsmQwen_H100):
     n_detached_recursions: int = 2
 
     # batch_size_training: int = 48 # migth be able to increase this since we only backprop last 2 passes
+
+
+
+@dataclass
+class TRMPLUS_H100(GsmQwen_H100):
+    """
+    Super fast an extreme, big batch, only backprop last 1 pass, 2x vbatch size
+    """
+    # TRM experiment: only backprop last 2 passes out of up to 8 total
+    n_detached_recursions: int = 2
+
+    batch_size_training: int = 48 # migth be able to increase this since we only backprop last 2 passes
+    # resume_epochs: int = 2+8*1
+    # num_epochs: int = 30
+    gradient_accumulation_steps: int = 1
+    # max_latent_stage: int = 10
+    
+    loss_seq_vcr: bool = True
+    reset_optimizer: bool = False
+    scheduler: str = "linear"
+    weight_decay: float = 0.001
+
+    # c_thought: int = 2
+    lr: float = 1e-4

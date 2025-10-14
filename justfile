@@ -21,9 +21,11 @@ run_trm:
 
 run_h100:
   #!/bin/bash
+  export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
   . ./.venv/bin/activate
   python scripts/run.py TRM_H100
   python scripts/run.py GsmQwen_H100
+  python scripts/run.py TRMPLUS_H100
 
 # run3:
 #   #!/bin/bash

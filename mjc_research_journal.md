@@ -879,3 +879,127 @@ epoch=7 stage=0
 
 
 fix resume_epoch to start at stage 1, not -1, or 1
+
+# 2025-10-12 21:39:42
+
+With only one training step the rest detached:
+
+| epoch | acc  | <latents>'s |
+| ----- | ---- | ----------- |
+| 10    | 0.6  | 2           |
+| 11    | 4.2  | 2           |
+| 15    | 21.4 | 2           |
+| 18    | 9.6  | 4           |
+| 20    | 6.4  | 4           |
+| 22    | 3.8  | 4           |
+| 24    | 4.8  | 4           |
+| 26    | 3.2  | 6           | 
+
+ended in out of meme OOM 
+
+
+While the same but with all learning was
+
+| epoch | acc | <latents>'s |
+| ----- | --- | ----------- |
+| 13    | 32  | 2           |
+
+# Results: gsm-qwen-0.6bh100_20251012-214131
+
+{'project': 'coconut', 'save_path': 'outputs/', 'name': 'gsm-qwen-0.6bh100', 'model_id': 'suayptalha/Qwen3-0.6B-Math-Expert', 'only_eval': False, 'load_model_path': 'outputs/qwen3-0.6b_20250514-194730/checkpoint_2', 'resume_epochs': 10, 'replacement_method': 'supressed[0.75:]', 'use_position_ids': True, 'bf16': True, 'bf16_weight': False, 'opt_8b': False, 'cot_epochs': 2, 'epochs_per_stage': 8, 'max_latent_stage': 10, 'num_epochs': 30, 'c_thought': 2, 'batch_size_training': 48, 'gradient_accumulation_steps': 2, 'lr': 0.0001, 'weight_decay': 0.01, 'grad_clip': 10.0, 'scheduler': 'cosine', 'debug': False, 'seed': 42, 'reset_optimizer': True, 'loss_seq_vcr': True, 'n_detached_recursions': 2, 'max_size': 60000, 'pad_latent_to_max': True, 'uniform_prob': 0.0, 'train_path': 'data/gsm_train.json', 'val_path': 'data/gsm_valid.json', 'system_prompt': ''}
+|    |   eval/acc |   eval/cot_em |   epoch |   stage |   eval/ratios |   train/minutes |    train/loss |     eval/loss |
+|---:|-----------:|--------------:|--------:|--------:|--------------:|----------------:|--------------:|--------------:|
+|  0 |      0.004 |         0.008 |      -1 |       1 |        0.8832 |        nan      | nan           | nan           |
+|  1 |      0.312 |         0.008 |      10 |       1 |        0.9247 |         52.8182 |   0.167544    |   0.3305      |
+|  2 |      0.312 |         0.008 |      -1 |       1 |        0.9247 |        nan      | nan           | nan           |
+|  3 |      0.202 |         0.012 |      11 |       1 |        0.9165 |         53.1923 |   0.131262    |   0.3058      |
+|  4 |      0.202 |         0.012 |      -1 |       1 |        0.9165 |        nan      | nan           | nan           |
+|  5 |      0.22  |         0.01  |      12 |       1 |        0.913  |         52.8404 |   0.159561    |   0.3059      |
+|  6 |      0.22  |         0.01  |      -1 |       1 |        0.913  |        nan      | nan           | nan           |
+|  7 |      0.358 |         0.018 |      13 |       1 |        0.9098 |         53.099  |   0.128176    |   0.309       |
+|  8 |      0.358 |         0.018 |      -1 |       1 |        0.9098 |        nan      | nan           | nan           |
+|  9 |      0.36  |         0.012 |      14 |       1 |        0.8797 |         52.7037 |   0.107306    |   0.3193      |
+| 10 |      0.36  |         0.012 |      -1 |       1 |        0.8797 |        nan      | nan           | nan           |
+| 11 |      0.374 |         0.014 |      15 |       1 |        0.8878 |         52.4442 |   0.0661385   |   0.3232      |
+| 12 |      0.374 |         0.014 |      -1 |       1 |        0.8878 |        nan      | nan           | nan           |
+| 13 |      0.356 |         0.014 |      16 |       1 |        0.8886 |         52.4911 |   0.0759603   |   0.3324      |
+| 14 |      0.356 |         0.014 |      -1 |       1 |        0.8886 |        nan      | nan           | nan           |
+| 15 |      0.39  |         0.012 |      17 |       1 |        0.8727 |         52.3591 |   0.0903275   |   0.3567      |
+| 16 |      0.294 |         0.01  |      -1 |       2 |        0.5753 |        nan      | nan           | nan           |
+| 17 |      0.088 |         0.012 |      18 |       2 |        0.6815 |         49.3495 |   2.80134     |  17.0314      |
+| 18 |      0.088 |         0.012 |      -1 |       2 |        0.6815 |        nan      | nan           | nan           |
+| 19 |      0.034 |         0.012 |      19 |       2 |        0.7249 |         48.2797 |   5.25639     |  28.8641      |
+| 20 |      0.034 |         0.012 |      -1 |       2 |        0.7249 |        nan      | nan           | nan           |
+| 21 |      0.01  |         0.006 |      20 |       2 |        0.684  |         46.4525 |  44.2678      | 127.056       |
+| 22 |      0.01  |         0.006 |      -1 |       2 |        0.684  |        nan      | nan           | nan           |
+| 23 |      0.012 |         0.01  |      21 |       2 |        0.7339 |         45.2312 |  56.0021      | 108.808       |
+| 24 |      0.012 |         0.01  |      -1 |       2 |        0.7339 |        nan      | nan           | nan           |
+| 25 |      0.028 |         0.004 |      22 |       2 |        0.7622 |         44.5645 |  32.5923      |  75.4351      |
+| 26 |      0.028 |         0.004 |      -1 |       2 |        0.7622 |        nan      | nan           | nan           |
+| 27 |      0.03  |         0.01  |      23 |       2 |        0.7558 |         44.2663 |  61.2389      |  96.5807      |
+| 28 |      0.03  |         0.01  |      -1 |       2 |        0.7558 |        nan      | nan           | nan           |
+| 29 |      0.028 |         0.01  |      24 |       2 |        0.7801 |         43.7908 |  36.8941      |  77.6323      |
+| 30 |      0.028 |         0.01  |      -1 |       2 |        0.7801 |        nan      | nan           | nan           |
+| 31 |      0.03  |         0.006 |      25 |       2 |        0.7845 |         43.4268 |  29.8162      |  69.9565      |
+| 32 |      0.024 |         0.01  |      -1 |       3 |        0.7076 |        nan      | nan           | nan           |
+| 33 |      0.006 |         0.012 |      26 |       3 |        0.8164 |         51.1444 |   6.16294e+06 |   6.7437e+06  |
+| 34 |      0.006 |         0.012 |      -1 |       3 |        0.8164 |        nan      | nan           | nan           |
+| 35 |      0     |         0.01  |      27 |       3 |        0.8511 |         51.1183 |   2.54883e+06 |   1.19071e+07 |
+| 36 |      0     |         0.01  |      -1 |       3 |        0.8511 |        nan      | nan           | nan           |
+| 37 |      0     |         0.012 |      28 |       3 |        0.8447 |         51.0069 |   1.01061e+07 |   1.26631e+07 |
+| 38 |      0     |         0.012 |      -1 |       3 |        0.8447 |        nan      | nan           | nan           |
+| 39 |      0     |         0.012 |      29 |       3 |        0.8902 |         51.037  |   2.10279e+07 |   2.28462e+07 |
+
+Withotu detach
+|    |   eval/acc |   eval/cot_em |   epoch |   stage |   eval/ratios |   train/minutes |    train/loss |     eval/loss |
+|---:|-----------:|--------------:|--------:|--------:|--------------:|----------------:|--------------:|--------------:|
+| 15 |      0.33  |         0.018 |      17 |       1 |        0.8792 |          |     |       |
+| 18 |      0.056 |         0.012 |      18 |       2 |        0.66993 |        42      | nan           | nan           |
+
+
+# 2025-10-14 00:31:12
+
+## Results: gsm-qwen-0.6bh100_20251013-215328
+n_detached_recursions
+ 2
+{'project': 'coconut', 'save_path': 'outputs/', 'name': 'gsm-qwen-0.6bh100', 'model_id': 'suayptalha/Qwen3-0.6B-Math-Expert', 'only_eval': False, 'load_model_path': 'outputs/qwen3-0.6b_20250514-194730/checkpoint_2', 'resume_epochs': 17, 'replacement_method': 'supressed[0.75:]', 'use_position_ids': True, 'bf16': True, 'bf16_weight': False, 'opt_8b': False, 'cot_epochs': 2, 'epochs_per_stage': 8, 'max_latent_stage': 3, 'num_epochs': 20, 'c_thought': 2, 'batch_size_training': 48, 'gradient_accumulation_steps': 3, 'lr': 0.0001, 'weight_decay': 0.01, 'grad_clip': 10.0, 'scheduler': 'cosine', 'debug': False, 'seed': 42, 'reset_optimizer': True, 'loss_seq_vcr': False, 'n_detached_recursions': 2, 'max_size': 60000, 'pad_latent_to_max': True, 'uniform_prob': 0.0, 'train_path': 'data/gsm_train.json', 'val_path': 'data/gsm_valid.json', 'system_prompt': ''}
+|    |   eval/acc |   eval/cot_em |   epoch |   stage |   eval/ratios |   train/minutes |   train/loss |   eval/loss |
+|---:|-----------:|--------------:|--------:|--------:|--------------:|----------------:|-------------:|------------:|
+|  0 |      0.004 |         0.008 |      -1 |       1 |        0.8832 |        nan      |   nan        |    nan      |
+|  1 |      0.212 |         0.006 |      17 |       1 |        0.9415 |         47.8774 |     0.229151 |      0.3071 |
+|  2 |      0.222 |         0.014 |      -1 |       2 |        0.7314 |        nan      |   nan        |    nan      |
+|  3 |      0.11  |         0.012 |      18 |       2 |        0.7223 |         44.6466 |     0.311127 |      0.4235 |
+|  4 |      0.11  |         0.012 |      -1 |       2 |        0.7223 |        nan      |   nan        |    nan      |
+|  5 |      0.128 |         0.012 |      19 |       2 |        0.6887 |         44.556  |     0.236562 |      0.4133 |
+
+
+
+# 2025-10-14 10:08:16
+
+
+# Results: gsm-qwen-0.6bh100_20251014-003415
+{'project': 'coconut', 'save_path': 'outputs/', 'name': 'gsm-qwen-0.6bh100', 'model_id': 'suayptalha/Qwen3-0.6B-Math-Expert', 'only_eval': False, 'load_model_path': 'outputs/qwen3-0.6b_20250514-194730/checkpoint_2', 'resume_epochs': 13, 'replacement_method': 'supressed[0.75:]', 'use_position_ids': True, 'bf16': True, 'bf16_weight': False, 'opt_8b': False, 'cot_epochs': 2, 'epochs_per_stage': 6, 'max_latent_stage': 3, 'num_epochs': 24, 'c_thought': 2, 'batch_size_training': 42, 'gradient_accumulation_steps': 3, 'lr': 0.0004, 'weight_decay': 0.01, 'grad_clip': 10.0, 'scheduler': 'cosine', 'debug': False, 'seed': 42, 'reset_optimizer': True, 'loss_seq_vcr': False, 'n_detached_recursions': 2, 'max_size': 60000, 'pad_latent_to_max': True, 'uniform_prob': 0.0, 'train_path': 'data/gsm_train.json', 'val_path': 'data/gsm_valid.json', 'system_prompt': ''}
+|    |   eval/acc |   eval/cot_em |   epoch |   stage |   eval/ratios |   train/minutes |   train/loss |   eval/loss |
+|---:|-----------:|--------------:|--------:|--------:|--------------:|----------------:|-------------:|------------:|
+|  0 |      0.008 |         0.008 |      -1 |       1 |        0.865  |        nan      |  nan         |    nan      |
+|  1 |      0.354 |         0.004 |      13 |       1 |        0.9233 |         42.1996 |    0.17989   |      0.2956 |
+|  2 |      0.342 |         0.006 |      -1 |       2 |        0.6747 |        nan      |  nan         |    nan      |
+|  3 |      0.22  |         0.012 |      14 |       2 |        0.6324 |         39.8421 |    0.189788  |      0.4027 |
+|  4 |      0.22  |         0.012 |      -1 |       2 |        0.6324 |        nan      |  nan         |    nan      |
+|  5 |      0.178 |         0.012 |      15 |       2 |        0.6544 |         39.745  |    0.243706  |      0.4476 |
+|  6 |      0.178 |         0.012 |      -1 |       2 |        0.6544 |        nan      |  nan         |    nan      |
+|  7 |      0.174 |         0.012 |      16 |       2 |        0.6281 |         40.3605 |    0.228659  |      0.446  |
+|  8 |      0.174 |         0.012 |      -1 |       2 |        0.6281 |        nan      |  nan         |    nan      |
+|  9 |      0.18  |         0.012 |      17 |       2 |        0.6391 |         39.9031 |    0.183613  |      0.4559 |
+| 10 |      0.18  |         0.012 |      -1 |       2 |        0.6391 |        nan      |  nan         |    nan      |
+| 11 |      0.144 |         0.012 |      18 |       2 |        0.6109 |         39.5908 |    0.0857562 |      0.4709 |
+| 12 |      0.144 |         0.012 |      -1 |       2 |        0.6109 |        nan      |  nan         |    nan      |
+| 13 |      0.14  |         0.004 |      19 |       2 |        0.6173 |         39.4858 |    0.210172  |      0.4557 |
+| 14 |      0.142 |         0.008 |      -1 |       3 |        0.4713 |        nan      |  nan         |    nan      |
+| 15 |      0.106 |         0.012 |      20 |       3 |        0.5534 |         45.7894 |    0.345805  |      0.5753 |
+| 16 |      0.106 |         0.012 |      -1 |       3 |        0.5534 |        nan      |  nan         |    nan      |
+| 17 |      0.092 |         0.012 |      21 |       3 |        0.5615 |         45.6138 |    0.260465  |      0.5937 |
+| 18 |      0.092 |         0.012 |      -1 |       3 |        0.5615 |        nan      |  nan         |    nan      |
+| 19 |      0.086 |         0.012 |      22 |       3 |        0.5554 |         45.0971 |    0.343754  |      0.588  |
+| 20 |      0.086 |         0.012 |      -1 |       3 |        0.5554 |        nan      |  nan         |    nan      |
+| 21 |      0.126 |         0.012 |      23 |       3 |        0.5123 |         44.7795 |    0.283659  |      0.5706 |
