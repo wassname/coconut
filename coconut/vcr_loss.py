@@ -16,6 +16,25 @@ def calc_seq_vcr_loss(
 ) -> Tuple[Float[Tensor, ""], Dict[str, float]]:
     """
     Fully-vectorized Seq-VCR loss: no Python for‐loop.
+
+
+    Usage:
+    class Model(nn.Module):
+        def __init__(self, ...):
+            ...
+            self.vcr_loss = VCRLoss(H=hidden_size, D=proj_dim)
+            ...
+
+        def forward(self, x):
+            loss = super().forward(x)
+            ...
+            if self.training and self.config.loss_seq_vcr:
+                loss_vcr, logs_vcr = self.vcr_loss(hs_l)
+                loss += loss_vcr
+
+            ...
+            return loss, logits, logs
+
     """
     B, T, P = hs.shape
     # (T, B, P)

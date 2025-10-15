@@ -26,13 +26,13 @@
       }
     },
     {
-      "name": "cot full",
+      "name": "trm cot full",
       "type": "debugpy",
       "request": "launch",
       "program": "./scripts/run.py",
       "console": "integratedTerminal",
       "args": [
-        "args/gsm_qwen_1.5b.yaml"
+        "TRM"
       ],
       "justMyCode": false,
       "autoReload": {

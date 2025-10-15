@@ -7,13 +7,13 @@ from coconut.coconut import (
     CoconutConfig,
     CoconutQwen3ForCausalLM,
 )
-from coconut.utils import Config
+from coconut.configs import BaseConfig
 from loguru import logger
 from pathlib import Path
 import torch
 import toml
 
-def load_new_model(conf: Config, device, dtype):
+def load_new_model(conf: BaseConfig, device, dtype):
     # load tokenizer
     tokenizer = AutoTokenizer.from_pretrained(
         conf.model_id,
@@ -42,16 +42,50 @@ def load_new_model(conf: Config, device, dtype):
         replacement_method=conf.replacement_method,
         loss_seq_vcr=conf.loss_seq_vcr,
         n_detached_recursions=conf.n_detached_recursions,
+        use_trm=getattr(conf, 'use_trm', False),
+        load_in_4bit=getattr(conf, 'load_in_4bit', False),
+        load_in_8bit=getattr(conf, 'load_in_8bit', False),
+        trm_num_layers=getattr(conf, 'trm_num_layers', 2),
+        trm_num_heads=getattr(conf, 'trm_num_heads', 8),
+        trm_expansion=getattr(conf, 'trm_expansion', 2.67),
     )
-    model = CoconutQwen3ForCausalLM.from_pretrained(
-        conf.model_id, config=model_config, device_map=device, torch_dtype=dtype
-    )
+    
+    # TRM mode: load with quantization
+    if getattr(conf, 'use_trm', False):
+        logger.info("TRM mode: loading model with quantization")
+        from transformers import BitsAndBytesConfig
+        
+        quantization_config = None
+        if getattr(conf, 'load_in_4bit', False):
+            logger.info("Loading in 4bit")
+            quantization_config = BitsAndBytesConfig(
+                load_in_4bit=True,
+                bnb_4bit_compute_dtype=dtype,
+                bnb_4bit_use_double_quant=True,
+                bnb_4bit_quant_type="nf4"
+            )
+        elif getattr(conf, 'load_in_8bit', False):
+            logger.info("Loading in 8bit")
+            quantization_config = BitsAndBytesConfig(load_in_8bit=True)
+        
+        model = CoconutQwen3ForCausalLM.from_pretrained(
+            conf.model_id, 
+            config=model_config, 
+            device_map=device, 
+            torch_dtype=dtype,
+            quantization_config=quantization_config
+        )
+    else:
+        model = CoconutQwen3ForCausalLM.from_pretrained(
+            conf.model_id, config=model_config, device_map=device, torch_dtype=dtype
+        )
+    
     # apply_config(model, tokenizer, conf)
 
     model.resize_token_embeddings(len(tokenizer))
     return model, tokenizer
 
-def resume_model(conf: Config, device="auto", dtype=torch.bfloat16):
+def resume_model(conf: BaseConfig, device="auto", dtype=torch.bfloat16):
     # load model
     f = Path("./" + conf.load_model_path)
     assert f.exists(), f"Model path {f} does not exist"

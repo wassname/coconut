@@ -65,6 +65,14 @@ class BaseConfig:
     # TRM-style: detach gradients for first N passes, only backprop through last few
     n_detached_recursions: int = 0  # 0=disabled, 2=keep gradients only for last 2 passes
 
+    # TRM mode: use frozen quantized LLM with TRM recursive reasoning
+    use_trm: bool = False  # Enable TRM adapter with frozen LLM
+    load_in_4bit: bool = False  # Load LLM in 4bit for TRM mode
+    load_in_8bit: bool = False  # Load LLM in 8bit for TRM mode
+    trm_num_layers: int = 2  # Number of transformer layers in TRM recurser
+    trm_num_heads: int = 8  # Number of attention heads in TRM
+    trm_expansion: float = 2.67  # MLP expansion factor in TRM
+
 
 
     # # used to get a baseline, not used or broken now?
@@ -168,6 +176,21 @@ class TRMTest(BaseConfig):
     """
     # TRM experiment: only backprop last 2 passes out of 4 total
     n_detached_recursions: int = 2
+
+@dataclass
+class TRM(BaseConfig):
+    """Full TRM mode: frozen quantized LLM + TRM adapter."""
+    name: str = "trm-qwen3-0.6b"
+    use_trm: bool = True
+    load_in_4bit: bool = True
+    n_detached_recursions: int = 2
+    trm_num_layers: int = 2
+    trm_num_heads: int = 8
+    max_size: int = 1000  # Start very small for testing
+    batch_size_training: int = 2  # Smaller batch for quantized model
+    gradient_accumulation_steps: int = 64  # Keep effective batch ~128
+    loss_seq_vcr: bool = False  # Disable VCR loss (conflicts with 4bit quantization)
+    num_epochs: int = 3  # Just a few epochs to test training
 
 @dataclass
 class TRM_H100(GsmQwen_H100):

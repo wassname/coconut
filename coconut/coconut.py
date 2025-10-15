@@ -28,6 +28,7 @@ from transformers import (
 
 from coconut.hs2ie import hs2ie, get_supressed_activations
 from coconut.vcr_loss import VCRLoss
+from coconut.trm_adapter import CoconutTRM
 
 
 Outputs = namedtuple(
@@ -51,6 +52,12 @@ class CoconutConfig(Qwen3Config):
         self.use_position_ids = None
         self.loss_seq_vcr = None
         self.n_detached_recursions = None
+        self.use_trm = None
+        self.load_in_4bit = None
+        self.load_in_8bit = None
+        self.trm_num_layers = None
+        self.trm_num_heads = None
+        self.trm_expansion = None
 
 class CoconutQwen3ForCausalLM(Qwen3ForCausalLM):
     def __init__(
@@ -66,11 +73,137 @@ class CoconutQwen3ForCausalLM(Qwen3ForCausalLM):
         assert self.config.n_detached_recursions is not None, "n_detached_recursions must be set in the config"
 
         self.gen_forward_cnt = 0
+
+        # FIXME this is getting quantised
         if self.config.loss_seq_vcr:
             self.vcr_loss = VCRLoss(H=self.config.hidden_size)
+        
+        # TRM mode: add TRM adapter
+        if getattr(self.config, 'use_trm', False):
+            logger.info("Initializing TRM adapter for frozen LLM")
+            self.trm = CoconutTRM(
+                hidden_size=self.config.hidden_size,
+                n_latents=4,  # Match typical coconut latent count
+                n_detached=self.config.n_detached_recursions,
+                num_layers=getattr(self.config, 'trm_num_layers', 2),
+                num_heads=getattr(self.config, 'trm_num_heads', 8),
+                expansion=getattr(self.config, 'trm_expansion', 2.67),
+            )
+            # Freeze LLM when using TRM
+            logger.info("Freezing base LLM parameters")
+            for param in self.model.parameters():
+                param.requires_grad = False
+            for param in self.lm_head.parameters():
+                param.requires_grad = False
 
+    def _forward_trm(
+        self, 
+        input_ids: Int[Tensor, 'batch seq'], 
+        attention_mask: Optional[Int[Tensor, 'batch seq']] = None,
+        labels: Optional[Int[Tensor, 'batch seq']] = None,
+        position_ids: Optional[Int[Tensor, 'batch seq']] = None,
+        **kwargs
+    ) -> Outputs:
+        """
+        TRM mode forward: frozen LLM + TRM adapter.
+        
+        Flow:
+        1. Encode question with frozen LLM → context hidden states
+        2. TRM adapter does recursive reasoning on latent states
+        3. Decode with frozen LLM → logits
+        """
+        if attention_mask is None:
+            attention_mask = torch.ones_like(input_ids, device=input_ids.device)
+        if labels is None:
+            labels = input_ids.clone()
+        
+        # Find latent token positions
+        latent_indices = (input_ids == self.config.latent_token_id).nonzero()
+        logger.debug(f"TRM forward: found {len(latent_indices)} latent tokens")
+        
+        # Split into: question (before first latent) | latents | answer (after last latent)
+        first_latent_pos = latent_indices[:, 1].min().item()
+        last_latent_pos = latent_indices[:, 1].max().item()
+        logger.debug(f"TRM forward: latent positions {first_latent_pos} to {last_latent_pos}")
+        
+        # Step 1: Encode question with frozen LLM
+        question_ids: Int[Tensor, 'batch q_len'] = input_ids[:, :first_latent_pos]
+        question_mask: Int[Tensor, 'batch q_len'] = attention_mask[:, :first_latent_pos]
+        
+        logger.debug(f"TRM forward: encoding question shape {question_ids.shape}")
+        with torch.no_grad():
+            question_outputs = super().forward(
+                input_ids=question_ids,
+                attention_mask=question_mask,
+                output_hidden_states=True,
+            )
+        
+        # Get context hidden states (last layer)
+        context_hs: Float[Tensor, 'batch q_len hidden'] = question_outputs.hidden_states[-1]
+        logger.debug(f"TRM forward: context_hs shape {context_hs.shape}")
+        
+        # Step 2: TRM recursive reasoning
+        logger.debug("TRM forward: running TRM adapter")
+        latent_embeds: Float[Tensor, 'batch n_latents hidden'] = self.trm(context_hs)
+        logger.debug(f"TRM forward: latent_embeds shape {latent_embeds.shape}")
+        
+        # Step 3: Insert latent embeddings and decode
+        # Build full input embeddings: question embeds | latent embeds | answer embeds
+        embed_layer = self.get_input_embeddings()
+        question_embeds: Float[Tensor, 'batch q_len hidden'] = embed_layer(question_ids)
+        
+        # Get answer tokens (after latents)
+        if last_latent_pos + 1 < input_ids.shape[1]:
+            answer_ids: Int[Tensor, 'batch a_len'] = input_ids[:, last_latent_pos + 1:]
+            answer_embeds: Float[Tensor, 'batch a_len hidden'] = embed_layer(answer_ids)
+            
+            # Concatenate: question | latent_embeds | answer
+            full_embeds: Float[Tensor, 'batch full_len hidden'] = torch.cat([
+                question_embeds, latent_embeds, answer_embeds
+            ], dim=1)
+        else:
+            # No answer tokens, just question + latents
+            full_embeds: Float[Tensor, 'batch full_len hidden'] = torch.cat([
+                question_embeds, latent_embeds
+            ], dim=1)
+        
+        # Decode with frozen LLM
+        with torch.no_grad():
+            decode_outputs = super().forward(
+                inputs_embeds=full_embeds,
+                attention_mask=attention_mask,
+                output_hidden_states=True,
+            )
+        
+        # Compute loss (only TRM gets gradients)
+        logits: Float[Tensor, 'batch seq vocab'] = decode_outputs.logits
+        shift_logits = logits[..., :-1, :].contiguous()
+        shift_labels = labels[..., 1:].contiguous()
+        loss_fct = CrossEntropyLoss()
+        loss = loss_fct(
+            shift_logits.view(-1, shift_logits.size(-1)), 
+            shift_labels.view(-1)
+        )
+        
+        extra = {'loss_ar': loss.item()}
+        
+        return Outputs(
+            loss=loss, 
+            inputs_embeds=full_embeds, 
+            logits=logits, 
+            past_key_values=decode_outputs.past_key_values,
+            hidden_states=list(decode_outputs.hidden_states), 
+            log=extra
+        )
 
     def forward(self, input_ids, attention_mask=None, labels=None, position_ids=None, **kwargs):
+        # Route to TRM forward if enabled AND latents present
+        if getattr(self.config, 'use_trm', False):
+            latent_indices = (input_ids == self.config.latent_token_id).nonzero()
+            if len(latent_indices) > 0:
+                return self._forward_trm(input_ids, attention_mask, labels, position_ids, **kwargs)
+            # If no latents, fall through to standard forward
+        
         if attention_mask is None:
             attention_mask=torch.ones_like(input_ids, device=input_ids.device)
         if labels is None:

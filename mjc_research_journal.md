@@ -852,3 +852,144 @@ Where are we at?
 
 I do the first few epochs and save a checkpoint, since it doesn't differ.
 This lets me do follow up experiments more quickly.
+
+# 2025-10-14 18:12:23
+
+# TRM-Style Recursive Reasoning for Small LLMs
+
+
+## Core Idea
+
+Apply Tiny Recursive Model (TRM) principles to pretrained LLMs using two learned components:
+1. **Transcoder**: Bridges output hidden states → input embeddings (the format mismatch problem)
+2. **Recurser**: Tiny 2-layer transformer that iteratively refines hidden states
+
+Only backprop through full LLM once at the end, avoiding Coconut's 3-day training bottleneck.
+
+Refs:
+
+- docs/trm_paper.md
+- docs/trm_reference_code/models/layers.py
+
+
+so it's TRM but I'm modifying the idea to apply to LLM's coconut style, so the idea is TRM but it's applied to the <latent> tokens in coconut, and just like TRM we detach all but the last 2 recursions. This lets us use a quantised LLM and just learn a TRM that takes in the output hidden state `hs.detach()` from the LLM processing every token up to <start-latent> then TRM works on the latents, then the network decodes the final hidden state to tokens `hs->output`
+
+There one additional problem which is that LLM's are not used to receiving their own hidden states as input, so we need a small transcoder network to convert the hidden state to the embedding space using the output_head. This is like the "format mismatch" problem in coconut, but we solve it explicitly with a small network. I thought that output_head would naturally learn the transcode, and the TRM would natrually learn to work in the output embedding space
+
+we should reuse the coconut code as much as possible, so read README.md and justfile, and coconut.py
+
+Here's my attempt at modifying the TRM psudocode from the paper to add the LLM wrapper. Again this is my modification of TRM not TRM's original psudocode
+
+```py
+# where output_head converts zH to input embeddings
+# where x are output hidden states from LLM
+# hs are embeddings 
+# where the llm is 4bit and frozen
+
+def hrm(z, x, n=2, T=2): # hierarchical reasoning
+    zH, zL = z
+    with torch.no_grad():
+        for i in range(nT - 2):
+            zL = L_net(zL, zH, x)
+            if (i + 1) % T == 0:
+                zH = H_net(zH, zL)
+    # 1-step grad
+    zL = L_net(zL, zH, x)
+    zH = H_net(zH, zL)
+    return (zH, zL), output_head(zH), Q_head(zH)
+
+def ACT_halt(q, y_hat, y_true):
+    target_halt = (y_hat == y_true)
+    loss = 0.5*binary_cross_entropy(q[0], target_halt)
+    return loss
+
+def ACT_continue(q, last_step):
+    if last_step:
+        target_continue = sigmoid(q[0])
+    else:
+        target_continue = sigmoid(max(q[0], q[1]))
+    loss = 0.5*binary_cross_entropy(q[1], target_continue)
+    return loss
+
+# Deep Supervision
+for x_input, y_true in train_dataloader:
+    z = z_init
+    for step in range(N_sup): # deep supervision
+        with torch.no_grad():
+            # LLM converts input tokens to output hidden states
+            x_hs = LLM(x_input).hidden_states[-1]
+        z, embed_pred, q = hrm(z, x_hs)
+        y_pred = LLM(embed_pred) # new
+        loss = loss_fn(y_pred, y_true)
+        # Adaptive computational time (ACT) using Q-learning
+        loss += ACT_halt(q, y_pred, y_true)
+        _, _, q_next = hrm(z, x_hs) # extra forward pass
+        loss += ACT_continue(q_next, step == N_sup - 1)
+        z = z.detach()
+        loss.backward()
+        opt.step()
+        opt.zero_grad()
+        if q[0] > q[1]: # early-stopping
+            break
+```
+Figure 2: Pseudocode of Hierarchical Reasoning Models (HRMs).
+
+
+So we use a frozen 8bit or 4bit llm for the encoder, out output head is now a transcoder that converts hidden states to embeddings,and we decode the final hidden state with the llm rollout from <think> to full output chain of thought.
+
+ok but for TRM modules look at layers.py and trm.py ema.py, losses.py how much do we need to carry over? and you designed your own... why? I don't think you shoul;d
+
+we are looking for minimal modification to this repo's coconut, we can probobly modify the config, coconut.py forward, bring in trm/*.py as needed,
+
+coconut/
+├── __init__.py
+├── coconut.py          # Modify: add use_trm mode
+├── configs.py          # Modify: add TRM config
+├── trm_layers.py       # NEW: copy from TRM reference
+└── trm_adapter.py      # NEW: minimal TRM wrapper for LLM
+
+Minimal Modification Strategy
+What to Copy from TRM Reference Code:
+layers.py → coconut/trm_layers.py
+
+Already have Attention, SwiGLU, rms_norm, etc.
+Use these building blocks directly
+Core TRM Components (simplified from trm.py):
+
+TinyRecursiveReasoningModel_ACTV1Block - the 2-layer transformer
+TinyRecursiveReasoningModel_ACTV1ReasoningModule - wrapper for recursion
+Skip ACT/Q-learning initially (too complex)
+
+Looking at the progress so far and your plan, here's a comprehensive task list:
+
+## TRM Integration Task List
+
+### Core Implementation
+- [x] Copy TRM layers over as needed
+  - [x] Create trm_layers.py with core building blocks (Attention, SwiGLU, RMSNorm)
+  - [x] Create trm_adapter.py with TRMBlock, TRMRecurser, TRMTranscoder, CoconutTRM
+- [x] Modify config
+  - [x] Add TRM config fields to configs.py (use_trm, load_in_4bit/8bit, trm_num_layers, etc.)
+- [ ] Modify coconut.py forward and loss
+  - [ ] Add `CoconutTRM` initialization in `__init__` when `use_trm=True`
+  - [ ] Add `_forward_trm()` method for TRM path
+  - [ ] Modify `forward()` to route to TRM path when `use_trm=True`
+  - [ ] Handle frozen LLM loading (4bit/8bit via bitsandbytes)
+- [ ] Create TRM config class
+  - [ ] Add `GSMQwenTRM` config in configs.py with use_trm=True, load_in_4bit=True, n_detached_recursions=2
+- [ ] Update run.py to handle TRM config name
+
+### Testing & Debugging
+- [ ] Try running with `uv run python scripts/run.py TRM`
+
+Next immediate action: Modify coconut.py to add TRM integration.
+
+fyi as you go, I do like jaxtyping and einops, so if you are rewriting any they are nice and as a bonux jaxtyping for pytorch lets us check dims e.g.
+```
+# https://github.com/patrick-kidger/jaxtyping?tab=readme-ov-file
+from jaxtyping import Float, Int
+x: Float[Tensor, 'batch seq hs'] = torch.rand(...
+# https://github.com/beartype/beartype
+from beartype.claw import beartype_this_package       # <-- hype comes
+beartype_this_package()                               # <-- hype goes
+```
