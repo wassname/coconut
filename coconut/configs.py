@@ -181,6 +181,7 @@ class TRMTest(BaseConfig):
 class TRM(BaseConfig):
     """Full TRM mode: frozen quantized LLM + TRM adapter."""
     name: str = "trm-qwen3-0.6b"
+    load_model_path: str = "outputs/qwen3-0.6b_20250514-194730/checkpoint_2"
     use_trm: bool = True
     load_in_4bit: bool = True
     n_detached_recursions: int = 2
@@ -190,7 +191,11 @@ class TRM(BaseConfig):
     batch_size_training: int = 2  # Smaller batch for quantized model
     gradient_accumulation_steps: int = 64  # Keep effective batch ~128
     loss_seq_vcr: bool = False  # Disable VCR loss (conflicts with 4bit quantization)
-    num_epochs: int = 3  # Just a few epochs to test training
+    num_epochs: int = 4  # Just a few epochs to test training
+    epochs_per_stage: int = 1
+    resume_epochs: int = 2
+    cot_epochs: int = 1
+
 
 @dataclass
 class TRM_H100(GsmQwen_H100):

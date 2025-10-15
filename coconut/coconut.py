@@ -96,6 +96,8 @@ class CoconutQwen3ForCausalLM(Qwen3ForCausalLM):
             for param in self.lm_head.parameters():
                 param.requires_grad = False
 
+            self.model.enable_input_require_grads()
+
     def _forward_trm(
         self, 
         input_ids: Int[Tensor, 'batch seq'], 
@@ -132,7 +134,7 @@ class CoconutQwen3ForCausalLM(Qwen3ForCausalLM):
         
         logger.debug(f"TRM forward: encoding question shape {question_ids.shape}")
         with torch.no_grad():
-            question_outputs = super().forward(
+            question_outputs = self.model.forward(
                 input_ids=question_ids,
                 attention_mask=question_mask,
                 output_hidden_states=True,
@@ -150,14 +152,17 @@ class CoconutQwen3ForCausalLM(Qwen3ForCausalLM):
         # Step 3: Insert latent embeddings and decode
         # Build full input embeddings: question embeds | latent embeds | answer embeds
         embed_layer = self.get_input_embeddings()
-        question_embeds: Float[Tensor, 'batch q_len hidden'] = embed_layer(question_ids)
+        with torch.no_grad():
+            question_embeds: Float[Tensor, 'batch q_len hidden'] = embed_layer(question_ids)
         
         # Get answer tokens (after latents)
         if last_latent_pos + 1 < input_ids.shape[1]:
             answer_ids: Int[Tensor, 'batch a_len'] = input_ids[:, last_latent_pos + 1:]
-            answer_embeds: Float[Tensor, 'batch a_len hidden'] = embed_layer(answer_ids)
+            with torch.no_grad():
+                answer_embeds: Float[Tensor, 'batch a_len hidden'] = embed_layer(answer_ids)
             
             # Concatenate: question | latent_embeds | answer
+            # latent_embeds has gradients, others don't
             full_embeds: Float[Tensor, 'batch full_len hidden'] = torch.cat([
                 question_embeds, latent_embeds, answer_embeds
             ], dim=1)
@@ -167,16 +172,20 @@ class CoconutQwen3ForCausalLM(Qwen3ForCausalLM):
                 question_embeds, latent_embeds
             ], dim=1)
         
-        # Decode with frozen LLM
+        # Decode with frozen LLM - but keep LM head WITH gradients for loss
+        # Forward through transformer layers (frozen, no grad)
         with torch.no_grad():
-            decode_outputs = super().forward(
+            decode_outputs = super().model(
                 inputs_embeds=full_embeds,
                 attention_mask=attention_mask,
                 output_hidden_states=True,
             )
+            final_hidden = decode_outputs[0]  # Last hidden state
         
-        # Compute loss (only TRM gets gradients)
-        logits: Float[Tensor, 'batch seq vocab'] = decode_outputs.logits
+        # Apply LM head WITH gradients (not frozen, allows gradients to flow to TRM)
+        logits: Float[Tensor, 'batch seq vocab'] = self.lm_head(final_hidden)
+        
+        # Compute loss - now has gradient path through lm_head -> latent_embeds -> TRM
         shift_logits = logits[..., :-1, :].contiguous()
         shift_labels = labels[..., 1:].contiguous()
         loss_fct = CrossEntropyLoss()
@@ -185,14 +194,18 @@ class CoconutQwen3ForCausalLM(Qwen3ForCausalLM):
             shift_labels.view(-1)
         )
         
+        
         extra = {'loss_ar': loss.item()}
+        
+        # Build hidden_states list (all layers from decode)
+        hidden_states = decode_outputs.hidden_states if hasattr(decode_outputs, 'hidden_states') else (final_hidden,)
         
         return Outputs(
             loss=loss, 
             inputs_embeds=full_embeds, 
             logits=logits, 
-            past_key_values=decode_outputs.past_key_values,
-            hidden_states=list(decode_outputs.hidden_states), 
+            past_key_values=None,  # We don't use KV cache in TRM training
+            hidden_states=list(hidden_states), 
             log=extra
         )
 
@@ -504,7 +517,13 @@ class CoconutQwen3ForCausalLM(Qwen3ForCausalLM):
             return tokens
 
 def check_input_lens(input_ids, attention_mask, kv_cache):
-    len_c = kv_cache.key_cache[0].shape[2] if len(kv_cache.key_cache) else 0
+    # Handle DynamicCache - use get_seq_length() method
+    if hasattr(kv_cache, 'get_seq_length'):
+        len_c = kv_cache.get_seq_length()
+    else:
+        # legacy cache format
+        len_c = kv_cache.key_cache[0].shape[2] if len(kv_cache.key_cache) else 0
+    
     len_ids = input_ids.shape[1]
     len_att = attention_mask.shape[1]
     assert len_c + len_ids == len_att, f"The length of the attention mask  {len_att} should cover the cache length {len_c} and the len of the input_ids {len_ids}"
