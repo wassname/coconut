@@ -131,7 +131,7 @@ class Coconut(nn.Module):
         
         # Step 3: Insert latent embeddings and decode
         # Build full input embeddings: question embeds | latent embeds | answer embeds
-        embed_layer = self.get_input_embeddings()
+        embed_layer = self.model.get_input_embeddings()
         with torch.no_grad():
             question_embeds: Float[Tensor, 'batch q_len hidden'] = embed_layer(question_ids)
         
@@ -165,7 +165,7 @@ class Coconut(nn.Module):
             final_hidden = decode_outputs[0]  # Last hidden state
         
         # Apply LM head WITH gradients (not frozen, allows gradients to flow to TRM)
-        logits: Float[Tensor, 'batch seq vocab'] = self.lm_head(final_hidden)
+        logits: Float[Tensor, 'batch seq vocab'] = self.model.lm_head(final_hidden)
         
         # Compute loss - now has gradient path through lm_head -> latent_embeds -> TRM
         shift_logits = logits[..., :-1, :].contiguous()

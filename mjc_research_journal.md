@@ -870,6 +870,9 @@ Refs:
 
 - docs/trm_paper.md
 - docs/trm_reference_code/models/layers.py
+- docs/trm_reference_code/models/recursive_reasoning/trm.py
+- docs/trm_reference_code/pretrain.py
+- coconut/trm_layers.py
 
 
 so it's TRM but I'm modifying the idea to apply to LLM's coconut style, so the idea is TRM but it's applied to the <latent> tokens in coconut, and just like TRM we detach all but the last 2 recursions. This lets us use a quantised LLM and just learn a TRM that takes in the output hidden state `hs.detach()` from the LLM processing every token up to <start-latent> then TRM works on the latents, then the network decodes the final hidden state to tokens `hs->output`
