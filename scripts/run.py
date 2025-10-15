@@ -94,29 +94,29 @@ def run_ratio_eval(
 def create_optimizer(model, configs, warmup_fraction=0.1, opt_steps=None, cycles=1):
     warmup_steps = opt_steps * warmup_fraction
     scheduler = None
-    if configs.bf16_weight:
-        import optimi
+    # if configs.bf16_weight:
+    #     import optimi
 
-        optimizer = optimi.AdamW(
-            model.parameters(),
-            lr=configs.lr,
-            weight_decay=configs.weight_decay if configs.weight_decay else None,
-            kahan_sum=True,
-        )
-    elif configs.opt_8b:
-        import bitsandbytes as bnb
+    #     optimizer = optimi.AdamW(
+    #         model.parameters(),
+    #         lr=configs.lr,
+    #         weight_decay=configs.weight_decay if configs.weight_decay else None,
+    #         kahan_sum=True,
+    #     )
+    # elif configs.opt_8b:
+    #     import bitsandbytes as bnb
 
-        optimizer = bnb.optim.Adam8bit(
-            model.parameters(),
-            lr=configs.lr,
-            weight_decay=configs.weight_decay,
-        )
-    else:
-        optimizer = optim.AdamW(
-            model.parameters(),
-            lr=configs.lr,
-            weight_decay=configs.weight_decay,
-        )
+    #     optimizer = bnb.optim.Adam8bit(
+    #         model.parameters(),
+    #         lr=configs.lr,
+    #         weight_decay=configs.weight_decay,
+    #     )
+    # else:
+    optimizer = optim.AdamW(
+        model.parameters(),
+        lr=configs.lr,
+        weight_decay=configs.weight_decay,
+    )
     if warmup_steps is not None:
         if configs.scheduler == "linear":
             scheduler = get_linear_schedule_with_warmup(
@@ -165,7 +165,7 @@ def main():
 
     # set devices
     print_cuda_devices()
-    device = "cuda"  # if torch.cuda.is_available() else "cpu"
+    device = "cuda:0"  # if torch.cuda.is_available() else "cpu"
     dtype = torch.bfloat16 if (conf.bf16 is True) else torch.float32
     logger.info(f"Using device: {device}, dtype: {dtype}")
 
@@ -250,6 +250,7 @@ def main():
         )
 
         # initial eval
+
         dataset_gen_val = get_question_only_latent_dataset(
             stage,
             base_dataset_valid,

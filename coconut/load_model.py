@@ -12,6 +12,7 @@ from loguru import logger
 from pathlib import Path
 import torch
 import toml
+from transformers import BitsAndBytesConfig
 
 def load_new_model(conf: BaseConfig, device, dtype):
     # load tokenizer
@@ -53,7 +54,6 @@ def load_new_model(conf: BaseConfig, device, dtype):
     # TRM mode: load with quantization
     if getattr(conf, 'use_trm', False):
         logger.info("TRM mode: loading model with quantization")
-        from transformers import BitsAndBytesConfig
         
         quantization_config = None
         if getattr(conf, 'load_in_4bit', False):
@@ -75,10 +75,10 @@ def load_new_model(conf: BaseConfig, device, dtype):
             torch_dtype=dtype,
             quantization_config=quantization_config
         )
-    else:
-        model = CoconutQwen3ForCausalLM.from_pretrained(
-            conf.model_id, config=model_config, device_map=device, torch_dtype=dtype
-        )
+
+    model = CoconutQwen3ForCausalLM.from_pretrained(
+        conf.model_id, config=model_config, device_map=device, torch_dtype=dtype, quantization_config=quantization_config
+    )
     
     # apply_config(model, tokenizer, conf)
 
@@ -103,14 +103,34 @@ def resume_model(conf: BaseConfig, device="auto", dtype=torch.bfloat16):
         loss_seq_vcr=conf.loss_seq_vcr,
         replacement_method=conf.replacement_method,
         n_detached_recursions=conf.n_detached_recursions,
+        load_in_4bit=conf.load_in_4bit,
+        load_in_8bit=conf.load_in_8bit,
+        use_trm=conf.use_trm,
+        trm_num_layers=conf.trm_num_layers,
+        trm_num_heads=conf.trm_num_heads,
+        trm_expansion=conf.trm_expansion,
+        # need
     )
+
+
+    quantization_config = None
+    if getattr(conf, 'load_in_4bit', False):
+        logger.info("Loading in 4bit")
+        quantization_config = BitsAndBytesConfig(
+            load_in_4bit=True,
+            bnb_4bit_compute_dtype=dtype,
+            bnb_4bit_use_double_quant=True,
+            bnb_4bit_quant_type="nf4"
+        )
+    elif getattr(conf, 'load_in_8bit', False):
+        logger.info("Loading in 8bit")
+        quantization_config = BitsAndBytesConfig(load_in_8bit=True)
+        
     model = CoconutQwen3ForCausalLM.from_pretrained(
         conf.load_model_path,
         config=config,
         # conf.load_model_path, 
-        device_map=device, torch_dtype=dtype, 
-
-
+        device_map=device, torch_dtype=dtype, quantization_config=quantization_config
     )
     logger.warning(f"Resumed model from {conf.load_model_path}")
 

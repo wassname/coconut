@@ -52,9 +52,9 @@ class CoconutConfig(Qwen3Config):
         self.use_position_ids = None
         self.loss_seq_vcr = None
         self.n_detached_recursions = None
-        self.use_trm = None
         self.load_in_4bit = None
         self.load_in_8bit = None
+        self.use_trm = None
         self.trm_num_layers = None
         self.trm_num_heads = None
         self.trm_expansion = None
@@ -123,6 +123,7 @@ class CoconutQwen3ForCausalLM(Qwen3ForCausalLM):
         latent_indices = (input_ids == self.config.latent_token_id).nonzero()
         logger.debug(f"TRM forward: found {len(latent_indices)} latent tokens")
         
+        # FIXME does this work if they are in differen't places? Would need to pad and mask? to make splitting at different work? I think we do it in another location
         # Split into: question (before first latent) | latents | answer (after last latent)
         first_latent_pos = latent_indices[:, 1].min().item()
         last_latent_pos = latent_indices[:, 1].max().item()
@@ -148,6 +149,7 @@ class CoconutQwen3ForCausalLM(Qwen3ForCausalLM):
         logger.debug("TRM forward: running TRM adapter")
         latent_embeds: Float[Tensor, 'batch n_latents hidden'] = self.trm(context_hs)
         logger.debug(f"TRM forward: latent_embeds shape {latent_embeds.shape}")
+        assert torch.isfinite(latent_embeds).all(), "Non-finite values in latent_embeds"
         
         # Step 3: Insert latent embeddings and decode
         # Build full input embeddings: question embeds | latent embeds | answer embeds
@@ -157,6 +159,7 @@ class CoconutQwen3ForCausalLM(Qwen3ForCausalLM):
         
         # Get answer tokens (after latents)
         if last_latent_pos + 1 < input_ids.shape[1]:
+            # FIXME why answer?
             answer_ids: Int[Tensor, 'batch a_len'] = input_ids[:, last_latent_pos + 1:]
             with torch.no_grad():
                 answer_embeds: Float[Tensor, 'batch a_len hidden'] = embed_layer(answer_ids)
@@ -175,7 +178,8 @@ class CoconutQwen3ForCausalLM(Qwen3ForCausalLM):
         # Decode with frozen LLM - but keep LM head WITH gradients for loss
         # Forward through transformer layers (frozen, no grad)
         with torch.no_grad():
-            decode_outputs = super().model(
+            # FIXME should be generate?
+            decode_outputs = self.model(
                 inputs_embeds=full_embeds,
                 attention_mask=attention_mask,
                 output_hidden_states=True,

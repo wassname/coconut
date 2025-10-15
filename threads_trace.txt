@@ -1,0 +1,69 @@
+Thread 0x00007825bf5fe6c0 (most recent call first):
+  File "/home/wassname/.local/share/uv/python/cpython-3.10.16-linux-x86_64-gnu/lib/python3.10/threading.py", line 324 in wait
+  File "/home/wassname/.local/share/uv/python/cpython-3.10.16-linux-x86_64-gnu/lib/python3.10/threading.py", line 607 in wait
+  File "/home/wassname/.vscode/extensions/ms-python.debugpy-2025.14.1-linux-x64/bundled/libs/debugpy/_vendored/pydevd/_pydevd_bundle/pydevd_timeout.py", line 43 in _on_run
+  File "/home/wassname/.vscode/extensions/ms-python.debugpy-2025.14.1-linux-x64/bundled/libs/debugpy/_vendored/pydevd/_pydevd_bundle/pydevd_daemon_thread.py", line 53 in run
+  File "/home/wassname/.local/share/uv/python/cpython-3.10.16-linux-x86_64-gnu/lib/python3.10/threading.py", line 1016 in _bootstrap_inner
+  File "/home/wassname/.local/share/uv/python/cpython-3.10.16-linux-x86_64-gnu/lib/python3.10/threading.py", line 973 in _bootstrap
+  File "/home/wassname/.vscode/extensions/ms-python.debugpy-2025.14.1-linux-x64/bundled/libs/debugpy/_vendored/pydevd/_pydev_bundle/pydev_monkey.py", line 1134 in __call__
+
+Thread 0x0000782723fff6c0 (most recent call first):
+  File "/home/wassname/.local/share/uv/python/cpython-3.10.16-linux-x86_64-gnu/lib/python3.10/threading.py", line 324 in wait
+  File "/home/wassname/.local/share/uv/python/cpython-3.10.16-linux-x86_64-gnu/lib/python3.10/threading.py", line 607 in wait
+  File "/home/wassname/.vscode/extensions/ms-python.debugpy-2025.14.1-linux-x64/bundled/libs/debugpy/_vendored/pydevd/pydevd.py", line 325 in _on_run
+  File "/home/wassname/.vscode/extensions/ms-python.debugpy-2025.14.1-linux-x64/bundled/libs/debugpy/_vendored/pydevd/_pydevd_bundle/pydevd_daemon_thread.py", line 53 in run
+  File "/home/wassname/.local/share/uv/python/cpython-3.10.16-linux-x86_64-gnu/lib/python3.10/threading.py", line 1016 in _bootstrap_inner
+  File "/home/wassname/.local/share/uv/python/cpython-3.10.16-linux-x86_64-gnu/lib/python3.10/threading.py", line 973 in _bootstrap
+
+Thread 0x0000782730e6b6c0 (most recent call first):
+  File "/home/wassname/.local/share/uv/python/cpython-3.10.16-linux-x86_64-gnu/lib/python3.10/threading.py", line 324 in wait
+  File "/home/wassname/.local/share/uv/python/cpython-3.10.16-linux-x86_64-gnu/lib/python3.10/threading.py", line 607 in wait
+  File "/home/wassname/.vscode/extensions/ms-python.debugpy-2025.14.1-linux-x64/bundled/libs/debugpy/_vendored/pydevd/pydevd.py", line 279 in _on_run
+  File "/home/wassname/.vscode/extensions/ms-python.debugpy-2025.14.1-linux-x64/bundled/libs/debugpy/_vendored/pydevd/_pydevd_bundle/pydevd_daemon_thread.py", line 53 in run
+  File "/home/wassname/.local/share/uv/python/cpython-3.10.16-linux-x86_64-gnu/lib/python3.10/threading.py", line 1016 in _bootstrap_inner
+  File "/home/wassname/.local/share/uv/python/cpython-3.10.16-linux-x86_64-gnu/lib/python3.10/threading.py", line 973 in _bootstrap
+
+Thread 0x000078273176c6c0 (most recent call first):
+  File "/home/wassname/.local/share/uv/python/cpython-3.10.16-linux-x86_64-gnu/lib/python3.10/threading.py", line 324 in wait
+  File "/home/wassname/.local/share/uv/python/cpython-3.10.16-linux-x86_64-gnu/lib/python3.10/threading.py", line 607 in wait
+  File "/home/wassname/.vscode/extensions/ms-python.debugpy-2025.14.1-linux-x64/bundled/libs/debugpy/_vendored/pydevd/_pydev_bundle/fsnotify/__init__.py", line 340 in iter_changes
+  File "/home/wassname/.vscode/extensions/ms-python.debugpy-2025.14.1-linux-x64/bundled/libs/debugpy/_vendored/pydevd/_pydevd_bundle/pydevd_comm.py", line 347 in _on_run
+  File "/home/wassname/.vscode/extensions/ms-python.debugpy-2025.14.1-linux-x64/bundled/libs/debugpy/_vendored/pydevd/_pydevd_bundle/pydevd_daemon_thread.py", line 53 in run
+  File "/home/wassname/.local/share/uv/python/cpython-3.10.16-linux-x86_64-gnu/lib/python3.10/threading.py", line 1016 in _bootstrap_inner
+  File "/home/wassname/.local/share/uv/python/cpython-3.10.16-linux-x86_64-gnu/lib/python3.10/threading.py", line 973 in _bootstrap
+
+Thread 0x0000782731f6d6c0 (most recent call first):
+  File "/home/wassname/.vscode/extensions/ms-python.debugpy-2025.14.1-linux-x64/bundled/libs/debugpy/_vendored/pydevd/_pydevd_bundle/pydevd_comm.py", line 227 in _read_line
+  File "/home/wassname/.vscode/extensions/ms-python.debugpy-2025.14.1-linux-x64/bundled/libs/debugpy/_vendored/pydevd/_pydevd_bundle/pydevd_comm.py", line 245 in _on_run
+  File "/home/wassname/.vscode/extensions/ms-python.debugpy-2025.14.1-linux-x64/bundled/libs/debugpy/_vendored/pydevd/_pydevd_bundle/pydevd_daemon_thread.py", line 53 in run
+  File "/home/wassname/.local/share/uv/python/cpython-3.10.16-linux-x86_64-gnu/lib/python3.10/threading.py", line 1016 in _bootstrap_inner
+  File "/home/wassname/.local/share/uv/python/cpython-3.10.16-linux-x86_64-gnu/lib/python3.10/threading.py", line 973 in _bootstrap
+
+Thread 0x000078273276e6c0 (most recent call first):
+  File "/home/wassname/.local/share/uv/python/cpython-3.10.16-linux-x86_64-gnu/lib/python3.10/threading.py", line 324 in wait
+  File "/home/wassname/.local/share/uv/python/cpython-3.10.16-linux-x86_64-gnu/lib/python3.10/queue.py", line 180 in get
+  File "/home/wassname/.vscode/extensions/ms-python.debugpy-2025.14.1-linux-x64/bundled/libs/debugpy/_vendored/pydevd/_pydevd_bundle/pydevd_comm.py", line 390 in _on_run
+  File "/home/wassname/.vscode/extensions/ms-python.debugpy-2025.14.1-linux-x64/bundled/libs/debugpy/_vendored/pydevd/_pydevd_bundle/pydevd_daemon_thread.py", line 53 in run
+  File "/home/wassname/.local/share/uv/python/cpython-3.10.16-linux-x86_64-gnu/lib/python3.10/threading.py", line 1016 in _bootstrap_inner
+  File "/home/wassname/.local/share/uv/python/cpython-3.10.16-linux-x86_64-gnu/lib/python3.10/threading.py", line 973 in _bootstrap
+
+Current thread 0x00007827353f6740 (most recent call first):
+  File "<string>", line 3 in <module>
+  File "/home/wassname/.vscode/extensions/ms-python.debugpy-2025.14.1-linux-x64/bundled/libs/debugpy/_vendored/pydevd/_pydevd_bundle/pydevd_exec2.py", line 5 in Exec
+  File "/home/wassname/.vscode/extensions/ms-python.debugpy-2025.14.1-linux-x64/bundled/libs/debugpy/_vendored/pydevd/_pydevd_bundle/pydevd_vars.py", line 558 in evaluate_expression
+  File "/home/wassname/.vscode/extensions/ms-python.debugpy-2025.14.1-linux-x64/bundled/libs/debugpy/_vendored/pydevd/_pydevd_bundle/pydevd_vars.py", line 305 in _run_with_interrupt_thread
+  File "/home/wassname/.vscode/extensions/ms-python.debugpy-2025.14.1-linux-x64/bundled/libs/debugpy/_vendored/pydevd/_pydevd_bundle/pydevd_vars.py", line 334 in _run_with_unblock_threads
+  File "/home/wassname/.vscode/extensions/ms-python.debugpy-2025.14.1-linux-x64/bundled/libs/debugpy/_vendored/pydevd/_pydevd_bundle/pydevd_vars.py", line 369 in new_func
+  File "/home/wassname/.vscode/extensions/ms-python.debugpy-2025.14.1-linux-x64/bundled/libs/debugpy/_vendored/pydevd/_pydevd_bundle/pydevd_comm.py", line 1245 in internal_evaluate_expression_json
+  File "/home/wassname/.vscode/extensions/ms-python.debugpy-2025.14.1-linux-x64/bundled/libs/debugpy/_vendored/pydevd/_pydevd_bundle/pydevd_comm.py", line 565 in do_it
+  File "/home/wassname/.vscode/extensions/ms-python.debugpy-2025.14.1-linux-x64/bundled/libs/debugpy/_vendored/pydevd/pydevd.py", line 2248 in _do_wait_suspend
+  File "/home/wassname/.vscode/extensions/ms-python.debugpy-2025.14.1-linux-x64/bundled/libs/debugpy/_vendored/pydevd/pydevd.py", line 2188 in do_wait_suspend
+  File "./scripts/run.py", line 501 in <module>
+  File "/home/wassname/.vscode/extensions/ms-python.debugpy-2025.14.1-linux-x64/bundled/libs/debugpy/_vendored/pydevd/_pydevd_bundle/pydevd_runpy.py", line 118 in _run_code
+  File "/home/wassname/.vscode/extensions/ms-python.debugpy-2025.14.1-linux-x64/bundled/libs/debugpy/_vendored/pydevd/_pydevd_bundle/pydevd_runpy.py", line 127 in _run_module_code
+  File "/home/wassname/.vscode/extensions/ms-python.debugpy-2025.14.1-linux-x64/bundled/libs/debugpy/_vendored/pydevd/_pydevd_bundle/pydevd_runpy.py", line 310 in run_path
+  File "/home/wassname/.vscode/extensions/ms-python.debugpy-2025.14.1-linux-x64/bundled/libs/debugpy/adapter/../../debugpy/launcher/../../debugpy/../debugpy/server/cli.py", line 358 in run_file
+  File "/home/wassname/.vscode/extensions/ms-python.debugpy-2025.14.1-linux-x64/bundled/libs/debugpy/adapter/../../debugpy/launcher/../../debugpy/../debugpy/server/cli.py", line 508 in main
+  File "/home/wassname/.vscode/extensions/ms-python.debugpy-2025.14.1-linux-x64/bundled/libs/debugpy/adapter/../../debugpy/launcher/../../debugpy/__main__.py", line 71 in <module>
+  File "/home/wassname/.local/share/uv/python/cpython-3.10.16-linux-x86_64-gnu/lib/python3.10/runpy.py", line 86 in _run_code
+  File "/home/wassname/.local/share/uv/python/cpython-3.10.16-linux-x86_64-gnu/lib/python3.10/runpy.py", line 196 in _run_module_as_main

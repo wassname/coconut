@@ -76,11 +76,13 @@ class TRMRecurser(nn.Module):
         if context_hs is not None:
             # Simple mean pooling of context
             context_pooled = context_hs.mean(dim=1, keepdim=True)  # [b, 1, hidden]
+            assert torch.isfinite(context_pooled).all()
             latent_hs = latent_hs + context_pooled
         
         # Apply transformer layers
         for layer in self.layers:
             latent_hs = layer(latent_hs)
+            assert torch.isfinite(latent_hs).all()
         
         return latent_hs
 
@@ -141,9 +143,13 @@ class CoconutTRM(nn.Module):
         Returns:
             embeds: [b, n_latents, hidden] - embeddings ready for LLM decode
         """
+        # FIXME meant to be `z, embed_pred, q = hrm(z, x_hs)`
+        # where x_hs is context_hs
+        # z is 
         batch_size = context_hs.shape[0]
         
         # Initialize latent states
+        # FIXME, somehow this self.latent_init ends up with values like 1e30! even tho it didn't start that way and hasn't had a single step?
         latent_hs = self.latent_init.unsqueeze(0).unsqueeze(0).expand(
             batch_size, self.n_latents, self.hidden_size
         )
@@ -152,12 +158,15 @@ class CoconutTRM(nn.Module):
         with torch.no_grad():
             for _ in range(self.n_detached):
                 latent_hs = self.recurser(latent_hs, context_hs)
+                assert torch.isfinite(latent_hs).all()
         
         # Recursions with gradient (learn to clean junk)
         for _ in range(self.n_latents - self.n_detached):
             latent_hs = self.recurser(latent_hs, context_hs)
+            assert torch.isfinite(latent_hs).all()
         
         # Transcode to embedding space
         embeds = self.transcoder(latent_hs)
+        assert torch.isfinite(embeds).all()
         
         return embeds

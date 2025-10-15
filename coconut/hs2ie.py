@@ -7,7 +7,7 @@ from collections import defaultdict
 import torch.nn as nn
 
 HiddenState = Float[Tensor, 'b t h']
-HiddenStates = Tuple[Float[Tensor, 'b t h']]
+HiddenStates = Tuple[Float[Tensor, 'b t h'], ...]
 
 def _parse_frac_part(part: str, n: int) -> int:
     """

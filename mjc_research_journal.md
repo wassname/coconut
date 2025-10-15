@@ -993,3 +993,17 @@ x: Float[Tensor, 'batch seq hs'] = torch.rand(...
 from beartype.claw import beartype_this_package       # <-- hype comes
 beartype_this_package()                               # <-- hype goes
 ```
+
+# 2025-10-15 18:28:19
+```
+Question → Frozen LLM Encoder → Context Hidden States
+                                        ↓
+                              TRM Recursive Reasoning
+                              (detached + gradient passes)
+                                        ↓
+                                   Transcoder
+                                        ↓
+                              Latent Embeddings
+                                        ↓
+                           Frozen LLM Decoder → Answer
+```
