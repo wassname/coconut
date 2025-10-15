@@ -13,7 +13,7 @@
       "program": "./scripts/run.py",
       "console": "integratedTerminal",
       "args": [
-        "Debug"
+        "TRMDebug"
       ],
       // "justMyCode": false,
       // "autoReload": {

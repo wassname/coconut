@@ -169,7 +169,7 @@ def main():
     dtype = torch.bfloat16 if (conf.bf16 is True) else torch.float32
     logger.info(f"Using device: {device}, dtype: {dtype}")
 
-    if conf.resume_epochs>0:    
+    if conf.resume_epochs>0 and conf.load_model_path:    
         logger.warning(f"Resuming from epoch {conf.resume_epochs}")    
         model, tokenizer = resume_model(conf, device, dtype)
     else:
@@ -211,10 +211,6 @@ def main():
     else:
         os.environ["WANDB_MODE"] = "disabled"
         wandb_run = None
-
-    logger.info(
-        f"loading with quants: \n- 8bit optimiser: {conf.opt_8b},\n- bf16 inputs: {conf.bf16},\n- bf16_weight:{conf.bf16_weight} (model weights with  Kahan Summation optimiser (experimental))"
-    )
 
     latent_id = tokenizer.convert_tokens_to_ids("<|latent|>")
     bot_id = tokenizer.convert_tokens_to_ids("<|start-latent|>")

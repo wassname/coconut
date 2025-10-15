@@ -33,7 +33,9 @@ class SwiGLU(nn.Module):
     """SwiGLU activation from TRM."""
     def __init__(self, hidden_size: int, expansion: float = 2.67):
         super().__init__()
-        inter = int(round(expansion * hidden_size * 2 / 3 / 256)) * 256  # round to 256
+        round_to = 16
+        inter = int(round(expansion * hidden_size * 2 / 3 / round_to)) * round_to  # round to 16
+        assert inter > hidden_size, "Expansion must be > 1.5"
         self.gate_up_proj = CastedLinear(hidden_size, inter * 2, bias=False)
         self.down_proj = CastedLinear(inter, hidden_size, bias=False)
 

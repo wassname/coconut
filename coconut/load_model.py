@@ -1,16 +1,14 @@
 from transformers import (
     AutoModelForCausalLM,
-    AutoTokenizer,
+    AutoTokenizer, AutoConfig,
     get_constant_schedule_with_warmup,
 )
-from coconut.coconut import (
-    CoconutConfig,
-    CoconutQwen3ForCausalLM,
-)
+from coconut.coconut import Coconut
 from coconut.configs import BaseConfig
 from loguru import logger
 from pathlib import Path
 import torch
+import safetensors.torch
 import toml
 from transformers import BitsAndBytesConfig
 
@@ -32,23 +30,16 @@ def load_new_model(conf: BaseConfig, device, dtype):
     bot_id = tokenizer.convert_tokens_to_ids("<|start-latent|>")
     eot_id = tokenizer.convert_tokens_to_ids("<|end-latent|>")
 
+    conf.latent_token_id = latent_id
+
     # load base model
-    model_config = CoconutConfig.from_pretrained(
+    model_config = AutoConfig.from_pretrained(
         conf.model_id,
         latent_token_id=latent_id,
         bot_id=bot_id,
         eot_id=eot_id,
         eos_token_id=tokenizer.eos_token_id,
         use_position_ids=conf.use_position_ids,
-        replacement_method=conf.replacement_method,
-        loss_seq_vcr=conf.loss_seq_vcr,
-        n_detached_recursions=conf.n_detached_recursions,
-        use_trm=getattr(conf, 'use_trm', False),
-        load_in_4bit=getattr(conf, 'load_in_4bit', False),
-        load_in_8bit=getattr(conf, 'load_in_8bit', False),
-        trm_num_layers=getattr(conf, 'trm_num_layers', 2),
-        trm_num_heads=getattr(conf, 'trm_num_heads', 8),
-        trm_expansion=getattr(conf, 'trm_expansion', 2.67),
     )
     
     # TRM mode: load with quantization
@@ -67,92 +58,35 @@ def load_new_model(conf: BaseConfig, device, dtype):
         elif getattr(conf, 'load_in_8bit', False):
             logger.info("Loading in 8bit")
             quantization_config = BitsAndBytesConfig(load_in_8bit=True)
-        
-        model = CoconutQwen3ForCausalLM.from_pretrained(
-            conf.model_id, 
-            config=model_config, 
-            device_map=device, 
-            torch_dtype=dtype,
-            quantization_config=quantization_config
-        )
 
-    model = CoconutQwen3ForCausalLM.from_pretrained(
+    base_model = AutoModelForCausalLM.from_pretrained(
         conf.model_id, config=model_config, device_map=device, torch_dtype=dtype, quantization_config=quantization_config
     )
     
     # apply_config(model, tokenizer, conf)
 
-    model.resize_token_embeddings(len(tokenizer))
+    base_model.resize_token_embeddings(len(tokenizer))
+
+    model = Coconut(base_model, conf)
     return model, tokenizer
 
 def resume_model(conf: BaseConfig, device="auto", dtype=torch.bfloat16):
-    # load model
-    f = Path("./" + conf.load_model_path)
-    assert f.exists(), f"Model path {f} does not exist"
-    tokenizer = AutoTokenizer.from_pretrained(conf.load_model_path)
-    latent_id = tokenizer.convert_tokens_to_ids("<|latent|>")
-    bot_id = tokenizer.convert_tokens_to_ids("<|start-latent|>")
-    eot_id = tokenizer.convert_tokens_to_ids("<|end-latent|>")
-    config = CoconutConfig.from_pretrained(
-        conf.load_model_path,
-        latent_token_id=latent_id,
-        bot_id=bot_id,
-        eot_id=eot_id,
-        eos_token_id=tokenizer.eos_token_id,
-        use_position_ids=conf.use_position_ids,
-        loss_seq_vcr=conf.loss_seq_vcr,
-        replacement_method=conf.replacement_method,
-        n_detached_recursions=conf.n_detached_recursions,
-        load_in_4bit=conf.load_in_4bit,
-        load_in_8bit=conf.load_in_8bit,
-        use_trm=conf.use_trm,
-        trm_num_layers=conf.trm_num_layers,
-        trm_num_heads=conf.trm_num_heads,
-        trm_expansion=conf.trm_expansion,
-        # need
-    )
 
+    model, tokenizer = load_new_model(conf, device, dtype)
 
-    quantization_config = None
-    if getattr(conf, 'load_in_4bit', False):
-        logger.info("Loading in 4bit")
-        quantization_config = BitsAndBytesConfig(
-            load_in_4bit=True,
-            bnb_4bit_compute_dtype=dtype,
-            bnb_4bit_use_double_quant=True,
-            bnb_4bit_quant_type="nf4"
-        )
-    elif getattr(conf, 'load_in_8bit', False):
-        logger.info("Loading in 8bit")
-        quantization_config = BitsAndBytesConfig(load_in_8bit=True)
-        
-    model = CoconutQwen3ForCausalLM.from_pretrained(
-        conf.load_model_path,
-        config=config,
-        # conf.load_model_path, 
-        device_map=device, torch_dtype=dtype, quantization_config=quantization_config
-    )
+    state_dict = safetensors.torch.load_file(conf.load_model_path, device=device)
+    model.load_state_dict(state_dict, strict=False)
     logger.warning(f"Resumed model from {conf.load_model_path}")
-
-    # apply_config(model, tokenizer, conf)
 
     # set the configuration
     return model, tokenizer
 
-
-# def apply_config(model, tokenizer, conf: Config):
-#     model.config.latent_token_id = tokenizer.convert_tokens_to_ids("<|latent|>")
-#     model.config.eos_token_id = tokenizer.convert_tokens_to_ids("<|end-latent|>")
-#     model.config.use_position_ids = conf.use_position_ids
-#     model.config.loss_seq_vcr = conf.loss_seq_vcr
-#     model.config.replacement_method = conf.replacement_method
-
-def tie_embeddings(model, tokenizer):
+def tie_embeddings(base, tokenizer):
     latent_id = tokenizer.convert_tokens_to_ids("<|latent|>")
     bot_id = tokenizer.convert_tokens_to_ids("<|start-latent|>")
     eot_id = tokenizer.convert_tokens_to_ids("<|end-latent|>")
     # tie the embeddings for the special tokens
-    embeddings = model.get_input_embeddings()
+    embeddings = base.model.get_input_embeddings()
     target_id = tokenizer.convert_tokens_to_ids("<<")
     # TODO check this is in vocab
     for token_id in [latent_id, bot_id, eot_id]:
@@ -161,9 +95,9 @@ def tie_embeddings(model, tokenizer):
         embeddings.weight.data[token_id] = target_embedding.clone()
 
         # The input embeddings and lm heads are tied in GPT2. So the code below is not necessary
-        lm_head = model.lm_head
+        lm_head = base.model.lm_head
         lm_head.weight.data[token_id] = lm_head.weight.data[target_id].clone()
-    return model
+    return base
 
 def save_model(model, tokenizer, configs, save_dir: Path):
     tokenizer.save_pretrained(save_dir)
@@ -171,3 +105,8 @@ def save_model(model, tokenizer, configs, save_dir: Path):
     with open(save_dir / "coconut_config.toml", "w") as f:
         toml.dump(configs, f)
     logger.info(f"saving model {save_dir}")
+
+    # save state dict
+    state_dict = model.state_dict()
+    safetensors.torch.save_file(state_dict, str(save_dir / "pytorch_model.safetensors"))
+    logger.info(f"saving model {save_dir / 'pytorch_model.safetensors'}")

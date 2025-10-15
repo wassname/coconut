@@ -1,6 +1,7 @@
 # from dataclasses import dataclass
 from pydantic.dataclasses import dataclass
 from pydantic import ConfigDict
+from typing import Optional, List, Literal
 
 
 @dataclass(config=ConfigDict(validate_assignment=True)) 
@@ -60,7 +61,7 @@ class BaseConfig:
 
     reset_optimizer: bool = True
 
-    loss_seq_vcr: bool = True # experimental loss, might help with intermediate state stabiliy
+    loss_seq_vcr: bool = False # experimental loss, might help with intermediate state stabiliy
 
     # TRM-style: detach gradients for first N passes, only backprop through last few
     n_detached_recursions: int = 0  # 0=disabled, 2=keep gradients only for last 2 passes
@@ -99,60 +100,62 @@ class BaseConfig:
     system_prompt: str = ""
     # system_prompt: str = "Solve this math question with multiple steps like `<<5*0+1*2=?>>` OR silently within `<|start-latent|><|end-latent|>`. Then return the final answer like `### 2\n`. Save all comments until after the answer."
 
-@dataclass
-class GSMQwen(BaseConfig):
-    train_path: str = "data/gsm_train.json"
-    val_path: str = "data/gsm_valid.json"
+    latent_token_id: Optional[int] = None  # to be set when loading model
 
-@dataclass
-class GSMQwenResume(BaseConfig):
-    load_model_path: str = "outputs/qwen3-0.6b_20250514-194730/checkpoint_2"
-    cot_epochs: int = 2
-    epochs_per_stage: int = 8
-    resume_epochs: int = 1
-    # loss_seq_vcr: bool = True
+# @dataclass
+# class GSMQwen(BaseConfig):
+#     train_path: str = "data/gsm_train.json"
+#     val_path: str = "data/gsm_valid.json"
+
+# @dataclass
+# class GSMQwenResume(BaseConfig):
+#     load_model_path: str = "outputs/qwen3-0.6b_20250514-194730/checkpoint_2"
+#     cot_epochs: int = 2
+#     epochs_per_stage: int = 8
+#     resume_epochs: int = 1
+#     # loss_seq_vcr: bool = True
 
 
 
-@dataclass
-class GsmQwen_H100(GSMQwenResume):
-    """
-    For running on a h100
-    """
-    name: str = "gsm-qwen-0.6bh100"
+# @dataclass
+# class GsmQwen_H100(GSMQwenResume):
+#     """
+#     For running on a h100
+#     """
+#     name: str = "gsm-qwen-0.6bh100"
     
-    bf16: bool = True
-    bf16_weight: bool = False
-    opt_8b: bool = False
+#     bf16: bool = True
+#     bf16_weight: bool = False
+#     opt_8b: bool = False
 
-    # note 48 ran out of ram at stage 3
-    batch_size_training: int = 48
-    gradient_accumulation_steps: int = 3
-    max_size: int = 60_000 # full ~400k in coconut
+#     # note 48 ran out of ram at stage 3
+#     batch_size_training: int = 48
+#     gradient_accumulation_steps: int = 3
+#     max_size: int = 60_000 # full ~400k in coconut
 
+
+# @dataclass
+# class EpochSingleCoT(GsmQwen_H100):
+#     load_model_path: str = "outputs/qwen3-0.6b_20250514-194730/checkpoint_2"
+#     cot_epochs: int = 2
+#     epochs_per_stage: int = 1
+#     resume_epochs: int = 1
+#     # loss_seq_vcr: bool = True
+#     num_epochs: int = 2
+#     max_size: int = 8_000 # full ~400k in coconut
+
+# @dataclass
+# class EpochSingleLatent(GsmQwen_H100):
+#     load_model_path: str = "outputs/qwen3-0.6b_20250514-194730/checkpoint_2"
+#     cot_epochs: int = 2
+#     epochs_per_stage: int = 1
+#     resume_epochs: int = 3
+#     # loss_seq_vcr: bool = True
+#     num_epochs: int = 4
+#     max_size: int = 8_000 # full ~400k in coconut
 
 @dataclass
-class EpochSingleCoT(GsmQwen_H100):
-    load_model_path: str = "outputs/qwen3-0.6b_20250514-194730/checkpoint_2"
-    cot_epochs: int = 2
-    epochs_per_stage: int = 1
-    resume_epochs: int = 1
-    # loss_seq_vcr: bool = True
-    num_epochs: int = 2
-    max_size: int = 8_000 # full ~400k in coconut
-
-@dataclass
-class EpochSingleLatent(GsmQwen_H100):
-    load_model_path: str = "outputs/qwen3-0.6b_20250514-194730/checkpoint_2"
-    cot_epochs: int = 2
-    epochs_per_stage: int = 1
-    resume_epochs: int = 3
-    # loss_seq_vcr: bool = True
-    num_epochs: int = 4
-    max_size: int = 8_000 # full ~400k in coconut
-
-@dataclass
-class Debug(GSMQwenResume):
+class Debug(BaseConfig):
     model_id: str = "yujiepan/qwen3-tiny-random"
 
     max_size: int = 1000 # full ~400k in coconut
@@ -189,21 +192,34 @@ class TRM(BaseConfig):
     trm_num_layers: int = 2
     trm_num_heads: int = 8
     max_size: int = 1000  # Start very small for testing
-    batch_size_training: int = 2  # Smaller batch for quantized model
-    gradient_accumulation_steps: int = 64  # Keep effective batch ~128
-    loss_seq_vcr: bool = False  # Disable VCR loss (conflicts with 4bit quantization)
+    batch_size_training: int = 64  # Smaller batch for quantized model
+    gradient_accumulation_steps: int = 4  # Keep effective batch ~128
     num_epochs: int = 4  # Just a few epochs to test training
     epochs_per_stage: int = 1
     cot_epochs: int = 1
 
-
 @dataclass
-class TRM_H100(GsmQwen_H100):
-    """
-    TRM-style detached recursions test.
+class TRMDebug(TRM):
+    model_id: str = "yujiepan/qwen3-tiny-random"
+
+    max_size: int = 1000 # full ~400k in coconut
+    debug: bool = True
+
+    batch_size_training: int = 8
+    gradient_accumulation_steps: int = 2
+
+    cot_epochs: int = 1
+    epochs_per_stage: int = 1
+    resume_epochs: int = 3
+    num_epochs: int = 4
+
+# @dataclass
+# class TRM_H100(GsmQwen_H100):
+#     """
+#     TRM-style detached recursions test.
     
-    Detaches gradients for early recursive passes, only backprops through last N.
-    Forces model to learn to clean up its own accumulated errors.
-    """
-    # TRM experiment: only backprop last 2 passes out of up to 8 total
-    n_detached_recursions: int = 2
+#     Detaches gradients for early recursive passes, only backprops through last N.
+#     Forces model to learn to clean up its own accumulated errors.
+#     """
+#     # TRM experiment: only backprop last 2 passes out of up to 8 total
+#     n_detached_recursions: int = 2

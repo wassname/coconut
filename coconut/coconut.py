@@ -18,17 +18,17 @@ from loguru import logger
 
 
 from transformers import (
-    Qwen2ForCausalLM, Qwen3ForCausalLM,
     DynamicCache,
     PreTrainedTokenizer,
     Qwen2Config, Qwen3Config,
     LlamaConfig,
-    LlamaForCausalLM,
+    LlamaForCausalLM, PreTrainedModel
 )
 
 from coconut.hs2ie import hs2ie, get_supressed_activations
 from coconut.vcr_loss import VCRLoss
 from coconut.trm_adapter import CoconutTRM
+from coconut.configs import BaseConfig
 
 
 Outputs = namedtuple(
@@ -39,38 +39,16 @@ Outputs = namedtuple(
 MAX_N_LATENT = 8
 
 
-
-
-class CoconutConfig(Qwen3Config):
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-
-        # to set extra attributes from kwargs they need to be set
-        self.replacement_method = None
-        self.latent_token_id = None
-        self.eos_token_id = None
-        self.use_position_ids = None
-        self.loss_seq_vcr = None
-        self.n_detached_recursions = None
-        self.load_in_4bit = None
-        self.load_in_8bit = None
-        self.use_trm = None
-        self.trm_num_layers = None
-        self.trm_num_heads = None
-        self.trm_expansion = None
-
-class CoconutQwen3ForCausalLM(Qwen3ForCausalLM):
+class Coconut(nn.Module):
     def __init__(
         self,
-        config: CoconutConfig
+        base_model: PreTrainedModel,
+        config: BaseConfig
     ):
-        super().__init__(config)
-        assert self.config.latent_token_id is not None, "latent_token_id must be set in the config"
-        assert self.config.eos_token_id is not None, "eos_token_id must be set in the config"
-        assert self.config.use_position_ids is not None, "use_position_ids must be set in the config"
-        assert self.config.loss_seq_vcr is not None, "loss_seq_vcr must be set in the config"
-        assert self.config.replacement_method is not None, "replacement_method must be set in the config"
-        assert self.config.n_detached_recursions is not None, "n_detached_recursions must be set in the config"
+        super().__init__()
+        self.model = base_model
+
+        self.config = config
 
         self.gen_forward_cnt = 0
 
@@ -82,18 +60,18 @@ class CoconutQwen3ForCausalLM(Qwen3ForCausalLM):
         if getattr(self.config, 'use_trm', False):
             logger.info("Initializing TRM adapter for frozen LLM")
             self.trm = CoconutTRM(
-                hidden_size=self.config.hidden_size,
+                hidden_size=self.model.config.hidden_size,
                 n_latents=4,  # Match typical coconut latent count
                 n_detached=self.config.n_detached_recursions,
-                num_layers=getattr(self.config, 'trm_num_layers', 2),
-                num_heads=getattr(self.config, 'trm_num_heads', 8),
-                expansion=getattr(self.config, 'trm_expansion', 2.67),
+                num_layers=self.config.trm_num_layers,
+                num_heads=self.config.trm_num_heads,
+                expansion=self.config.trm_expansion,
             )
             # Freeze LLM when using TRM
             logger.info("Freezing base LLM parameters")
             for param in self.model.parameters():
                 param.requires_grad = False
-            for param in self.lm_head.parameters():
+            for param in self.model.lm_head.parameters():
                 param.requires_grad = False
 
             self.model.enable_input_require_grads()
@@ -234,7 +212,7 @@ class CoconutQwen3ForCausalLM(Qwen3ForCausalLM):
         logits = []
 
         latent_indices = (
-            input_ids == self.config.latent_token_id
+            input_ids == self.model.config.latent_token_id
         ).nonzero()  # (num_latent_tokens_in_the_batch, 2)
 
         latent_lists = [
@@ -469,7 +447,7 @@ class CoconutQwen3ForCausalLM(Qwen3ForCausalLM):
         self.gen_forward_cnt = 0
 
         # assert input_ids.shape[0] == 1, "only support batch_size == 1 now"
-        lyr_embed = self.get_input_embeddings()
+        lyr_embed = self.model.get_input_embeddings()
 
         tokens = input_ids.detach()
         T = input_ids.shape[1]
