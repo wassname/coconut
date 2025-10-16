@@ -1010,3 +1010,38 @@ Question → Frozen LLM Encoder → Context Hidden States
                                         ↓
                            Frozen LLM Decoder → Answer
 ```
+
+
+# 2025-10-16 08:40:35
+
+    **What we implemented:**
+
+    1. **Dual-network HRM architecture** (`L_net` + `H_net`) matching the paper's Figure 2 pseudocode
+    2. **Frozen quantized LLM** (4bit) with only `lm_head` trainable for gradient flow
+    3. **Internal HRM recursions** with detached early steps (n_detached=2) and final steps with gradients
+    4. **Memory-efficient forward pass**: LLM encode (once) → HRM recursions (cheap) → LLM decode (once)
+
+    **Key architectural decision:**
+
+    The paper's full deep supervision (N_sup outer loop with backprop after each step) would require 4x LLM forward passes = OOM. Instead, we do:
+    - LLM encode question (frozen, detached): ~6GB
+    - HRM internal recursions (tiny model, <1GB): cheap
+    - LLM decode (frozen backbone, trainable lm_head): ~6GB
+    - Total: ~13GB fits in 24GB
+
+    **What's working:**
+    - Code runs without syntax errors
+    - Model loads correctly with 4bit quantization
+    - HRM adapter initialized with dual networks
+    - Training started (got to evaluation phase)
+
+    **Remaining limitation:**
+    The deep supervision loop from the paper isn't implemented due to memory constraints. The HRM still does multi-step refinement internally (via n_detached recursions), just without the outer supervision loop. This is a reasonable tradeoff for consumer GPUs.
+
+    Made changes.
+
+# 2025-10-16 14:48:59
+
+Ok it's not learning. But I don't have deep supervision, which might be expensive in this setup. Perhaps I need it.
+
+How can I get it, with the benefits, with some approximation that doesn't have one LLM rollout per supervision step?

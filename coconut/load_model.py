@@ -100,13 +100,15 @@ def tie_embeddings(base, tokenizer):
     return base
 
 def save_model(model, tokenizer, configs, save_dir: Path):
-    tokenizer.save_pretrained(save_dir)
-    model.save_pretrained(save_dir)
+    # tokenizer.save_pretrained(save_dir)
+    # model.model.save_pretrained(save_dir)
+    save_dir.mkdir(parents=True, exist_ok=True)
     with open(save_dir / "coconut_config.toml", "w") as f:
         toml.dump(configs, f)
     logger.info(f"saving model {save_dir}")
 
-    # save state dict
+    # save state dict (only TRM adapter, not frozen base model)
     state_dict = model.state_dict()
+    state_dict = {k: v for k, v in state_dict.items() if not k.startswith('model.model.')}
     safetensors.torch.save_file(state_dict, str(save_dir / "pytorch_model.safetensors"))
     logger.info(f"saving model {save_dir / 'pytorch_model.safetensors'}")

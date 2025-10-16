@@ -50,49 +50,39 @@ class TRMBlock(nn.Module):
 
 
 class L_net(nn.Module):
-    """
-    Tiny recursive reasoning module.
-    
-    Adapted from TinyRecursiveReasoningModel_ACTV1ReasoningModule.
-    Simplified to just do fixed recursions without ACT.
-    """
-    def __init__(self, hidden_size: int, num_layers: int = 2, num_heads: int = 8, expansion: float = 2.67):
+    """Low-level recursive reasoning module (HRM)."""
+    def __init__(self, hidden_size: int, num_layers: int, num_heads: int, expansion: float):
         super().__init__()
         self.layers = nn.ModuleList([
-            TRMBlock(hidden_size, num_heads, expansion) 
-            for _ in range(num_layers)
+            TRMBlock(hidden_size, num_heads, expansion) for _ in range(num_layers)
+        ])
+        self.context_proj = CastedLinear(hidden_size, hidden_size, bias=False)
+
+    def forward(self, zL, zH, context_hs):
+        # Inject context and high-level state
+        context_pooled = context_hs.mean(dim=1, keepdim=True)
+        in_state = zL + zH + self.context_proj(context_pooled)
+        
+        for layer in self.layers:
+            in_state = layer(in_state)
+        return in_state
+
+class H_net(nn.Module):
+    """High-level recursive reasoning module (HRM)."""
+    def __init__(self, hidden_size: int, num_layers: int, num_heads: int, expansion: float):
+        super().__init__()
+        self.layers = nn.ModuleList([
+            TRMBlock(hidden_size, num_heads, expansion) for _ in range(num_layers)
         ])
 
-    def forward(self, z: torch.Tensor, context_hs: Optional[torch.Tensor] = None) -> torch.Tensor:
-        """
-        Args:
-            latent_hs: [b, n_latents, hidden] - current latent hidden states
-            context_hs: [b, seq, hidden] - context from question encoding (optional)
-        
-        Returns:
-            refined_hs: [b, n_latents, hidden]
-        """
-        # Inject context (like TRM's input_injection)
-        if context_hs is not None:
-            # Simple mean pooling of context
-            context_pooled = context_hs.mean(dim=1, keepdim=True)  # [b, 1, hidden]
-            assert torch.isfinite(context_pooled).all()
-            z = z + context_pooled
-        
-        # Apply transformer layers
+    def forward(self, zH, zL):
+        in_state = zH + zL
         for layer in self.layers:
-            z = layer(z)
-            assert torch.isfinite(z).all()
-        
-        return z
+            in_state = layer(in_state)
+        return in_state
 
-
-class OuputHead(nn.Module):
-    """
-    Transcodes hidden states → embedding space.
-    
-    Minimal MLP to bridge format mismatch between LLM hidden states and embeddings.
-    """
+class TRMTranscoder(nn.Module):
+    """Transcodes the final high-level state zH into the LLM's embedding space."""
     def __init__(self, hidden_size: int, expansion: float = 4.0):
         super().__init__()
         self.proj = nn.Sequential(
@@ -101,72 +91,95 @@ class OuputHead(nn.Module):
             CastedLinear(int(hidden_size * expansion), hidden_size, bias=False),
         )
     
-    def forward(self, hs: torch.Tensor) -> torch.Tensor:
-        return self.proj(hs)
-
+    def forward(self, zH: torch.Tensor) -> torch.Tensor:
+        return self.proj(zH)
 
 class CoconutTRM(nn.Module):
     """
-    TRM wrapper for Coconut.
-    
-    Manages:
-    - Initialization of latent states
-    - Detached recursions (no grad)
-    - Recursions with gradient
-    - Transcoding to embedding space
+    HRM-style wrapper for Coconut, implementing the dual-network recursive
+    model matching the paper's pseudocode.
     """
     def __init__(
         self,
         hidden_size: int,
-        n_latents: int = 4,
-        n_detached: int = 2,
-        num_layers: int = 2,
-        num_heads: int = 8,
-        expansion: float = 2.67,
+        trm_n_sup: int,
+        n_detached_recursions: int,
+        n_gradient_recursions: int,
+        num_layers: int,
+        num_heads: int,
+        expansion: float,
     ):
         super().__init__()
         self.hidden_size = hidden_size
-        self.n_latents = n_latents
-        self.n_detached = n_detached
+        self.n_sup = trm_n_sup
+        self.n_detached = n_detached_recursions
+        self.n_gradient = n_gradient_recursions
         
         self.l_net = L_net(hidden_size, num_layers, num_heads, expansion)
-        self.output_head = OuputHead(hidden_size, expansion=4.0)
+        self.h_net = H_net(hidden_size, num_layers, num_heads, expansion)
+        self.transcoder = TRMTranscoder(hidden_size, expansion=4.0)
         
-        # Learnable initial state (like TRM's H_init, L_init)
-        self.z_init = nn.Parameter(torch.randn(hidden_size) * 0.02)
-    
-    def forward(self, x_hs: torch.Tensor) -> torch.Tensor:
+        # Learnable initial states for zL and zH
+        self.zL_init = nn.Parameter(torch.randn(hidden_size) * 0.02)
+        self.zH_init = nn.Parameter(torch.randn(hidden_size) * 0.02)
+        
+    def hrm(self, zL, zH, context_hs):
         """
-        Args:
-            context_hs: [b, seq, hidden] - hidden states from LLM encoding question
-        
-        Returns:
-            embeds: [b, n_latents, hidden] - embeddings ready for LLM decode
+        Single HRM recursion step matching the paper's hrm() function.
+        Does n_detached recursions without gradients, then n_gradient with gradients.
+        During training, computes EMA of zH over gradient recursions for deep supervision proxy.
         """
-        # FIXME meant to be `z, embed_pred, q = hrm(z, x_hs)`
-        # where x_hs is context_hs
-        # z is 
-        batch_size = x_hs.shape[0]
-        
-        # Initialize latent states
-        # FIXME, somehow this self.latent_init ends up with values like 1e30! even tho it didn't start that way and hasn't had a single step?
-        z = self.z_init.unsqueeze(0).unsqueeze(0).expand(
-            batch_size, self.n_latents, self.hidden_size
-        )
-        
-        # Detached recursions (accumulate junk, no grad)
+        # Add sequence dimension for processing
+        zL_step, zH_step = zL.unsqueeze(1), zH.unsqueeze(1)
+
+        # Detached recursions
         with torch.no_grad():
             for _ in range(self.n_detached):
-                z = self.l_net(z, x_hs)
-                assert torch.isfinite(z).all()
+                zL_step = self.l_net(zL_step, zH_step, context_hs)
+                zH_step = self.h_net(zH_step, zL_step)
+
+        ema_decay = 0.9  # tunable
+
+        if self.training:
+            # why do we do EMA? this is our proxy for deep supervision. Deep supervision would be too expensive to compute requiring LLM forward passes for each. So instead we use EMA to get a smoothed version of the final latent state. This means we can provide partial supervision to intermediate states, hopefully preventing collapse.
+            
+            # Gradient recursions with EMA
+            ema_zH = zH_step.clone()  # init EMA
+            for _ in range(self.n_gradient):
+                zL_step = self.l_net(zL_step, zH_step, context_hs)
+                zH_step = self.h_net(zH_step, zL_step)
+                ema_zH = ema_decay * ema_zH + (1 - ema_decay) * zH_step
+        else:
+            # Gradient recursions without EMA
+            for _ in range(self.n_gradient):
+                zL_step = self.l_net(zL_step, zH_step, context_hs)
+                zH_step = self.h_net(zH_step, zL_step)
+            ema_zH = zH_step  # use final for inference
+            
+        return zL_step.squeeze(1), zH_step.squeeze(1), ema_zH
         
-        # Recursions with gradient (learn to clean junk)
-        for _ in range(self.n_latents - self.n_detached):
-            z = self.l_net(z, x_hs)
-            assert torch.isfinite(z).all()
+    def forward(self, context_hs: torch.Tensor, zL_prev=None, zH_prev=None) -> tuple:
+        """
+        Performs one HRM step (not the full deep supervision loop).
+        Returns the embedding for LLM decoder and updated latent states.
+        Uses EMA zH during training for supervision, final zH during inference.
+        """
+        batch_size = context_hs.shape[0]
         
-        # Transcode to embedding space
-        embeds = self.output_head(z)
-        assert torch.isfinite(embeds).all()
+        # Initialize latent states if not provided
+        if zL_prev is None:
+            zL = self.zL_init.unsqueeze(0).expand(batch_size, -1)
+        else:
+            zL = zL_prev
+            
+        if zH_prev is None:
+            zH = self.zH_init.unsqueeze(0).expand(batch_size, -1)
+        else:
+            zH = zH_prev
+
+        # Run one HRM recursion
+        zL_next, _, zH_next = self.hrm(zL, zH, context_hs)
         
-        return embeds
+
+        latent_embed = self.transcoder(zH_next)
+        return latent_embed.squeeze(1), zL_next, zH_next

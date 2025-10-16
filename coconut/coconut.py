@@ -61,113 +61,113 @@ class Coconut(nn.Module):
             logger.info("Initializing TRM adapter for frozen LLM")
             self.trm = CoconutTRM(
                 hidden_size=self.model.config.hidden_size,
-                n_latents=4,  # Match typical coconut latent count
-                n_detached=self.config.n_detached_recursions,
+                trm_n_sup=self.config.trm_n_sup,
+                n_detached_recursions=self.config.n_detached_recursions,
                 num_layers=self.config.trm_num_layers,
                 num_heads=self.config.trm_num_heads,
                 expansion=self.config.trm_expansion,
+                n_gradient_recursions=self.config.n_gradient_recursions
             )
             # Freeze LLM when using TRM
             logger.info("Freezing base LLM parameters")
             for param in self.model.parameters():
                 param.requires_grad = False
+            # Unfreeze the LM head to allow gradients from the loss
             for param in self.model.lm_head.parameters():
-                param.requires_grad = False
+                param.requires_grad = True
 
             self.model.enable_input_require_grads()
 
     def _forward_trm(
         self, 
-        input_ids: Int[Tensor, 'batch seq'], 
-        attention_mask: Optional[Int[Tensor, 'batch seq']] = None,
-        labels: Optional[Int[Tensor, 'batch seq']] = None,
-        position_ids: Optional[Int[Tensor, 'batch seq']] = None,
+        input_ids: Int[Tensor, 'b s'], 
+        attention_mask: Optional[Int[Tensor, 'b s']] = None,
+        labels: Optional[Int[Tensor, 'b s']] = None,
+        position_ids: Optional[Int[Tensor, 'b s']] = None,
         **kwargs
     ) -> Outputs:
         """
-        TRM mode forward: frozen LLM + TRM adapter.
+        HRM mode forward: frozen LLM + HRM adapter.
         
-        Flow:
-        1. Encode question with frozen LLM → context hidden states
-        2. TRM adapter does recursive reasoning on latent states
-        3. Decode with frozen LLM → logits
+        Architecture (memory-efficient variant):
+        1. Encode question with frozen LLM (once, detached)
+        2. HRM internal recursions (cheap - happens inside trm.forward())
+        3. Decode with LLM (once)
+        4. Compute loss
+        
+        Note: Paper's deep supervision (N_sup outer loop with backprop after each step)
+        is currently disabled for memory efficiency. The HRM still does internal 
+        recursions (n_detached + gradients), which provides multi-step refinement
+        without the memory cost of multiple LLM forward passes.
         """
         if attention_mask is None:
             attention_mask = torch.ones_like(input_ids, device=input_ids.device)
         if labels is None:
             labels = input_ids.clone()
-        
-        # Find latent token positions
+
+        # FIXME: This assumes uniform latent structure across the batch.
         latent_indices = (input_ids == self.config.latent_token_id).nonzero()
-        logger.debug(f"TRM forward: found {len(latent_indices)} latent tokens")
-        
-        # FIXME does this work if they are in differen't places? Would need to pad and mask? to make splitting at different work? I think we do it in another location
-        # Split into: question (before first latent) | latents | answer (after last latent)
         first_latent_pos = latent_indices[:, 1].min().item()
         last_latent_pos = latent_indices[:, 1].max().item()
-        logger.debug(f"TRM forward: latent positions {first_latent_pos} to {last_latent_pos}")
+        n_latent_positions = last_latent_pos - first_latent_pos + 1
+
+        # Step 1: Encode question with frozen LLM (once per batch)
+        question_ids: Int[Tensor, 'b q'] = input_ids[:, :first_latent_pos]
         
-        # Step 1: Encode question with frozen LLM
-        question_ids: Int[Tensor, 'batch q_len'] = input_ids[:, :first_latent_pos]
-        question_mask: Int[Tensor, 'batch q_len'] = attention_mask[:, :first_latent_pos]
-        
-        logger.debug(f"TRM forward: encoding question shape {question_ids.shape}")
         with torch.no_grad():
             question_outputs = self.model.forward(
                 input_ids=question_ids,
-                attention_mask=question_mask,
                 output_hidden_states=True,
             )
         
-        # Get context hidden states (last layer)
-        context_hs: Float[Tensor, 'batch q_len hidden'] = question_outputs.hidden_states[-1]
-        logger.debug(f"TRM forward: context_hs shape {context_hs.shape}")
+        context_hs: Float[Tensor, 'b q h'] = question_outputs.hidden_states[-1].detach()
         
-        # Step 2: TRM recursive reasoning
-        logger.debug("TRM forward: running TRM adapter")
-        latent_embeds: Float[Tensor, 'batch n_latents hidden'] = self.trm(context_hs)
-        logger.debug(f"TRM forward: latent_embeds shape {latent_embeds.shape}")
-        assert torch.isfinite(latent_embeds).all(), "Non-finite values in latent_embeds"
-        
-        # Step 3: Insert latent embeddings and decode
-        # Build full input embeddings: question embeds | latent embeds | answer embeds
+        # Get embeddings for question/answer (frozen, detached)
         embed_layer = self.model.get_input_embeddings()
         with torch.no_grad():
-            question_embeds: Float[Tensor, 'batch q_len hidden'] = embed_layer(question_ids)
+            question_embeds: Float[Tensor, 'b q h'] = embed_layer(question_ids)
         
-        # Get answer tokens (after latents)
         if last_latent_pos + 1 < input_ids.shape[1]:
-            # FIXME why answer?
-            answer_ids: Int[Tensor, 'batch a_len'] = input_ids[:, last_latent_pos + 1:]
+            answer_ids: Int[Tensor, 'b a'] = input_ids[:, last_latent_pos + 1:]
             with torch.no_grad():
-                answer_embeds: Float[Tensor, 'batch a_len hidden'] = embed_layer(answer_ids)
-            
-            # Concatenate: question | latent_embeds | answer
-            # latent_embeds has gradients, others don't
-            full_embeds: Float[Tensor, 'batch full_len hidden'] = torch.cat([
+                answer_embeds: Float[Tensor, 'b a h'] = embed_layer(answer_ids)
+            has_answer = True
+        else:
+            has_answer = False
+        
+        # Step 2: Deep supervision - simplified for memory efficiency
+        # Instead of doing N_sup full forward passes, we only do the final one
+        # The HRM internal recursions already do the multi-step refinement
+        
+        # HRM reasoning (handles internal recursions)
+        latent_embed_single, zL, zH = self.trm(context_hs, None, None)
+        assert torch.isfinite(latent_embed_single).all(), "Non-finite in latent_embed"
+        
+        # Expand to fill all latent positions
+        latent_embeds: Float[Tensor, 'b n_latents h'] = latent_embed_single.unsqueeze(1).expand(
+            -1, n_latent_positions, -1
+        )
+        
+        # Build full embeddings
+        if has_answer:
+            full_embeds: Float[Tensor, 'b l h'] = torch.cat([
                 question_embeds, latent_embeds, answer_embeds
             ], dim=1)
         else:
-            # No answer tokens, just question + latents
-            full_embeds: Float[Tensor, 'batch full_len hidden'] = torch.cat([
+            full_embeds: Float[Tensor, 'b l h'] = torch.cat([
                 question_embeds, latent_embeds
             ], dim=1)
         
-        # Decode with frozen LLM - but keep LM head WITH gradients for loss
-        # Forward through transformer layers (frozen, no grad)
-        with torch.no_grad():
-            # FIXME should be generate?
-            decode_outputs = self.model(
-                inputs_embeds=full_embeds,
-                attention_mask=attention_mask,
-                output_hidden_states=True,
-            )
-            final_hidden = decode_outputs[0]  # Last hidden state
+        # Decode with LLM
+        decode_outputs = self.model(
+            inputs_embeds=full_embeds,
+            attention_mask=attention_mask,
+            output_hidden_states=True,
+        )
+        final_hidden = decode_outputs.hidden_states[-1]
+        logits: Float[Tensor, 'b s vocab'] = self.model.lm_head(final_hidden)
         
-        # Apply LM head WITH gradients (not frozen, allows gradients to flow to TRM)
-        logits: Float[Tensor, 'batch seq vocab'] = self.model.lm_head(final_hidden)
-        
-        # Compute loss - now has gradient path through lm_head -> latent_embeds -> TRM
+        # Compute loss
         shift_logits = logits[..., :-1, :].contiguous()
         shift_labels = labels[..., 1:].contiguous()
         loss_fct = CrossEntropyLoss()
@@ -176,18 +176,14 @@ class Coconut(nn.Module):
             shift_labels.view(-1)
         )
         
-        
         extra = {'loss_ar': loss.item()}
-        
-        # Build hidden_states list (all layers from decode)
-        hidden_states = decode_outputs.hidden_states if hasattr(decode_outputs, 'hidden_states') else (final_hidden,)
         
         return Outputs(
             loss=loss, 
             inputs_embeds=full_embeds, 
             logits=logits, 
-            past_key_values=None,  # We don't use KV cache in TRM training
-            hidden_states=list(hidden_states), 
+            past_key_values=decode_outputs.past_key_values,
+            hidden_states=list(decode_outputs.hidden_states), 
             log=extra
         )
 
@@ -212,7 +208,7 @@ class Coconut(nn.Module):
         logits = []
 
         latent_indices = (
-            input_ids == self.model.config.latent_token_id
+            input_ids == self.config.latent_token_id
         ).nonzero()  # (num_latent_tokens_in_the_batch, 2)
 
         latent_lists = [
@@ -223,7 +219,7 @@ class Coconut(nn.Module):
         max_n_latents = max([len(l) for l in latent_lists])
 
         next_compute_range = (0, input_ids.shape[1])
-        inputs_embeds = self.get_input_embeddings()(input_ids)
+        inputs_embeds = self.model.get_input_embeddings()(input_ids)
 
         if max_n_latents > 0:
             next_compute_range = (0, latent_indices[:, 1].min().item())
@@ -234,7 +230,7 @@ class Coconut(nn.Module):
         all_hs = []
 
         # FIXME: this lags behind, but for efficiency we accept this limitation
-        Wo = self.get_output_embeddings().weight
+        Wo = self.model.get_output_embeddings().weight
         # Wo_inv = torch.pinverse(Wo.clone().float()).detach()
         # device_type = input_ids.device.type
 
@@ -254,7 +250,7 @@ class Coconut(nn.Module):
             with ctx:
                 if kv_cache is None:
                     # first forward pass
-                    outputs = super().forward(
+                    outputs = self.model.forward(
                         inputs_embeds=inputs_embeds[
                             :, next_compute_range[0] : next_compute_range[1], :
                         ],
@@ -282,7 +278,7 @@ class Coconut(nn.Module):
                     # Qwen needs this
                     past_key_values= DynamicCache.from_legacy_cache(past_key_values)
 
-                    outputs = super().forward(
+                    outputs = self.model.forward(
                         inputs_embeds=inputs_embeds[
                             :, next_compute_range[0] : next_compute_range[1], :
                         ],
@@ -350,7 +346,7 @@ class Coconut(nn.Module):
 
                     # TODO experiment with transformers here, we are replacing. 
                     # replace it with the preceding last hidden states
-                    Wo = self.get_output_embeddings().weight
+                    Wo = self.model.get_output_embeddings().weight
                     recrv_embeds = hs2ie(hidden_states, inputs_embeds, Wo, method=self.config.replacement_method)
                     # print({'hs': torch.stack(hidden_states).shape, 'recrv_embeds': recrv_embeds.shape, 'tensor_list': tensor_list[batch_idx][token_idx].shape})
                     tensor_list[batch_idx][token_idx] = recrv_embeds[
@@ -392,7 +388,7 @@ class Coconut(nn.Module):
         past_key_values= DynamicCache.from_legacy_cache(past_key_values)
 
         # final pass
-        outputs = super().forward(
+        outputs = self.model.forward(
             inputs_embeds=inputs_embeds[
                 :, next_compute_range[0] : next_compute_range[1], :
             ],
@@ -444,6 +440,9 @@ class Coconut(nn.Module):
         output_embedding=False,
         **kwargs,
     ):
+        # TODO: The `generate` method does not currently support TRM-style recursive reasoning.
+        # It falls back to the base model's generation, which will not produce latent thoughts.
+        # A full implementation would require iteratively calling the TRM during generation.
         self.gen_forward_cnt = 0
 
         # assert input_ids.shape[0] == 1, "only support batch_size == 1 now"
@@ -453,7 +452,7 @@ class Coconut(nn.Module):
         T = input_ids.shape[1]
 
         # reuse the forward pass from training to go through all the inputs before gen, this includes latent thoughts
-        outputs = self.forward(input_ids, attention_mask)
+        outputs = self.model.forward(input_ids, attention_mask)
 
         # get the first token using the current hidden state
         next_token = outputs.logits[:, -1].argmax(-1).detach().unsqueeze(1)
@@ -469,9 +468,10 @@ class Coconut(nn.Module):
         # get other tokens
         kv_cache = outputs.past_key_values
         for _ in range(max_new_tokens - 1):
+            # FIXME should be generate?
             # here we use the base model forward, that means we DO NOT use latent thoughts after the preconfigured ones
             check_input_lens(new_inputs_embeds, new_att_mask, kv_cache)
-            outputs = super().forward(inputs_embeds=new_inputs_embeds, past_key_values=kv_cache, attention_mask=new_att_mask)
+            outputs = self.model.forward(inputs_embeds=new_inputs_embeds, past_key_values=kv_cache, attention_mask=new_att_mask)
             kv_cache = outputs.past_key_values
             self.gen_forward_cnt += 1
             next_token = outputs.logits[:, -1].argmax(-1).detach().unsqueeze(1)
@@ -481,7 +481,7 @@ class Coconut(nn.Module):
             tokens = torch.cat((tokens, next_token), dim=1)
 
             # Allow it to stop early if all batch have generated EOS
-            if (tokens[:, T:] == self.config.eos_token_id).any(1).all(0):
+            if (tokens[:, T:] == self.model.config.eos_token_id).any(1).all(0):
                 if _>min_new_tokens:
                     logger.info("EOS token generated, stopping early")
                     break
@@ -499,8 +499,11 @@ class Coconut(nn.Module):
             return tokens
 
 def check_input_lens(input_ids, attention_mask, kv_cache):
+    # Handle None cache
+    if kv_cache is None:
+        len_c = 0
     # Handle DynamicCache - use get_seq_length() method
-    if hasattr(kv_cache, 'get_seq_length'):
+    elif hasattr(kv_cache, 'get_seq_length'):
         len_c = kv_cache.get_seq_length()
     else:
         # legacy cache format

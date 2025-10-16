@@ -1,3 +1,83 @@
+## Experiment: Tiny Recursive Models (TRM) for Latent Reasoning
+
+This experiment adapts principles from Tiny Recursive Models ([TRM](https://arxiv.org/abs/2510.04871)) to the [COCONUT](https://arxiv.org/abs/2412.06769) framework. The goal is to replace the simple projection of latent tokens with a more structured, iterative reasoning process performed by a small, dedicated model.
+
+The core idea is to use a frozen, quantized LLM for perception and generation, while a small, trainable TRM performs iterative refinement on the latent representations. This involves two learned components:
+
+
+`uv run scripts/run.py TRM`
+
+### Proposed Architecture and Training
+
+The process integrates the LLM and the TRM as follows:
+
+We have a sentence like ["The capital of France is <start-latent> <latent> <latent> ... <latent> <end-latent> "] where the `<latent>` tokens are to be filled in by the TRM. Then we generate the rest of the sentence, e.g. "Paris."
+
+1.  The frozen LLM is loaded in 4bit and processes the input prompt up to the `<start-latent>` token, producing a sequence of hidden states.
+2.  These hidden states are detached and fed into the TRM.
+3.  The TRM's **Recurser** iteratively refines the latent representation over several steps.
+4.  The **Transcoder** converts the final latent state from the TRM back into the LLM's input embedding space.
+5.  The LLM's decoder then uses this final embedding to generate the output tokens.
+
+The following pseudocode outlines this modified training loop, incorporating the LLM wrapper into the original TRM algorithm.
+
+```py
+# where output_head converts zH to input embeddings
+# where x are output hidden states from LLM
+# hs are embeddings 
+# where the llm is 4bit and frozen
+
+def hrm(z, x, n=2, T=2): # hierarchical reasoning
+    zH, zL = z
+    with torch.no_grad():
+        for i in range(nT - 2):
+            zL = L_net(zL, zH, x)
+            if (i + 1) % T == 0:
+                zH = H_net(zH, zL)
+    # 1-step grad
+    zL = L_net(zL, zH, x)
+    zH = H_net(zH, zL)
+    return (zH, zL), output_head(zH), 0 # Q_head(zH)
+
+# def ACT_halt(q, y_hat, y_true):
+#     target_halt = (y_hat == y_true)
+#     loss = 0.5*binary_cross_entropy(q[0], target_halt)
+#     return loss
+
+# def ACT_continue(q, last_step):
+#     if last_step:
+#         target_continue = sigmoid(q[0])
+#     else:
+#         target_continue = sigmoid(max(q[0], q[1]))
+#     loss = 0.5*binary_cross_entropy(q[1], target_continue)
+#     return loss
+
+# Deep Supervision
+for x_input, y_true in train_dataloader:
+    z = z_init
+    for step in range(N_sup): # deep supervision
+        with torch.no_grad():
+            # LLM converts input tokens to output hidden states
+            x_hs = LLM(x_input).hidden_states[-1]
+        z, embed_pred, q = hrm(z, x_hs)
+        y_pred = LLM(embed_pred) # new
+        loss = loss_fn(y_pred, y_true)
+        # Adaptive computational time (ACT) using Q-learning
+        # loss += ACT_halt(q, y_pred, y_true)  # ablation shows not needed (just for efficiency)
+        # _, _, q_next = hrm(z, x_hs) # extra forward pass
+        # loss += ACT_continue(q_next, step == N_sup - 1) # ablation shows not needed (just for efficiency)
+        z = z.detach()
+        loss.backward()
+        opt.step()
+        opt.zero_grad()
+        # if q[0] > q[1]: # early-stopping
+        #     break
+```
+Figure 2: Pseudocode of Hierarchical Reasoning Models (HRMs).
+
+
+----
+
 # Replicating and Extending COCONUT  
 (Training Large Language Models to Reason in a Continuous Latent Space)
 

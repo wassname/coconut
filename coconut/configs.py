@@ -51,7 +51,7 @@ class BaseConfig:
 
     # https://github.com/QwenLM/Qwen3/blob/714df5bce80a67c698e37034e71dc2efa19ceaf3/examples/llama-factory/qwen2-7b-full-sft.yaml#L27
     lr: float = 1e-4 # 1e-4 in coconut, but 1e-6 in verl
-    weight_decay: float = 0.01 # 0.01 in coconut, 0 in verl
+    weight_decay: float = 0.5 # 0.01 in coconut, 0 in verl
     grad_clip: float = 10.0
     scheduler: str = "cosine" # "constant" or "cosine" or "linear"
 
@@ -59,7 +59,7 @@ class BaseConfig:
 
     seed: int = 42
 
-    reset_optimizer: bool = True
+    reset_optimizer: bool = False
 
     loss_seq_vcr: bool = False # experimental loss, might help with intermediate state stabiliy
 
@@ -70,6 +70,7 @@ class BaseConfig:
     use_trm: bool = False  # Enable TRM adapter with frozen LLM
     load_in_4bit: bool = False  # Load LLM in 4bit for TRM mode
     load_in_8bit: bool = False  # Load LLM in 8bit for TRM mode
+    trm_n_sup: int = 16  # Deep supervision steps (N_sup in HRM paper)
     trm_num_layers: int = 2  # Number of transformer layers in TRM recurser
     trm_num_heads: int = 8  # Number of attention heads in TRM
     trm_expansion: float = 2.67  # MLP expansion factor in TRM
@@ -189,13 +190,15 @@ class TRM(BaseConfig):
     use_trm: bool = True
     load_in_4bit: bool = True
     n_detached_recursions: int = 2
+    n_gradient_recursions: int = 2  # Number of final recursions with gradients (paper uses 2)
+    trm_n_sup: int = 4  # Deep supervision steps (currently not used due to memory)
     trm_num_layers: int = 2
     trm_num_heads: int = 8
-    max_size: int = 1000  # Start very small for testing
-    batch_size_training: int = 64  # Smaller batch for quantized model
-    gradient_accumulation_steps: int = 4  # Keep effective batch ~128
-    num_epochs: int = 4  # Just a few epochs to test training
-    epochs_per_stage: int = 1
+    max_size: int = 9000  # Start very small for testing
+    batch_size_training: int = 16  # Reduced from 16 due to OOM
+    gradient_accumulation_steps: int = 128//16  # Keep effective batch ~128
+    num_epochs: int = 6  # Just a few epochs to test training
+    epochs_per_stage: int = 2
     cot_epochs: int = 1
 
 @dataclass
@@ -211,7 +214,7 @@ class TRMDebug(TRM):
     cot_epochs: int = 1
     epochs_per_stage: int = 1
     resume_epochs: int = 3
-    num_epochs: int = 4
+    num_epochs: int = 5
 
 # @dataclass
 # class TRM_H100(GsmQwen_H100):
