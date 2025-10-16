@@ -78,122 +78,9 @@ class Coconut(nn.Module):
 
             self.model.enable_input_require_grads()
 
-    def _forward_trm(
-        self, 
-        input_ids: Int[Tensor, 'b s'], 
-        attention_mask: Optional[Int[Tensor, 'b s']] = None,
-        labels: Optional[Int[Tensor, 'b s']] = None,
-        position_ids: Optional[Int[Tensor, 'b s']] = None,
-        **kwargs
-    ) -> Outputs:
-        """
-        HRM mode forward: frozen LLM + HRM adapter.
-        
-        Architecture (memory-efficient variant):
-        1. Encode question with frozen LLM (once, detached)
-        2. HRM internal recursions (cheap - happens inside trm.forward())
-        3. Decode with LLM (once)
-        4. Compute loss
-        
-        Note: Paper's deep supervision (N_sup outer loop with backprop after each step)
-        is currently disabled for memory efficiency. The HRM still does internal 
-        recursions (n_detached + gradients), which provides multi-step refinement
-        without the memory cost of multiple LLM forward passes.
-        """
-        if attention_mask is None:
-            attention_mask = torch.ones_like(input_ids, device=input_ids.device)
-        if labels is None:
-            labels = input_ids.clone()
-
-        # FIXME: This assumes uniform latent structure across the batch.
-        latent_indices = (input_ids == self.config.latent_token_id).nonzero()
-        first_latent_pos = latent_indices[:, 1].min().item()
-        last_latent_pos = latent_indices[:, 1].max().item()
-        n_latent_positions = last_latent_pos - first_latent_pos + 1
-
-        # Step 1: Encode question with frozen LLM (once per batch)
-        question_ids: Int[Tensor, 'b q'] = input_ids[:, :first_latent_pos]
-        
-        with torch.no_grad():
-            question_outputs = self.model.forward(
-                input_ids=question_ids,
-                output_hidden_states=True,
-            )
-        
-        context_hs: Float[Tensor, 'b q h'] = question_outputs.hidden_states[-1].detach()
-        
-        # Get embeddings for question/answer (frozen, detached)
-        embed_layer = self.model.get_input_embeddings()
-        with torch.no_grad():
-            question_embeds: Float[Tensor, 'b q h'] = embed_layer(question_ids)
-        
-        if last_latent_pos + 1 < input_ids.shape[1]:
-            answer_ids: Int[Tensor, 'b a'] = input_ids[:, last_latent_pos + 1:]
-            with torch.no_grad():
-                answer_embeds: Float[Tensor, 'b a h'] = embed_layer(answer_ids)
-            has_answer = True
-        else:
-            has_answer = False
-        
-        # Step 2: Deep supervision - simplified for memory efficiency
-        # Instead of doing N_sup full forward passes, we only do the final one
-        # The HRM internal recursions already do the multi-step refinement
-        
-        # HRM reasoning (handles internal recursions)
-        latent_embed_single, zL, zH = self.trm(context_hs, None, None)
-        assert torch.isfinite(latent_embed_single).all(), "Non-finite in latent_embed"
-        
-        # Expand to fill all latent positions
-        latent_embeds: Float[Tensor, 'b n_latents h'] = latent_embed_single.unsqueeze(1).expand(
-            -1, n_latent_positions, -1
-        )
-        
-        # Build full embeddings
-        if has_answer:
-            full_embeds: Float[Tensor, 'b l h'] = torch.cat([
-                question_embeds, latent_embeds, answer_embeds
-            ], dim=1)
-        else:
-            full_embeds: Float[Tensor, 'b l h'] = torch.cat([
-                question_embeds, latent_embeds
-            ], dim=1)
-        
-        # Decode with LLM
-        decode_outputs = self.model(
-            inputs_embeds=full_embeds,
-            attention_mask=attention_mask,
-            output_hidden_states=True,
-        )
-        final_hidden = decode_outputs.hidden_states[-1]
-        logits: Float[Tensor, 'b s vocab'] = self.model.lm_head(final_hidden)
-        
-        # Compute loss
-        shift_logits = logits[..., :-1, :].contiguous()
-        shift_labels = labels[..., 1:].contiguous()
-        loss_fct = CrossEntropyLoss()
-        loss = loss_fct(
-            shift_logits.view(-1, shift_logits.size(-1)), 
-            shift_labels.view(-1)
-        )
-        
-        extra = {'loss_ar': loss.item()}
-        
-        return Outputs(
-            loss=loss, 
-            inputs_embeds=full_embeds, 
-            logits=logits, 
-            past_key_values=decode_outputs.past_key_values,
-            hidden_states=list(decode_outputs.hidden_states), 
-            log=extra
-        )
 
     def forward(self, input_ids, attention_mask=None, labels=None, position_ids=None, **kwargs):
-        # Route to TRM forward if enabled AND latents present
-        if getattr(self.config, 'use_trm', False):
-            latent_indices = (input_ids == self.config.latent_token_id).nonzero()
-            if len(latent_indices) > 0:
-                return self._forward_trm(input_ids, attention_mask, labels, position_ids, **kwargs)
-            # If no latents, fall through to standard forward
+
         
         if attention_mask is None:
             attention_mask=torch.ones_like(input_ids, device=input_ids.device)
@@ -229,12 +116,8 @@ class Coconut(nn.Module):
 
         all_hs = []
 
-        # FIXME: this lags behind, but for efficiency we accept this limitation
-        Wo = self.model.get_output_embeddings().weight
-        # Wo_inv = torch.pinverse(Wo.clone().float()).detach()
-        # device_type = input_ids.device.type
-
         for pass_idx in range(max_n_latents):
+            # FIXME why does it have this when it also has TRM, we want TRM not this
             # TRM-style: detach gradients for early passes, keep gradients for last N passes
             should_detach = (
                 self.training 
@@ -332,35 +215,20 @@ class Coconut(nn.Module):
                     ]
                     for batch_idx in range(inputs_embeds.shape[0])
                 ]
-                # tensor_shape = torch.stack([torch.stack([xx for xx in x]) for x in tensor_list]).shape
-                # # tensor_shapes = [[tuple(xx.shape) for xx in x] for x in tensor_list]
-                # print({'pass_idx':pass_idx, 
-                #        'inputs_embeds': inputs_embeds.shape, 
-                #        'tensor_shape': tensor_shape, 
-                #        'hidden_states_offset': hidden_states_offset})
-
 
                 # replace some of them with continuous thoughts
+                zL_prev, zH_prev = None, None
                 for idx_pair in filling_indices:
                     batch_idx, token_idx = idx_pair
 
-                    # TODO experiment with transformers here, we are replacing. 
-                    # replace it with the preceding last hidden states
-                    Wo = self.model.get_output_embeddings().weight
-                    recrv_embeds = hs2ie(hidden_states, inputs_embeds, Wo, method=self.config.replacement_method)
-                    # print({'hs': torch.stack(hidden_states).shape, 'recrv_embeds': recrv_embeds.shape, 'tensor_list': tensor_list[batch_idx][token_idx].shape})
-                    tensor_list[batch_idx][token_idx] = recrv_embeds[
-                        batch_idx, token_idx - 1 - hidden_states_offset, :
-                    ]
-                    # print(tensor_list[batch_idx][token_idx].shape, recrv_embeds.shape, batch_idx, token_idx, token_idx - 1 - hidden_states_offset)
+                    # FIXME should I not run .trm here instead
+                    tensor_list[batch_idx][token_idx] = self._forward_trm(
+                        input_ids,
 
+                    )
 
-                # modification. Hypothesis: if the model has a unique positional id for thinking token then it will more quickly learn to mode switch to the recusrsive thinking mode
-                if self.config.use_position_ids:
-                    thinking_base_position = 100000  # Well beyond normal context windows
-                    position_ids[batch_idx][token_idx] = thinking_base_position + pass_idx
-                    # TODO consider token_type_ids, or add a distinct thinking vector the embeddings, perhaps just embedding <latent> token back in and adding
-
+                    latent_embed_single, zL_prev, zH_prev = self.trm(hidden_states, zL_prev, zH_prev, max_loops=max_loops)
+                    tensor_list[batch_idx][token_idx] = latent_embed_single
 
                 # assemble the new inputs_embeds
                 inputs_embeds = torch.stack(

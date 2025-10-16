@@ -123,7 +123,7 @@ class CoconutTRM(nn.Module):
         self.zL_init = nn.Parameter(torch.randn(hidden_size) * 0.02)
         self.zH_init = nn.Parameter(torch.randn(hidden_size) * 0.02)
         
-    def hrm(self, zL, zH, context_hs):
+    def hrm(self, zL, zH, context_hs, max_loops: int=100) -> tuple:
         """
         Single HRM recursion step matching the paper's hrm() function.
         Does n_detached recursions without gradients, then n_gradient with gradients.
@@ -145,20 +145,20 @@ class CoconutTRM(nn.Module):
             
             # Gradient recursions with EMA
             ema_zH = zH_step.clone()  # init EMA
-            for _ in range(self.n_gradient):
+            for _ in range(min(max_loops//2, self.n_gradient)):
                 zL_step = self.l_net(zL_step, zH_step, context_hs)
                 zH_step = self.h_net(zH_step, zL_step)
                 ema_zH = ema_decay * ema_zH + (1 - ema_decay) * zH_step
         else:
             # Gradient recursions without EMA
-            for _ in range(self.n_gradient):
+            for _ in range(min(max_loops//2, self.n_gradient)):
                 zL_step = self.l_net(zL_step, zH_step, context_hs)
                 zH_step = self.h_net(zH_step, zL_step)
             ema_zH = zH_step  # use final for inference
             
         return zL_step.squeeze(1), zH_step.squeeze(1), ema_zH
         
-    def forward(self, context_hs: torch.Tensor, zL_prev=None, zH_prev=None) -> tuple:
+    def forward(self, context_hs: torch.Tensor, zL_prev=None, zH_prev=None, max_loops=100) -> tuple:
         """
         Performs one HRM step (not the full deep supervision loop).
         Returns the embedding for LLM decoder and updated latent states.
@@ -178,7 +178,7 @@ class CoconutTRM(nn.Module):
             zH = zH_prev
 
         # Run one HRM recursion
-        zL_next, _, zH_next = self.hrm(zL, zH, context_hs)
+        zL_next, _, zH_next = self.hrm(zL, zH, context_hs, max_loops=max_loops)
         
 
         latent_embed = self.transcoder(zH_next)
