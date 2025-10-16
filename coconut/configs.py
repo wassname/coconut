@@ -185,21 +185,29 @@ class TRMTest(BaseConfig):
 class TRM(BaseConfig):
     """Full TRM mode: frozen quantized LLM + TRM adapter."""
     name: str = "trm-qwen3-0.6b"
-    # load_model_path: str = "outputs/qwen3-0.6b_20250514-194730/checkpoint_2"
-    # resume_epochs: int = 2
-    use_trm: bool = True
     load_in_4bit: bool = True
+
+    # load_model_path: str = "outputs/qwen3-0.6b_20250514-194730/checkpoint_2"
+
+    # resume one that already know CoT reasoning
+    model_id: str = "outputs/qwen3-0.6b_20250514-194730/checkpoint_2"
+
+    num_epochs: int = 6  # Just a few epochs to test training
+    resume_epochs: int = 2
+    epochs_per_stage: int = 2
+    cot_epochs: int = 0
+
+    use_trm: bool = True
     n_detached_recursions: int = 2
     n_gradient_recursions: int = 2  # Number of final recursions with gradients (paper uses 2)
     trm_n_sup: int = 4  # Deep supervision steps (currently not used due to memory)
     trm_num_layers: int = 2
     trm_num_heads: int = 8
+
     max_size: int = 9000  # Start very small for testing
     batch_size_training: int = 16  # Reduced from 16 due to OOM
     gradient_accumulation_steps: int = 128//16  # Keep effective batch ~128
-    num_epochs: int = 6  # Just a few epochs to test training
-    epochs_per_stage: int = 2
-    cot_epochs: int = 1
+    
 
 @dataclass
 class TRMDebug(TRM):
