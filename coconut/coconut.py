@@ -52,7 +52,6 @@ class Coconut(nn.Module):
 
         self.gen_forward_cnt = 0
 
-        # FIXME this is getting quantised
         if self.config.loss_seq_vcr:
             self.vcr_loss = VCRLoss(H=self.config.hidden_size)
         
@@ -114,11 +113,14 @@ class Coconut(nn.Module):
 
         kv_cache = None
 
-        all_hs = []
+        # all_hs = []
+        
+        # TRM state carryover across passes (for recursive refinement)
+        zL_prev, zH_prev = None, None
 
         for pass_idx in range(max_n_latents):
-            # FIXME why does it have this when it also has TRM, we want TRM not this
-            # TRM-style: detach gradients for early passes, keep gradients for last N passes
+            # TRM-style detached recursions: detach gradients for early passes,
+            # keep gradients for last N passes to learn error cleanup
             should_detach = (
                 self.training 
                 and self.config.n_detached_recursions > 0 
@@ -217,16 +219,18 @@ class Coconut(nn.Module):
                 ]
 
                 # replace some of them with continuous thoughts
-                zL_prev, zH_prev = None, None
-                last_hidden_states = hidden_states[-1].detach() # [b, s, h]
-                # FIXME am I meant to do it over a whole batch
-                new_embed, zL_prev, zH_prev = self.trm(last_hidden_states, zL_prev, zH_prev)
-                # FIXME: we should generate next last_hidden_states here, using model.forward with cache. But for now just carry over z (the latent state)
-                # We could also hack it by saying `embed_diff = last_embed - new_embed` then `last_hidden_states+=embed_diff`. The logic being that they are both in the embedding space
+                # Note: zL_prev, zH_prev initialized outside loop and carried across passes
+                last_hidden_states = hidden_states[-4].detach() # [b, s, h]
+                # TRM processes full batch, handles variable latent counts via filling_indices
+                input_embed_diff, zL_prev, zH_prev = self.trm(last_hidden_states, zL_prev, zH_prev)
+                # Note: TRM refines in embedding space, so we directly inject refined embeds
+                # Alternative approach: update hidden_states and re-forward through LLM (more expensive)
                 for idx_pair in filling_indices:
                     # NOTE I could consider detaching all but the last one, but these should be cheap
                     batch_idx, token_idx = idx_pair
-                    tensor_list[batch_idx][token_idx] = new_embed[batch_idx]
+                    old_embed = tensor_list[batch_idx][token_idx]
+                    new_embed = old_embed + input_embed_diff[batch_idx]
+                    tensor_list[batch_idx][token_idx] = new_embed
 
 
                 # assemble the new inputs_embeds
@@ -267,10 +271,10 @@ class Coconut(nn.Module):
 
         logits.append(outputs.logits)
 
-        # collect hs
-        hs = rearrange(list(outputs.hidden_states), "l b t h -> l b t h")
-        all_hs.append(hs)
-        all_hs = torch.concat(all_hs, dim=2)
+        # # collect hs
+        # hs = rearrange(list(outputs.hidden_states), "l b t h -> l b t h").detach().cpu()
+        # all_hs.append(hs)
+        # all_hs = torch.concat(all_hs, dim=2)
 
         self.gen_forward_cnt += max_n_latents + 1
 
@@ -282,34 +286,38 @@ class Coconut(nn.Module):
             shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1)
         )
 
-        # Seq-VCR loss
-        # in the paper they apply it to the last hidden state, we apply it to all
+        # # Seq-VCR loss
+        # # in the paper they apply it to the last hidden state, we apply it to all
         extra = {}
-        if self.config.loss_seq_vcr:
-            with torch.autocast(device_type=input_ids.device.type):
-                loss_vcr, extra2 = self.vcr_loss(all_hs)
-            extra['loss_ar'] = loss.item()
-            extra.update(extra2)
-            loss += loss_vcr
+        # if self.config.loss_seq_vcr:
+        #     with torch.autocast(device_type=input_ids.device.type):
+        #         loss_vcr, extra2 = self.vcr_loss(all_hs)
+        #     extra['loss_ar'] = loss.item()
+        #     extra.update(extra2)
+        #     loss += loss_vcr
 
         assert torch.isfinite(loss).all(), f"Loss is {loss}"
 
         return Outputs(loss=loss, inputs_embeds=inputs_embeds, logits=logits, past_key_values=outputs.past_key_values,
-                        hidden_states=list(all_hs), log=extra)
+                        hidden_states=[],#list(all_hs), 
+                        log=extra)
 
 
     def generate(
         self,
         input_ids,
-        attention_mask,  # attention_mask is not used
+        attention_mask,
         max_new_tokens=16,
         min_new_tokens=1,
         output_embedding=False,
         **kwargs,
     ):
-        # TODO: The `generate` method does not currently support TRM-style recursive reasoning.
-        # It falls back to the base model's generation, which will not produce latent thoughts.
-        # A full implementation would require iteratively calling the TRM during generation.
+        """Generate answer tokens after processing latent reasoning.
+        
+        Note: Requires input_ids to contain pre-filled <latent> tokens.
+        The method processes these latents with TRM (if enabled), then generates
+        the answer continuation. For dynamic latent generation, use a different approach.
+        """
         self.gen_forward_cnt = 0
 
         # assert input_ids.shape[0] == 1, "only support batch_size == 1 now"
@@ -319,7 +327,13 @@ class Coconut(nn.Module):
         T = input_ids.shape[1]
 
         # reuse the forward pass from training to go through all the inputs before gen, this includes latent thoughts
-        outputs = self.model.forward(input_ids, attention_mask)
+        # Use self.forward (Coconut) not self.model.forward (base LLM) to enable TRM
+        with torch.no_grad():
+            coconut_outputs = self.forward(input_ids, attention_mask)
+        outputs = type('obj', (object,), {
+            'logits': coconut_outputs.logits,
+            'past_key_values': coconut_outputs.past_key_values
+        })()
 
         # get the first token using the current hidden state
         next_token = outputs.logits[:, -1].argmax(-1).detach().unsqueeze(1)
@@ -331,12 +345,10 @@ class Coconut(nn.Module):
             (attention_mask, torch.ones((B, 1), device=attention_mask.device)), dim=1
         )
 
-
         # get other tokens
         kv_cache = outputs.past_key_values
         for _ in range(max_new_tokens - 1):
-            # FIXME should be generate?
-            # here we use the base model forward, that means we DO NOT use latent thoughts after the preconfigured ones
+            # Use base model forward for answer generation (latents already processed above)
             check_input_lens(new_inputs_embeds, new_att_mask, kv_cache)
             outputs = self.model.forward(inputs_embeds=new_inputs_embeds, past_key_values=kv_cache, attention_mask=new_att_mask)
             kv_cache = outputs.past_key_values

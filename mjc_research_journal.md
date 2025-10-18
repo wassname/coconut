@@ -1154,3 +1154,93 @@ wandb: 🚀 View run trm-qwen3-0.6b_20251017-154402 at:
 wandb: Find logs at: wandb/run-20251017_154406-cekkxhs8/logs
 
 Hm I wonder if a higher lr, or no scheduelr
+
+Hm so it overfits too
+https://wandb.ai/wassname/coconut/runs/cekkxhs8?nw=nwuserwassname
+so it's stable but it overfits
+
+
+
+
+Ratios (nll_ans/nll_corrupted_ans) drop sharply post-stage 1, hinting mode collapse to safe (non-latent) outputs. 
+
+
+TODO load
+- [ ] 2025-10-18 06:28:10.828 | INFO     | coconut.load_model:save_model:114 - saving model outputs/trm-qwen3-0.6b_20251017-154402/checkpoint_49/pytorch_model.safetensors
+- [ ] fix gen, then run eval.
+- [ ] add train/ratios?
+
+
+# 2025-10-18 15:37:52
+
+So I fixed generate so that eval now uses TRM, and I got an initial drop, but then it went up. Ratios went up, when it should go down.
+
+
+- [x] fix generate and eval
+- [x] I also change it use hidden state n-4
+
+
+
+## Results: trm-qwen3-0.6b_20251018-141208
+{'project': 'coconut', 'save_path': 'outputs/', 'name': 'trm-qwen3-0.6b', 'model_id': 'outputs/qwen3-0.6b_20250514-194730/checkpoint_2', 'only_eval': False, 'load_model_path': '', 'resume_epochs': 8, 'replacement_method': 'supressed[0.75:]', 'use_position_ids': True, 'bf16': True, 'bf16_weight': False, 'opt_8b': False, 'cot_epochs': 0, 'epochs_per_stage': 8, 'max_latent_stage': 3, 'num_epochs': 12, 'batch_size_training': 16, 'gradient_accumulation_steps': 8, 'lr': 0.0001, 'weight_decay': 0.1, 'grad_clip': 10.0, 'scheduler': 'linear', 'debug': False, 'seed': 42, 'reset_optimizer': False, 'loss_seq_vcr': False, 'n_detached_recursions': 2, 'use_trm': True, 'load_in_4bit': True, 'load_in_8bit': False, 'trm_n_sup': 4, 'trm_num_layers': 2, 'trm_num_heads': 8, 'trm_expansion': 2.67, 'max_size': 20000, 'c_thought': 2, 'pad_latent_to_max': True, 'uniform_prob': 0.0, 'train_path': 'data/gsm_train.json', 'val_path': 'data/gsm_valid.json', 'system_prompt': '', 'latent_token_id': None, 'eval_first_epoch': False, 'n_gradient_recursions': 2}
+|    |   eval/acc |   eval/cot_em |   eval/ratios |   epoch |   stage |   train/minutes |   train/loss |   eval/loss |
+|---:|-----------:|--------------:|--------------:|--------:|--------:|----------------:|-------------:|------------:|
+|  0 |      0.304 |         0.022 |        0.9298 |       8 |       1 |         20.7967 |     0.479528 |      0.5213 |
+|  1 |      0.328 |         0.014 |        0.9301 |       9 |       1 |         20.3774 |     0.361955 |      0.4921 |
+|  2 |      0.326 |         0.014 |        0.932  |      10 |       1 |         21.0332 |     0.295458 |      0.4851 |
+|  3 |      0.288 |         0.012 |        0.9358 |      11 |       1 |         21.0486 |     0.258795 |      0.4792 |
+
+
+- [x] use 1 latent per stage: c_thought->1
+
+
+@/README.md @/coconut  @/coconut/trm_layers.py  hopefully you can see what I'm doing from the psudocode in the readme
+
+anyway I'm thinking that
+
+right now each call of TRM taken in hidden[n-3] and output input_embedding. It must recurse on hs. but also convert hs and z into input embedding
+
+would it not be better to have it convert z and input_embed to new input embed. It can still take in hs for context thought as it's usefull?
+
+
+The otehr thing is... should I make TRM a true adapter? Like LoRA, how much more complex would that be... it would have to hook into a layer and modify the hidden state... so no longer would it return input_embed (less info) but instead a modified hidden[n-3] which is a much more information rich place to put modifications, and is better supported by LORA type papers, and the out_head has a much easier job modifying hidden rather than converting hidden to input embed
+
+changes
+- [x] learn addition to embed, not embed
+- [x] use last hidden state not mean
+- [x] 1 latent thought not 2 per stage
+
+ok now it starts at
+- eval/acc 0.304 -> 0.318! -> 0.25 ?
+- eval/cot_em 0.022 -> 0.014 -> 1
+- eval/ratios 0.9298 -> 0.9313 ! -> 0.9281
+- loss 0.47 -> ?
+- 20min to 10min (due to 1 latent per stage)
+
+# 2025-10-18 16:17:55
+
+### Step-by-Step Implementation Steps
+
+    If this plan sounds good, here's how I'd implement in ACT mode:
+
+    1. Update trm_adapter.py: Change TRMTranscoder to output hidden_size (not embedding size if different). Return trm_delta instead of input_embed_diff.
+
+    2. In coconut.py forward loop:
+
+    - After initial outputs = model.forward(...), get original_hs = hidden_states[-4]
+    - Compute trm_delta = trm(original_hs, zL_prev, zH_prev)[0]
+    - modified_hs = original_hs + trm_delta
+    - Then, custom re_forward_from_layer(model, modified_hs, kv_cache_up_to_-4, position_ids, etc.) to get updated outputs/logits/KV.
+    - Proceed to next latent with updated KV.
+
+    3. Test: Add logging to verify modified hs affects outputs correctly.
+
+
+
+> To make it adapter-like: Simplest way is to keep multi-pass but change injection point. Compute TRM delta for hs[-4], then re-forward from layer -4 with added delta, using KV cache up to that point. This avoids full hooks but requires splitting the LLM forward.
+
+Hm I wonder if that's easy, or use TraceDict from Baukit. Or reuse PEFT type hooks.
+
+> Currently, it processes detached hidden_states[-4] to produce an additive diff for the input embedding at latent positions. You want it to instead recurse on hidden states and output a modified hidden[n-3] (i.e., hidden_states[-4]), which is richer for modifications and better aligns with adapter literature.
+
+Do you think so, or is input_embedding just as rich. I mean it goes directly into the residual stream anyway... so we might be able to generate it at any stage

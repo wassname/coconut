@@ -20,6 +20,7 @@ from torch import Tensor
 from .trm_layers import Attention, SwiGLU, rms_norm, CastedLinear
 
 hs_bsh = Float[Tensor, 'b s h']
+hs_b1h = Float[Tensor, 'b 1 h']
 z_bh = Float[Tensor, 'b h']
 z_b1h = Float[Tensor, 'b 1 h']
 
@@ -66,12 +67,14 @@ class L_net(nn.Module):
 
     def forward(self, zL: z_b1h, zH: z_b1h, context_hs: hs_bsh) -> z_b1h:
         # Inject context and high-level state
-        context_pooled = context_hs.mean(dim=1, keepdim=True)
-        in_state = zL + zH + self.context_proj(context_pooled)
+        # # TODO update and remove - should apply attention and weighted, or just use latest? mean?. Try latest...
+        # context_pooled = context_hs.mean(dim=1, keepdim=True)
+        last_hs = context_hs[:, -1:, :]
+        in_state = zL + zH + self.context_proj(last_hs)
         
         for layer in self.layers:
             in_state = layer(in_state)
-        return in_state # FIXME where is the extra dim being added?
+        return in_state
 
 class H_net(nn.Module):
     """High-level recursive reasoning module (HRM)."""
@@ -97,7 +100,7 @@ class TRMTranscoder(nn.Module):
             CastedLinear(int(hidden_size * expansion), hidden_size, bias=False),
         )
     
-    def forward(self, zH: z_bh) -> Float[Tensor, 'b 1 h']:
+    def forward(self, zH: z_bh) -> hs_b1h:
         return self.proj(zH)
 
 class CoconutTRM(nn.Module):
@@ -189,5 +192,5 @@ class CoconutTRM(nn.Module):
         zL_next, _, zH_next = self.hrm(zL, zH, context_hs, max_loops=max_loops)
         
 
-        latent_embed = self.transcoder(zH_next)
-        return latent_embed.squeeze(1), zL_next, zH_next
+        diff_to_hs = self.transcoder(zH_next)
+        return diff_to_hs.squeeze(1), zL_next, zH_next

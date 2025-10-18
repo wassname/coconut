@@ -120,7 +120,7 @@ def create_optimizer(model, configs, warmup_fraction=0.1, opt_steps=None, cycles
     if warmup_steps is not None:
         if configs.scheduler == "linear":
             scheduler = get_linear_schedule_with_warmup(
-                optimizer, num_warmup_steps=warmup_steps
+                optimizer, num_warmup_steps=warmup_steps, num_training_steps=opt_steps,
             )
         elif configs.scheduler == "constant":
             scheduler = get_constant_schedule_with_warmup(

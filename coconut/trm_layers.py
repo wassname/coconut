@@ -17,6 +17,40 @@ def rms_norm(hidden_states: torch.Tensor, variance_epsilon: float) -> torch.Tens
     return hidden_states.to(input_dtype)
 
 
+def rotate_half(x: torch.Tensor):
+    """Rotates half the hidden dims of the input."""
+    x1 = x[..., : x.shape[-1] // 2]
+    x2 = x[..., x.shape[-1] // 2 :]
+    return torch.cat((-x2, x1), dim=-1)
+
+
+def apply_rotary_pos_emb(q: torch.Tensor, k: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor):
+    # q, k: [bs, num_heads, seq_len, head_dim] or similar
+    # cos, sin: [seq_len, head_dim]
+    orig_dtype = q.dtype
+    q = q.to(cos.dtype)
+    k = k.to(cos.dtype)
+
+    q_embed = (q * cos.unsqueeze(1 if q.ndim == 3 else (0,1))) + (rotate_half(q) * sin.unsqueeze(1 if q.ndim == 3 else (0,1)))
+    k_embed = (k * cos.unsqueeze(1 if k.ndim == 3 else (0,1))) + (rotate_half(k) * sin.unsqueeze(1 if k.ndim == 3 else (0,1)))
+
+    return q_embed.to(orig_dtype), k_embed.to(orig_dtype)
+
+
+class RotaryEmbedding(nn.Module):
+    def __init__(self, dim: int, max_position_embeddings: int, base: float = 10000.0, device=None):
+        super().__init__()
+        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float32, device=device) / dim))
+        t = torch.arange(max_position_embeddings, dtype=torch.float32, device=device)
+        freqs = torch.outer(t, inv_freq)
+        emb = torch.cat((freqs, freqs), dim=-1)
+        self.cos_cached = nn.Parameter(emb.cos(), requires_grad=False)
+        self.sin_cached = nn.Parameter(emb.sin(), requires_grad=False)
+
+    def forward(self, seq_len: int):
+        return self.cos_cached[:seq_len], self.sin_cached[:seq_len]
+
+
 class CastedLinear(nn.Module):
     def __init__(self, in_features: int, out_features: int, bias: bool):
         super().__init__()
@@ -45,7 +79,7 @@ class SwiGLU(nn.Module):
 
 
 class Attention(nn.Module):
-    """Simplified attention from TRM (no RoPE for now)."""
+    """Simplified attention from TRM (with optional RoPE)."""
     def __init__(self, hidden_size, head_dim, num_heads, num_key_value_heads, causal=False):
         super().__init__()
         self.hidden_size = hidden_size
@@ -73,6 +107,14 @@ class Attention(nn.Module):
         query = query.transpose(1, 2)  # [b, h, s, d]
         key = key.transpose(1, 2)
         value = value.transpose(1, 2)
+        
+        if cos_sin is not None:
+            cos, sin = cos_sin
+            # Assume cos/sin are [seq_len, head_dim//2 * 2]; broadcast to [1, seq_len, head_dim] if needed
+            if sin.shape[0] != seq_len:
+                cos = cos[:seq_len]
+                sin = sin[:seq_len]
+            query, key = apply_rotary_pos_emb(query, key, cos, sin)
         
         # Use PyTorch's scaled_dot_product_attention
         attn_output = F.scaled_dot_product_attention(

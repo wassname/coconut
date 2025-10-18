@@ -62,10 +62,13 @@ for x_input, y_true in train_dataloader:
         z, embed_pred, q = hrm(z, x_hs)
         y_pred = LLM(embed_pred) # new
         loss = loss_fn(y_pred, y_true)
+
+        # Note I have disabled ACT for now, it's only for efficiency
         # Adaptive computational time (ACT) using Q-learning
-        # loss += ACT_halt(q, y_pred, y_true)  # ablation shows not needed (just for efficiency)
+        # loss += ACT_halt(q, y_pred, y_true)  # ablation shows not needed
         # _, _, q_next = hrm(z, x_hs) # extra forward pass
-        # loss += ACT_continue(q_next, step == N_sup - 1) # ablation shows not needed (just for efficiency)
+        # loss += ACT_continue(q_next, step == N_sup - 1) # ablation shows not needed
+
         z = z.detach()
         loss.backward()
         opt.step()
@@ -76,6 +79,7 @@ for x_input, y_true in train_dataloader:
 Figure 2: Pseudocode of Hierarchical Reasoning Models (HRMs).
 
 
+Instead of applying deep supervision at every layer—which would require an expensive LLM rollout for each step—I perform a single LLM rollout using the exponential moving average (EMA) of the hidden states during training. This approach ensures that all hidden states receive some supervision, aiming to capture the stabilizing effects of deep supervision while avoiding the computational cost associated with full LLM-based supervision at each layer.
 ----
 
 # Replicating and Extending COCONUT  
