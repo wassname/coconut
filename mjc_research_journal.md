@@ -1209,6 +1209,7 @@ changes
 - [x] learn addition to embed, not embed
 - [x] use last hidden state not mean
 - [x] 1 latent thought not 2 per stage
+- [ ] linear schedule
 
 ok now it starts at
 - eval/acc 0.304 -> 0.318! -> 0.25 ?
@@ -1244,3 +1245,24 @@ Hm I wonder if that's easy, or use TraceDict from Baukit. Or reuse PEFT type hoo
 > Currently, it processes detached hidden_states[-4] to produce an additive diff for the input embedding at latent positions. You want it to instead recurse on hidden states and output a modified hidden[n-3] (i.e., hidden_states[-4]), which is richer for modifications and better aligns with adapter literature.
 
 Do you think so, or is input_embedding just as rich. I mean it goes directly into the residual stream anyway... so we might be able to generate it at any stage
+
+# 2025-10-18 19:41:11
+
+# Results: trm-qwen3-0.6b_20251018-155617
+{'project': 'coconut', 'save_path': 'outputs/', 'name': 'trm-qwen3-0.6b', 'model_id': 'outputs/qwen3-0.6b_20250514-194730/checkpoint_2', 'only_eval': False, 'load_model_path': '', 'resume_epochs': 8, 'replacement_method': 'supressed[0.75:]', 'use_position_ids': True, 'bf16': True, 'bf16_weight': False, 'opt_8b': False, 'cot_epochs': 0, 'epochs_per_stage': 8, 'max_latent_stage': 3, 'num_epochs': 16, 'batch_size_training': 16, 'gradient_accumulation_steps': 8, 'lr': 0.0001, 'weight_decay': 0.1, 'grad_clip': 10.0, 'scheduler': 'linear', 'debug': False, 'seed': 42, 'reset_optimizer': False, 'loss_seq_vcr': False, 'n_detached_recursions': 2, 'use_trm': True, 'load_in_4bit': True, 'load_in_8bit': False, 'trm_n_sup': 4, 'trm_num_layers': 2, 'trm_num_heads': 8, 'trm_expansion': 2.67, 'max_size': 20000, 'c_thought': 1, 'pad_latent_to_max': True, 'uniform_prob': 0.0, 'train_path': 'data/gsm_train.json', 'val_path': 'data/gsm_valid.json', 'system_prompt': '', 'latent_token_id': None, 'eval_first_epoch': False, 'n_gradient_recursions': 2}
+|    |   eval/acc |   eval/cot_em |   eval/ratios |   epoch |   stage |   train/minutes |   train/loss |   eval/loss |
+|---:|-----------:|--------------:|--------------:|--------:|--------:|----------------:|-------------:|------------:|
+|  0 |      0.318 |         0.014 |        0.9313 |       8 |       1 |         13.5332 |     0.532149 |      0.5204 |
+|  1 |      0.272 |         0.012 |        0.9305 |       9 |       1 |         13.6789 |     0.353447 |      0.4924 |
+|  2 |      0.252 |         0.01  |        0.9281 |      10 |       1 |         14.4978 |     0.296711 |      0.4819 |
+|  3 |      0.254 |         0.01  |        0.9247 |      11 |       1 |         14.8083 |     0.272362 |      0.4771 |
+|  4 |      0.25  |         0.01  |        0.928  |      12 |       1 |         14.531  |     0.292608 |      0.4744 |
+|  5 |      0.218 |         0.008 |        0.9256 |      13 |       1 |         14.801  |     0.371305 |      0.4723 |
+|  6 |      0.226 |         0.01  |        0.9247 |      14 |       1 |         14.551  |     0.324713 |      0.4692 |
+|  7 |      0.202 |         0.012 |        0.9293 |      15 |       1 |         13.2352 |     0.308156 |      0.468  |
+
+Well that seems disapointing, the loss went down, it did not overfit, but the acc went down.
+
+# 2025-10-18 19:41:14
+
+now try with persistant steering

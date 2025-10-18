@@ -75,6 +75,7 @@ class BaseConfig:
     trm_num_heads: int = 8  # Number of attention heads in TRM
     trm_expansion: float = 2.67  # MLP expansion factor in TRM
 
+    trm_persistent_steering: bool = True  # Whether to persistently steer all future latent embeddings
 
 
     # # used to get a baseline, not used or broken now?
