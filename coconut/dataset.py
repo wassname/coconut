@@ -15,12 +15,13 @@ import torch.distributed as dist
 from datasets import Dataset
 from transformers import PreTrainedTokenizerBase
 from transformers.data.data_collator import pad_without_fast_tokenizer_warning
+from anycache import anycache
 
 DEBUG = os.environ.get("DEBUG", False)
 
 default_num_proc = None if DEBUG else mp.cpu_count()//2 
 
-
+@anycache('.anycache')
 def get_dataset(path, tokenizer, max_size=1000000000, drop_unused=True, system_prompt="", num_proc=default_num_proc, verbose=True):
     if system_prompt:
         # system_prompt = "<|im_start|>system\n" + system_prompt.strip() + "<|im_end|>\n"
@@ -201,6 +202,7 @@ class CoconutCollator:
         return batch
 
 
+@anycache('.anycache')
 def get_question_only_latent_dataset(
     scheduled_stage,
     base_dataset_valid,

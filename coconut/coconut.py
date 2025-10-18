@@ -218,17 +218,16 @@ class Coconut(nn.Module):
 
                 # replace some of them with continuous thoughts
                 zL_prev, zH_prev = None, None
+                last_hidden_states = hidden_states[-1].detach() # [b, s, h]
+                # FIXME am I meant to do it over a whole batch
+                new_embed, zL_prev, zH_prev = self.trm(last_hidden_states, zL_prev, zH_prev)
+                # FIXME: we should generate next last_hidden_states here, using model.forward with cache. But for now just carry over z (the latent state)
+                # We could also hack it by saying `embed_diff = last_embed - new_embed` then `last_hidden_states+=embed_diff`. The logic being that they are both in the embedding space
                 for idx_pair in filling_indices:
+                    # NOTE I could consider detaching all but the last one, but these should be cheap
                     batch_idx, token_idx = idx_pair
+                    tensor_list[batch_idx][token_idx] = new_embed[batch_idx]
 
-                    # FIXME should I not run .trm here instead
-                    tensor_list[batch_idx][token_idx] = self._forward_trm(
-                        input_ids,
-
-                    )
-
-                    latent_embed_single, zL_prev, zH_prev = self.trm(hidden_states, zL_prev, zH_prev, max_loops=max_loops)
-                    tensor_list[batch_idx][token_idx] = latent_embed_single
 
                 # assemble the new inputs_embeds
                 inputs_embeds = torch.stack(

@@ -15,7 +15,13 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 from typing import Optional
+from jaxtyping import Float, Int, Bool
+from torch import Tensor
 from .trm_layers import Attention, SwiGLU, rms_norm, CastedLinear
+
+hs_bsh = Float[Tensor, 'b s h']
+z_bh = Float[Tensor, 'b h']
+z_b1h = Float[Tensor, 'b 1 h']
 
 
 class TRMBlock(nn.Module):
@@ -58,14 +64,14 @@ class L_net(nn.Module):
         ])
         self.context_proj = CastedLinear(hidden_size, hidden_size, bias=False)
 
-    def forward(self, zL, zH, context_hs):
+    def forward(self, zL: z_b1h, zH: z_b1h, context_hs: hs_bsh) -> z_b1h:
         # Inject context and high-level state
         context_pooled = context_hs.mean(dim=1, keepdim=True)
         in_state = zL + zH + self.context_proj(context_pooled)
         
         for layer in self.layers:
             in_state = layer(in_state)
-        return in_state
+        return in_state # FIXME where is the extra dim being added?
 
 class H_net(nn.Module):
     """High-level recursive reasoning module (HRM)."""
@@ -75,7 +81,7 @@ class H_net(nn.Module):
             TRMBlock(hidden_size, num_heads, expansion) for _ in range(num_layers)
         ])
 
-    def forward(self, zH, zL):
+    def forward(self, zH: z_b1h, zL: z_b1h) -> z_b1h:
         in_state = zH + zL
         for layer in self.layers:
             in_state = layer(in_state)
@@ -91,7 +97,7 @@ class TRMTranscoder(nn.Module):
             CastedLinear(int(hidden_size * expansion), hidden_size, bias=False),
         )
     
-    def forward(self, zH: torch.Tensor) -> torch.Tensor:
+    def forward(self, zH: z_bh) -> Float[Tensor, 'b 1 h']:
         return self.proj(zH)
 
 class CoconutTRM(nn.Module):
@@ -122,8 +128,8 @@ class CoconutTRM(nn.Module):
         # Learnable initial states for zL and zH
         self.zL_init = nn.Parameter(torch.randn(hidden_size) * 0.02)
         self.zH_init = nn.Parameter(torch.randn(hidden_size) * 0.02)
-        
-    def hrm(self, zL, zH, context_hs, max_loops: int=100) -> tuple:
+
+    def hrm(self, zL: z_bh, zH: z_bh, context_hs: hs_bsh, max_loops: int=22) -> tuple:
         """
         Single HRM recursion step matching the paper's hrm() function.
         Does n_detached recursions without gradients, then n_gradient with gradients.
@@ -156,9 +162,9 @@ class CoconutTRM(nn.Module):
                 zH_step = self.h_net(zH_step, zL_step)
             ema_zH = zH_step  # use final for inference
             
-        return zL_step.squeeze(1), zH_step.squeeze(1), ema_zH
-        
-    def forward(self, context_hs: torch.Tensor, zL_prev=None, zH_prev=None, max_loops=100) -> tuple:
+        return zL_step.squeeze(1), zH_step.squeeze(1), ema_zH.squeeze(1)
+
+    def forward(self, context_hs: hs_bsh, zL_prev: Optional[z_bh] = None, zH_prev: Optional[z_bh] = None, max_loops=22) -> tuple:
         """
         Performs one HRM step (not the full deep supervision loop).
         Returns the embedding for LLM decoder and updated latent states.
@@ -171,11 +177,13 @@ class CoconutTRM(nn.Module):
             zL = self.zL_init.unsqueeze(0).expand(batch_size, -1)
         else:
             zL = zL_prev
+            assert zL.ndim == 2
             
         if zH_prev is None:
             zH = self.zH_init.unsqueeze(0).expand(batch_size, -1)
         else:
             zH = zH_prev
+            assert zH.ndim == 2
 
         # Run one HRM recursion
         zL_next, _, zH_next = self.hrm(zL, zH, context_hs, max_loops=max_loops)

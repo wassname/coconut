@@ -270,7 +270,7 @@ def main():
             batch_size=conf.batch_size_training,
             collate_fn=collator,
         )
-        if epoch == 0 or conf.resume_epochs>0:
+        if epoch == 0 or (epoch==conf.resume_epochs) and conf.eval_first_epoch:
             # quick QC to see how well untouched model does at the task
             r = evaluate(
                 valid_gen_dataloader,

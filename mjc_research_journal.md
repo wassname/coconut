@@ -1045,3 +1045,112 @@ Question → Frozen LLM Encoder → Context Hidden States
 Ok it's not learning. But I don't have deep supervision, which might be expensive in this setup. Perhaps I need it.
 
 How can I get it, with the benefits, with some approximation that doesn't have one LLM rollout per supervision step?
+
+# Base acc
+
+For model_id: str = "outputs/qwen3-0.6b_20250514-194730/checkpoint_2"
+
+which is the one that's trained to produce CoT math solutions in the format
+
+Extracted llm Output: `300` (=? 300) ✅.
+ideal_CoT = '<<4-2=2>>
+        <<2/.5=4>>
+        <<12/4=3>>
+        <<100*3=300>>'.
+Answer = '300' .
+
+Acc is 44.9%
+
+    ██████████████████████████████| 19/19 [02:36<00:00,  8.25s/it]
+    2025-10-16 17:42:40.466 | INFO     | coconut.eval:evaluate:112 - Correct=150, CoT_correct=4, Total=303. eval_2_start                             
+    2025-10-16 17:42:40.471 | INFO     | coconut.eval:evaluate:113 - Accuracy on val:  150 / 303 =  49.5050%                                         
+    2025-10-16 17:42:40.477 | INFO     | coconut.eval:evaluate:114 - CoT match on val: 4 / 303 =  1.3201% 
+
+
+This run
+epoch1:
+
+    loss: 0.4
+    eval_loss 0.5
+    full eval: 47.85
+    CoT acc = 1.32
+
+epoch2:
+- loss 0.35
+- eval_acc 0.49
+- full acc: 0.48.5
+- CoT acc 1.32
+ nll_ans/nll_corrupted_ans = 0.9002
+ 
+loss 0.54
+loss 0.48
+test acc 0.5
+full acc: 49.83
+CoT acc 1.32
+nll_ans/nll_corrupted_ans = 0.6478
+
+# Results: trm-qwen3-0.6b_20251017-075826
+
+    {'project': 'coconut', 'save_path': 'outputs/', 'name': 'trm-qwen3-0.6b', 'model_id': 'outputs/qwen3-0.6b_20250514-194730/checkpoint_2', 'only_eval': False, 'load_model_path': '', 'resume_epochs': 2, 'replacement_method': 'supressed[0.75:]', 'use_position_ids': True, 'bf16': True, 'bf16_weight': False, 'opt_8b': False, 'cot_epochs': 0, 'epochs_per_stage': 2, 'max_latent_stage': 3, 'num_epochs': 6, 'batch_size_training': 16, 'gradient_accumulation_steps': 8, 'lr': 0.0001, 'weight_decay': 0.5, 'grad_clip': 10.0, 'scheduler': 'cosine', 'debug': False, 'seed': 42, 'reset_optimizer': False, 'loss_seq_vcr': False, 'n_detached_recursions': 2, 'use_trm': True, 'load_in_4bit': True, 'load_in_8bit': False, 'trm_n_sup': 4, 'trm_num_layers': 2, 'trm_num_heads': 8, 'trm_expansion': 2.67, 'max_size': 9000, 'c_thought': 2, 'pad_latent_to_max': True, 'uniform_prob': 0.0, 'train_path': 'data/gsm_train.json', 'val_path': 'data/gsm_valid.json', 'system_prompt': '', 'latent_token_id': None, 'eval_first_epoch': False, 'n_gradient_recursions': 2}
+
+|      | eval/acc | eval/cot_em | eval/ratios | epoch | stage | train/minutes | train/loss | eval/loss |
+| ---: | -------: | ----------: | ----------: | ----: | ----: | ------------: | ---------: | --------: |
+|    0 |   0.4785 |      0.0132 |      0.9074 |     2 |     1 |        14.615 |   0.403016 |    0.5406 |
+|    1 |   0.4851 |      0.0132 |      0.9002 |     3 |     1 |       14.4587 |   0.345151 |    0.4847 |
+|    2 |   0.4983 |      0.0132 |      0.6478 |     4 |     2 |       16.2101 |   0.483461 |     0.623 |
+|    3 |    0.495 |      0.0132 |      0.6454 |     5 |     2 |       15.1292 |   0.420522 |    0.6093 |
+
+
+
+# Results: trm-qwen3-0.6b_20251017-154402
+{'project': 'coconut', 'save_path': 'outputs/', 'name': 'trm-qwen3-0.6b', 'model_id': 'outputs/qwen3-0.6b_20250514-194730/checkpoint_2', 'only_eval': False, 'load_model_path': '', 'resume_epochs': 8, 'replacement_method': 'supressed[0.75:]', 'use_position_ids': True, 'bf16': True, 'bf16_weight': False, 'opt_8b': False, 'cot_epochs': 0, 'epochs_per_stage': 8, 'max_latent_stage': 3, 'num_epochs': 50, 'batch_size_training': 16, 'gradient_accumulation_steps': 8, 'lr': 0.0001, 'weight_decay': 0.5, 'grad_clip': 10.0, 'scheduler': 'cosine', 'debug': False, 'seed': 42, 'reset_optimizer': False, 'loss_seq_vcr': False, 'n_detached_recursions': 2, 'use_trm': True, 'load_in_4bit': True, 'load_in_8bit': False, 'trm_n_sup': 4, 'trm_num_layers': 2, 'trm_num_heads': 8, 'trm_expansion': 2.67, 'max_size': 20000, 'c_thought': 2, 'pad_latent_to_max': True, 'uniform_prob': 0.0, 'train_path': 'data/gsm_train.json', 'val_path': 'data/gsm_valid.json', 'system_prompt': '', 'latent_token_id': None, 'eval_first_epoch': False, 'n_gradient_recursions': 2}
+|    |   eval/acc |   eval/cot_em |   eval/ratios |   epoch |   stage |   train/minutes |   train/loss |   eval/loss |
+|---:|-----------:|--------------:|--------------:|--------:|--------:|----------------:|-------------:|------------:|
+|  0 |      0.486 |         0.016 |        0.9312 |       8 |       1 |         21.5086 |     0.561535 |      0.6984 |
+|  1 |      0.492 |         0.016 |        0.9315 |       9 |       1 |         22.7353 |     0.44593  |      0.5652 |
+|  2 |      0.492 |         0.016 |        0.9317 |      10 |       1 |         22.6433 |     0.392704 |      0.5235 |
+|  3 |      0.488 |         0.016 |        0.9322 |      11 |       1 |         21.784  |     0.326752 |      0.5187 |
+|  4 |      0.484 |         0.016 |        0.9312 |      12 |       1 |         21.7898 |     0.32877  |      0.5095 |
+|  5 |      0.492 |         0.016 |        0.9334 |      13 |       1 |         21.8261 |     0.437547 |      0.5079 |
+|  6 |      0.48  |         0.016 |        0.9312 |      14 |       1 |         21.833  |     0.366916 |      0.5013 |
+|  7 |      0.494 |         0.016 |        0.9305 |      15 |       1 |         22.3296 |     0.344434 |      0.5006 |
+|  8 |      0.484 |         0.018 |        0.6817 |      16 |       2 |         22.2727 |     0.514602 |      0.6541 |
+|  9 |      0.48  |         0.018 |        0.6934 |      17 |       2 |         22.1381 |     0.479511 |      0.6479 |
+| 10 |      0.482 |         0.018 |        0.7048 |      18 |       2 |         18.5789 |     0.534687 |      0.6368 |
+| 11 |      0.486 |         0.018 |        0.7079 |      19 |       2 |         18.2682 |     0.470743 |      0.6315 |
+| 12 |      0.484 |         0.018 |        0.7107 |      20 |       2 |         18.3157 |     0.507592 |      0.6268 |
+| 13 |      0.492 |         0.018 |        0.7115 |      21 |       2 |         18.4808 |     0.431141 |      0.6293 |
+| 14 |      0.484 |         0.018 |        0.7142 |      22 |       2 |         18.2401 |     0.411453 |      0.6298 |
+| 15 |      0.486 |         0.018 |        0.7046 |      23 |       2 |         18.3428 |     0.504539 |      0.6339 |
+| 16 |      0.492 |         0.018 |        0.5844 |      24 |       3 |         20.962  |     0.445394 |      0.7045 |
+| 17 |      0.496 |         0.018 |        0.5847 |      25 |       3 |         20.5289 |     0.487632 |      0.7121 |
+| 18 |      0.5   |         0.018 |        0.5905 |      26 |       3 |         20.5692 |     0.497739 |      0.7127 |
+| 19 |      0.502 |         0.018 |        0.5861 |      27 |       3 |         20.4389 |     0.549286 |      0.7074 |
+| 20 |      0.502 |         0.018 |        0.5908 |      28 |       3 |         20.3751 |     0.458084 |      0.7296 |
+| 21 |      0.502 |         0.018 |        0.5873 |      29 |       3 |         20.5997 |     0.623392 |      0.7353 |
+| 22 |      0.502 |         0.018 |        0.5839 |      30 |       3 |         20.6925 |     0.545111 |      0.7474 |
+| 23 |      0.5   |         0.018 |        0.5799 |      31 |       3 |         20.5603 |     0.535096 |      0.7552 |
+| 24 |      0.496 |         0.018 |        0.5852 |      32 |       3 |         21.0831 |     0.45221  |      0.7714 |
+| 25 |      0.496 |         0.018 |        0.5836 |      33 |       3 |         21.5744 |     0.540627 |      0.7576 |
+| 26 |      0.494 |         0.018 |        0.5829 |      34 |       3 |         21.3658 |     0.581768 |      0.7979 |
+| 27 |      0.506 |         0.018 |        0.5863 |      35 |       3 |         21.5139 |     0.6375   |      0.8009 |
+| 28 |      0.496 |         0.018 |        0.58   |      36 |       3 |         21.5572 |     0.475648 |      0.7865 |
+| 29 |      0.496 |         0.018 |        0.579  |      37 |       3 |         21.7109 |     0.527833 |      0.8089 |
+| 30 |      0.498 |         0.018 |        0.5907 |      38 |       3 |         21.7482 |     0.581697 |      0.7583 |
+| 31 |      0.5   |         0.018 |        0.5853 |      39 |       3 |         21.5036 |     0.644376 |      0.7743 |
+| 32 |      0.49  |         0.018 |        0.5833 |      40 |       3 |         21.5312 |     0.539744 |      0.7824 |
+| 33 |      0.498 |         0.018 |        0.583  |      41 |       3 |         21.5114 |     0.592342 |      0.7168 |
+| 34 |      0.496 |         0.018 |        0.5925 |      42 |       3 |         21.4841 |     0.543578 |      0.7813 |
+| 35 |      0.496 |         0.018 |        0.5856 |      43 |       3 |         21.531  |     0.604821 |      0.7597 |
+| 36 |      0.498 |         0.018 |        0.5825 |      44 |       3 |         21.5864 |     0.612349 |      0.7686 |
+| 37 |      0.5   |         0.018 |        0.5826 |      45 |       3 |         21.1743 |     0.544882 |      0.7106 |
+| 38 |      0.496 |         0.018 |        0.5931 |      46 |       3 |         21.5019 |     0.617497 |      0.6941 |
+| 39 |      0.504 |         0.018 |        0.599  |      47 |       3 |         21.1994 |     0.611732 |      0.7067 |
+| 40 |      0.498 |         0.018 |        0.5882 |      48 |       3 |         21.4256 |     0.530537 |      0.7298 |
+| 41 |      0.5   |         0.018 |        0.5853 |      49 |       3 |         22.1675 |     0.510084 |      0.7242 |
+ 14h 44m 17s
+wandb: 
+wandb: 🚀 View run trm-qwen3-0.6b_20251017-154402 at: 
+wandb: Find logs at: wandb/run-20251017_154406-cekkxhs8/logs
+
+Hm I wonder if a higher lr, or no scheduelr

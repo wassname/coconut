@@ -15,7 +15,6 @@ dependencies = [
     "torch>=2.1.2",
     "transformers[torch]>4.51.0",
     "bitsandbytes>=0.47.0",
-
     "tqdm>=4.67.0",
     "datasets>=3.1.0",
     "einops>=0.8.0",
@@ -31,6 +30,7 @@ dependencies = [
     "pydantic>=2.11.4",
     "tyro>=0.9.20",
     "beartype>=0.22.2",
+    "anycache>=2.4.0",
 ]
 
 [dependency-groups]

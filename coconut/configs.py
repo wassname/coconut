@@ -192,10 +192,12 @@ class TRM(BaseConfig):
     # resume one that already know CoT reasoning
     model_id: str = "outputs/qwen3-0.6b_20250514-194730/checkpoint_2"
 
-    num_epochs: int = 6  # Just a few epochs to test training
-    resume_epochs: int = 2
-    epochs_per_stage: int = 2
+    # num_epochs: int = 6  # Just a few epochs to test training
+    resume_epochs: int = 8
+    # epochs_per_stage: int = 8
     cot_epochs: int = 0
+
+    eval_first_epoch: bool = True  # Evaluate before training
 
     use_trm: bool = True
     n_detached_recursions: int = 2
@@ -204,9 +206,11 @@ class TRM(BaseConfig):
     trm_num_layers: int = 2
     trm_num_heads: int = 8
 
-    max_size: int = 9000  # Start very small for testing
+    max_size: int = 20_000  # Start very small for testing
     batch_size_training: int = 16  # Reduced from 16 due to OOM
     gradient_accumulation_steps: int = 128//16  # Keep effective batch ~128
+
+    eval_first_epoch: bool = False  # Skip eval for speed
     
 
 @dataclass
@@ -223,6 +227,8 @@ class TRMDebug(TRM):
     epochs_per_stage: int = 1
     resume_epochs: int = 3
     num_epochs: int = 5
+
+    eval_first_epoch: bool = False  # Skip eval for speed
 
 # @dataclass
 # class TRM_H100(GsmQwen_H100):
