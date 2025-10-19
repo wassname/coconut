@@ -64,18 +64,13 @@ class BaseConfig:
     loss_seq_vcr: bool = False # experimental loss, might help with intermediate state stabiliy
 
     # TRM-style: detach gradients for first N passes, only backprop through last few
-    n_detached_recursions: int = 0  # 0=disabled, 2=keep gradients only for last 2 passes
+    n_detached_recursions: int = 2  # 0=disabled, 2=keep gradients only for last 2 passes
 
     # TRM mode: use frozen quantized LLM with TRM recursive reasoning
     use_trm: bool = False  # Enable TRM adapter with frozen LLM
-    load_in_4bit: bool = False  # Load LLM in 4bit for TRM mode
+    load_in_4bit: bool = True  # Load LLM in 4bit for TRM mode
     load_in_8bit: bool = False  # Load LLM in 8bit for TRM mode
-    trm_n_sup: int = 16  # Deep supervision steps (N_sup in HRM paper)
-    trm_num_layers: int = 2  # Number of transformer layers in TRM recurser
-    trm_num_heads: int = 8  # Number of attention heads in TRM
-    trm_expansion: float = 2.67  # MLP expansion factor in TRM
 
-    trm_persistent_steering: bool = True  # Whether to persistently steer all future latent embeddings
 
 
     # # used to get a baseline, not used or broken now?
@@ -198,15 +193,26 @@ class TRM(BaseConfig):
     # epochs_per_stage: int = 8
     cot_epochs: int = 0
     num_epochs: int = 16  # More epochs to let TRM adapter learn
+    lr: float = 5e-5  # Slightly lower LR for adapter training
 
     eval_first_epoch: bool = True  # Evaluate before training
 
+    # NOTE: see TRM paper settings https://github.com/SamsungSAILMontreal/TinyRecursiveModels/blob/e7b68717f0a6c4cbb4ce6fbef787b14f42083bd9/config/arch/trm.yaml#L17
     use_trm: bool = True
-    n_detached_recursions: int = 2
+
+    trm_n_sup: int = 16  # Deep supervision steps (N_sup in HRM paper)
+    trm_h_layers: int = 0  # Layers for H_net (0 for single net mode)
+    trm_h_cycles: int = 3  # Outer cycles (T in paper)
+    trm_l_cycles: int = 6  # Inner cycles (n in paper)
+    trm_l_layers: int = 2  # Layers for L_net (or single net)
+    trm_hidden_size: Optional[int] = None  # Dynamic from base model if None
+    trm_num_heads: int = 8  # Number of attention heads in TRM (12 in paper)
+    trm_expansion: float = 2.67  # MLP expansion factor in TRM (4 in paper)
+
+    trm_persistent_steering: bool = False  # Whether to persistently steer all future latent embeddings
+
+    n_detached_recursions: int = 2  # Number of detached recursions (paper used >6)
     n_gradient_recursions: int = 2  # Number of final recursions with gradients (paper uses 2)
-    trm_n_sup: int = 4  # Deep supervision steps (currently not used due to memory)
-    trm_num_layers: int = 2
-    trm_num_heads: int = 8
 
     max_size: int = 20_000  # Start very small for testing
     batch_size_training: int = 16  # Reduced from 16 due to OOM

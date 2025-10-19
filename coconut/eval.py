@@ -362,7 +362,7 @@ def get_answer_preference(
 
         ratios = []
 
-        for batch_n, batch in enumerate(tqdm(valid_gen_dataloader, desc="PPX", colour="green", dynamic_ncols=True)):
+        for batch_n, batch in enumerate(valid_gen_dataloader):
 
             if verbose and batch_n <1:
                 i = tokenizer.decode(batch['input_ids'][0], skip_special_tokens=False)

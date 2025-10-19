@@ -99,6 +99,9 @@ class TRMTranscoder(nn.Module):
             nn.GELU(),
             CastedLinear(int(hidden_size * expansion), hidden_size, bias=False),
         )
+        # In TRMTranscoder.__init__
+        nn.init.xavier_uniform_(self.proj[2].weight)
+        self.proj[2].weight.data *= 0.01  # scale down 100x
     
     def forward(self, zH: z_bh) -> hs_b1h:
         return self.proj(zH)
@@ -111,7 +114,7 @@ class CoconutTRM(nn.Module):
     def __init__(
         self,
         hidden_size: int,
-        trm_n_sup: int,
+        # trm_n_sup: int,
         n_detached_recursions: int,
         n_gradient_recursions: int,
         num_layers: int,
@@ -120,7 +123,7 @@ class CoconutTRM(nn.Module):
     ):
         super().__init__()
         self.hidden_size = hidden_size
-        self.n_sup = trm_n_sup
+        # self.n_sup = trm_n_sup
         self.n_detached = n_detached_recursions
         self.n_gradient = n_gradient_recursions
         

@@ -60,7 +60,7 @@ class Coconut(nn.Module):
             logger.info("Initializing TRM adapter for frozen LLM")
             self.trm = CoconutTRM(
                 hidden_size=self.model.config.hidden_size,
-                trm_n_sup=self.config.trm_n_sup,
+                # trm_n_sup=self.config.trm_n_sup,
                 n_detached_recursions=self.config.n_detached_recursions,
                 num_layers=self.config.trm_num_layers,
                 num_heads=self.config.trm_num_heads,
@@ -227,14 +227,14 @@ class Coconut(nn.Module):
                 if filling_indices:
                     batch_indices, token_indices = zip(*filling_indices)
                     # Get hidden states only for batches with latents at this pass
-                    last_hidden_states = hidden_states[-4][list(batch_indices), -1:, :]  # [num_filling, 1, h]
+                    last_hidden_states = hidden_states[-4][list(batch_indices), -1:, :]  # [b, 1, h]
                     
                     # Get previous states for these batches (if they exist)
                     zL_batch = zL_prev[list(batch_indices)] if zL_prev is not None else None
                     zH_batch = zH_prev[list(batch_indices)] if zH_prev is not None else None
                     
                     # TRM only on relevant batches
-                    input_embed_diff, zL_next, zH_next = self.trm(last_hidden_states, zL_batch, zH_batch)  # [num_filling, h]
+                    input_embed_diff, zL_next, zH_next = self.trm(last_hidden_states, zL_batch, zH_batch)  # [b, h]
                     
                     # Initialize full state if needed
                     if zL_prev is None:
@@ -249,8 +249,8 @@ class Coconut(nn.Module):
                     zH_prev[list(batch_indices)] = zH_next.to(zH_prev.dtype)
                     
                     # Apply embeddings
-                    for filling_idx, (batch_idx, token_idx) in enumerate(filling_indices):
-                        tensor_list[batch_idx][token_idx] = tensor_list[batch_idx][token_idx] + input_embed_diff[filling_idx]
+                    for batch_idx, token_idx in filling_indices:
+                        tensor_list[batch_idx][token_idx] = tensor_list[batch_idx][token_idx] + input_embed_diff[batch_idx]
                 # Note: keep input_embed_diff from last pass for persistent steering
 
 
@@ -290,7 +290,7 @@ class Coconut(nn.Module):
             # Apply steering only to batches that had latents in the last pass
             batch_indices_last = [idx for idx, _ in filling_indices]
             for filling_idx, batch_idx in enumerate(batch_indices_last):
-                inputs_embeds[batch_idx] = inputs_embeds[batch_idx] + input_embed_diff[filling_idx]
+                inputs_embeds[batch_idx] = inputs_embeds[batch_idx] + input_embed_diff[batch_idx]
         outputs = self.model.forward(
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask[:, : next_compute_range[1]],

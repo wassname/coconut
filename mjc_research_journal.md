@@ -1266,3 +1266,85 @@ Well that seems disapointing, the loss went down, it did not overfit, but the ac
 # 2025-10-18 19:41:14
 
 now try with persistant steering
+
+big loss of 7 to start with
+
+# Results: trm-qwen3-0.6b_20251018-201519
+{'project': 'coconut', 'save_path': 'outputs/', 'name': 'trm-qwen3-0.6b', 'model_id': 'outputs/qwen3-0.6b_20250514-194730/checkpoint_2', 'only_eval': False, 'load_model_path': '', 'resume_epochs': 8, 'replacement_method': 'supressed[0.75:]', 'use_position_ids': True, 'bf16': True, 'bf16_weight': False, 'opt_8b': False, 'cot_epochs': 0, 'epochs_per_stage': 8, 'max_latent_stage': 3, 'num_epochs': 16, 'batch_size_training': 16, 'gradient_accumulation_steps': 8, 'lr': 0.0001, 'weight_decay': 0.1, 'grad_clip': 10.0, 'scheduler': 'linear', 'debug': False, 'seed': 42, 'reset_optimizer': False, 'loss_seq_vcr': False, 'n_detached_recursions': 2, 'use_trm': True, 'load_in_4bit': True, 'load_in_8bit': False, 'trm_n_sup': 4, 'trm_num_layers': 2, 'trm_num_heads': 8, 'trm_expansion': 2.67, 'trm_persistent_steering': True, 'max_size': 20000, 'c_thought': 1, 'pad_latent_to_max': True, 'uniform_prob': 0.0, 'train_path': 'data/gsm_train.json', 'val_path': 'data/gsm_valid.json', 'system_prompt': '', 'latent_token_id': None, 'eval_first_epoch': False, 'n_gradient_recursions': 2}
+|    |   eval/acc |   eval/cot_em |   eval/ratios |   epoch |   stage |   train/minutes |   train/loss |   eval/loss |
+|---:|-----------:|--------------:|--------------:|--------:|--------:|----------------:|-------------:|------------:|
+|  0 |      0.322 |         0.046 |        0.9715 |       8 |       1 |         14.4724 |      5.85434 |      6.1491 |
+|  1 |      0.29  |         0.036 |        0.9655 |       9 |       1 |         14.4789 |      5.55748 |      5.9305 |
+|  2 |      0.27  |         0.038 |        0.9726 |      10 |       1 |         14.5137 |      5.37045 |      5.7498 |
+|  3 |      0.258 |         0.03  |        0.9827 |      11 |       1 |         14.5729 |      5.19475 |      5.5971 |
+|  4 |      0.258 |         0.034 |        0.9927 |      12 |       1 |         14.5285 |      5.16986 |      5.4678 |
+|  5 |      0.242 |         0.026 |        0.9813 |      13 |       1 |         14.5436 |      5.21671 |      5.3621 |
+|  6 |      0.236 |         0.026 |        0.9954 |      14 |       1 |         14.612  |      4.68249 |      5.2943 |
+|  7 |      0.252 |         0.026 |        1.0032 |      15 |       1 |         14.5252 |      4.74156 |      5.2109 |
+
+
+wih trm_persistent_steering, loss starts at 6
+without starts at 1
+
+
+1 epoch of perisistent steering was 
+    2025-10-19 07:04:49.891 | INFO     | coconut.eval:evaluate:112 - Correct=159, CoT_correct=6, Total=500. eval_8                                       
+    2025-10-19 07:04:49.892 | INFO     | coconut.eval:evaluate:113 - Accuracy on val:  159 / 500 =  31.8000%                                             
+    2025-10-19 07:04:49.893 | INFO     | coconut.eval:evaluate:114 - CoT match on val: 6 / 500 =  1.2000%                                                
+    process_dataset: cot_latent_1 (num_proc=12): 100%|█████████████████████████████████████████████████████████| 500/500 [00:01<00:00, 493.06 examples/s]
+    PPX: 100%|███████████████████████████████████████████████████████████████████████████████████████████████████████████| 32/32 [00:13<00:00,  2.33it/s]
+    2025-10-19 07:05:04.735 | INFO     | coconut.eval:get_answer_preference:390 - ratio nll_ans/nll_corrupted_ans = 0.9283   
+    loss 0.44
+    Full llm output: `['<<', '1', '2', '*', '1', '2', '=', '1', '4', '4', '>>\n', '<<', '1', '0', '0', '/', '1', '2', '=', '8', '.', '3', '3', '>>\n', '<<', '8', '.', '3', '3', '*', '1', '4', '4', '=', '1', '2', '0', '0', '.', '3', '2', '>>\n', '###', ' ', '1', '2', '0', '0', '.', '3', '2', '\n', '<|im_end|>', '\n', '<|im_end|>', '\n', '<|im_end|>', '\n', '<|im_end|>', '\n', '<|im_end|>', '\n', '<|im_end|>', '\n']`. 
+    Extracted llm Output: `1200.32` (=? 300) ❌.
+    ideal_CoT = '<<4-2=2>>
+            <<2/.5=4>>
+            <<12/4=3>>
+            <<100*3=300>>'.
+    Answer = '300' .
+
+
+With persistent steering off, after 1 epoch:
+    Full llm output: `['<<', '1', '0', '0', '/', '1', '2', '=', '8', '.', '3', '3', '>>\n', '###', ' ', '8', '.', '3', '3', '\n', '<|im_end|>', '\n', '<|im_end|>', '\n', '<|im_end|>', '\n', '<|im_end|>', '\n', '<|im_end|>', '\n', '<|im_end|>', '\n', '<|im_end|>', '\n', '<|im_end|>', '\n', '<|im_end|>', '\n', '<|im_end|>', '\n', '<|im_end|>', '\n', '<|im_end|>', '\n', '<|im_end|>', '\n', '<|im_end|>', '\n', '<|im_end|>', '\n', '<|im_end|>', '\n', '<|im_end|>', '\n', '<|im_end|>', '\n', '###', ' ', '8', '.', '3', '3', '\n', '<|im_end|>']`. 
+    Extracted llm Output: `8.33` (=? 300) ❌.
+    ideal_CoT = '<<4-2=2>>
+            <<2/.5=4>>
+            <<12/4=3>>
+            <<100*3=300>>'.
+    Answer = '300' .
+
+
+    Test accuracy: 0.25. eval_8: 100%|███████████████████████████████████████████████████████████████████████████████████| 32/32 [01:55<00:00,  3.62s/it]
+    2025-10-19 07:19:29.188 | INFO     | coconut.eval:evaluate:112 - Correct=124, CoT_correct=6, Total=500. eval_8                                       
+    2025-10-19 07:19:29.189 | INFO     | coconut.eval:evaluate:113 - Accuracy on val:  124 / 500 =  24.8000%                                             
+    2025-10-19 07:19:29.190 | INFO     | coconut.eval:evaluate:114 - CoT match on val: 6 / 500 =  1.2000%                                                
+    process_dataset: cot_latent_1 (num_proc=12): 100%|█████████████████████████████████████████████████████████| 500/500 [00:01<00:00, 473.72 examples/s]
+    2025-10-19 07:19:43.406 | INFO     | coconut.eval:get_answer_preference:390 - ratio nll_ans/nll_corrupted_ans = 0.9249       
+
+# 2025-10-19 10:14:50
+
+Trying longer run with lower lr
+
+# Results: trm-qwen3-0.6b_20251019-070624
+{'project': 'coconut', 'save_path': 'outputs/', 'name': 'trm-qwen3-0.6b', 'model_id': 'outputs/qwen3-0.6b_20250514-194730/checkpoint_2', 'only_eval': False, 'load_model_path': '', 'resume_epochs': 8, 'replacement_method': 'supressed[0.75:]', 'use_position_ids': True, 'bf16': True, 'bf16_weight': False, 'opt_8b': False, 'cot_epochs': 0, 'epochs_per_stage': 8, 'max_latent_stage': 3, 'num_epochs': 16, 'batch_size_training': 16, 'gradient_accumulation_steps': 8, 'lr': 0.0001, 'weight_decay': 0.1, 'grad_clip': 10.0, 'scheduler': 'linear', 'debug': False, 'seed': 42, 'reset_optimizer': False, 'loss_seq_vcr': False, 'n_detached_recursions': 2, 'use_trm': True, 'load_in_4bit': True, 'load_in_8bit': False, 'trm_n_sup': 4, 'trm_num_layers': 2, 'trm_num_heads': 8, 'trm_expansion': 2.67, 'trm_persistent_steering': False, 'max_size': 20000, 'c_thought': 1, 'pad_latent_to_max': True, 'uniform_prob': 0.0, 'train_path': 'data/gsm_train.json', 'val_path': 'data/gsm_valid.json', 'system_prompt': '', 'latent_token_id': None, 'eval_first_epoch': False, 'n_gradient_recursions': 2}
+|    |   eval/acc |   eval/cot_em |   eval/ratios |   epoch |   stage |   train/minutes |   train/loss |   eval/loss |
+|---:|-----------:|--------------:|--------------:|--------:|--------:|----------------:|-------------:|------------:|
+|  0 |      0.248 |         0.012 |        0.9249 |       8 |       1 |         13.2342 |     0.471396 |      0.4976 |
+|  1 |      0.194 |         0.012 |        0.9226 |       9 |       1 |         13.2039 |     0.331766 |      0.481  |
+|  2 |      0.242 |         0.01  |        0.924  |      10 |       1 |         13.18   |     0.314844 |      0.4776 |
+|  3 |      0.228 |         0.014 |        0.9251 |      11 |       1 |         13.0798 |     0.413031 |      0.4737 |
+|  4 |      0.256 |         0.012 |        0.924  |      12 |       1 |         13.0448 |     0.287812 |      0.4749 |
+|  5 |      0.212 |         0.01  |        0.9254 |      13 |       1 |         13.0954 |     0.295502 |      0.4734 |
+|  6 |      0.214 |         0.012 |        0.9234 |      14 |       1 |         12.9535 |     0.295184 |      0.4739 |
+|  7 |      0.206 |         0.01  |        0.9283 |      15 |       1 |         12.9635 |     0.36557  |      0.473  |
+
+# 2025-10-19 10:59:15 original papert configs
+
+https://github.com/SamsungSAILMontreal/TinyRecursiveModels/tree/e7b68717f0a6c4cbb4ce6fbef787b14f42083bd9/config/arch
+
+The other configs are: 
+- trm.yaml (with mlp false) TRM-MLP (87.4% test accuracy with 5M params), 
+- hrm.yaml for the original HRM (55% acc), 
+- transformers_baseline.yaml for baseline (0% acc), 
+- trm_hier6.yaml for a multi-scale z variant (lower acc), 
+- trm_singlez.yaml for single z (71.9% acc).
