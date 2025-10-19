@@ -2,7 +2,7 @@
 # Minimal dependencies for TRM recursion
 
 from einops import rearrange
-from typing import Tuple
+from typing import Tuple, Optional
 import torch
 import math
 from torch import nn
@@ -153,7 +153,7 @@ class Attention(nn.Module):
         self.qkv_proj = CastedLinear(self.hidden_size, (self.num_heads + 2 * self.num_key_value_heads) * self.head_dim, bias=False)
         self.o_proj = CastedLinear(self.output_size, self.hidden_size, bias=False)
 
-    def forward(self, cos_sin: CosSin, hidden_states: torch.Tensor) -> torch.Tensor:
+    def forward(self, hidden_states: torch.Tensor, cos_sin: Optional[CosSin] = None) -> torch.Tensor:
         batch_size, seq_len, _ = hidden_states.shape
 
         # hidden_states: [bs, seq_len, num_heads, head_dim]

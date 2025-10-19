@@ -61,9 +61,9 @@ class Coconut(nn.Module):
             self.trm = CoconutTRM(
                 hidden_size=self.config.trm_hidden_size or self.model.config.hidden_size,
                 llm_hidden_size=self.model.config.hidden_size,
-                trm_l_layers=self.config.trm_l_layers,
-                trm_h_cycles=self.config.trm_h_cycles,
-                trm_l_cycles=self.config.trm_l_cycles,
+                l_layers=self.config.trm_l_layers,
+                h_cycles=self.config.trm_h_cycles,
+                l_cycles=self.config.trm_l_cycles,
                 num_heads=self.config.trm_num_heads,
                 expansion=self.config.trm_expansion,
                 trm_transcoder_layers=self.config.trm_transcoder_layers,

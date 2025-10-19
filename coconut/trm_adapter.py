@@ -72,18 +72,12 @@ class L_net(nn.Module):
         self.layers = nn.ModuleList([
             TRMBlock(hidden_size, num_heads, expansion) for _ in range(num_layers)
         ])
-        self.context_proj = CastedLinear(llm_hidden_size, hidden_size, bias=False)
 
-    def forward(self, zL: z_b1h, zH: z_b1h, context_hs: hs_bsh) -> z_b1h:
-        # Inject context and high-level state
-        # # TODO update and remove - should apply attention and weighted, or just use latest? mean?. Try latest...
-        # context_pooled = context_hs.mean(dim=1, keepdim=True)
-        last_hs = context_hs[:, -1:, :]
-        in_state = zL + zH + self.context_proj(last_hs)
-        
+    def forward(self, hidden_states: z_b1h, input_injection: z_b1h, **kwargs) -> z_b1h:
+        hidden_states = hidden_states + input_injection
         for layer in self.layers:
-            in_state = layer(in_state)
-        return in_state
+            hidden_states = layer(hidden_states=hidden_states, **kwargs)
+        return hidden_states
 
 class H_net(nn.Module):
     """High-level recursive reasoning module (HRM)."""
@@ -176,21 +170,18 @@ class TRMTranscoder(nn.Module):
 
 class CoconutTRM(nn.Module):
     """
-    Configurable TRM/HRM-style wrapper for Coconut, with optional dual/single net and transcoder layers.
+    Configurable TRM-style wrapper for Coconut
     """
     def __init__(
         self,
         hidden_size: int,
         llm_hidden_size: int,
-        # trm_h_layers: int,
-        trm_l_layers: int,
-        trm_h_cycles: int,
-        trm_l_cycles: int,
+        l_layers: int,
+        h_cycles: int,
+        l_cycles: int,
         num_heads: int,
         expansion: float,
         trm_transcoder_layers: int,
-        # n_detached_recursions: int,
-        # n_gradient_recursions: int,
         llm_embed: torch.Tensor = None
     ):
         super().__init__()
@@ -199,31 +190,25 @@ class CoconutTRM(nn.Module):
         self.llm_hidden_size = llm_hidden_size
         # self.h_layers = trm_h_layers
         # self.l_layers = trm_l_layers
-        self.h_cycles = trm_h_cycles
-        self.trm_l_cycles = trm_l_cycles
+        self.h_cycles = h_cycles
+        self.l_cycles = l_cycles
         self.num_heads = num_heads
         self.expansion = expansion
-        # self.trm_transcoder_layers = trm_transcoder_layers
-        # self.n_detached = n_detached_recursions
-        # self.n_gradient = n_gradient_recursions
         
         # L_net always present
-        self.l_net = L_net(hidden_size, llm_hidden_size, trm_l_layers, num_heads, expansion)
+        self.l_net = L_net(hidden_size, llm_hidden_size, l_layers, num_heads, expansion)
 
-        # self.L_level = TinyRecursiveReasoningModel_ACTV1ReasoningModule(layers=[TinyRecursiveReasoningModel_ACTV1Block(self.config) for _i in range(self.config.L_layers)]) # TODO rm ref
-        # self.h_net = H_net(hidden_size, self.trm_h_layers, num_heads, expansion) # TODO remove no hnet
         
         # Configurable transcoder with SwiGLU layers
         self.transcoder = TRMTranscoder(hidden_size, llm_hidden_size, expansion=expansion, trm_transcoder_layers=trm_transcoder_layers, 
                                         llm_embed=llm_embed)
         
         # Initial states
-        self.H_init = nn.Buffer(trunc_normal_init_(torch.empty(hidden_size, dtype=self.forward_dtype), std=1), persistent=True)
-        self.L_init = nn.Buffer(trunc_normal_init_(torch.empty(hidden_size, dtype=self.forward_dtype), std=1), persistent=True)
+        self.zH_init = nn.Buffer(trunc_normal_init_(torch.empty(hidden_size, dtype=self.forward_dtype), std=1), persistent=True)
+        self.zL_init = nn.Buffer(trunc_normal_init_(torch.empty(hidden_size, dtype=self.forward_dtype), std=1), persistent=True)
 
-        # self.lm_head      = CastedLinear(hidden_size, self.config.vocab_size, bias=False)
+
         self.q_head       = CastedLinear(hidden_size, 2, bias=True)
-        # Q head special init
         # Init Q to (almost) zero for faster learning during bootstrapping
         with torch.no_grad():
             self.q_head.weight.zero_()
@@ -278,6 +263,6 @@ class CoconutTRM(nn.Module):
         # LM outputs
         # output = self.lm_head(zHs)[:, self.puzzle_emb_len:]
         diff_to_hs = self.transcoder(zH_next)
-        q_logits = self.q_head(zH_next[:, 0]).to(torch.float32)
+        q_logits = self.q_head(zH_next).to(torch.float32)
 
         return diff_to_hs.squeeze(1), zL_next, zH_next
