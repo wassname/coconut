@@ -29,14 +29,10 @@ TODO merge above and below into a coherent description
 We combine [COCONUT](https://arxiv.org/abs/2412.06769)[[code](https://github.com/facebookresearch/coconut)] and [TRM](https://arxiv.org/abs/2510.04871) [[code](https://github.com/SamsungSAILMontreal/TinyRecursiveModels)]. 
   - Like COCONUT we iterate on the hidden states of a pretrained LLM, using this to update the input_embeddings for the next LLM forward pass.
   - Like TRM recursion happens in latent space, with latent z and output y being updated via multiple passes of net (the TRMTranscoder).
-    - Unlike TRM we use an approximation of deep supervision to account for expensive LLM forwards.
+    - Unlike TRM which uses deep supervision (where the latent state is supervised at every recursive step for the same input) we use the coconut curriculum of multiple LLM forward passes which serves the same purpose: "the models learns to take any (zL, zH ) and improve it through a full recursion process, hopefully making zH closer to the solution"
     - We output both an input_embedding diff (like COCONUT) and a Q_hat (like TRM) to allow early stopping.
 - Note we might disable ACT for simplity
 - LLM is a 4bit frozen LLM (e.g. Qwen-3-0.6B)
-
-
-
-Instead of applying deep supervision at every layer—which would require an expensive LLM rollout for each step—I perform a single LLM rollout using the exponential moving average (EMA) of the hidden states during training. This approach ensures that all hidden states receive some supervision, aiming to capture the stabilizing effects of deep supervision while avoiding the computational cost associated with full LLM-based supervision at each layer.
 
 
 
@@ -59,27 +55,21 @@ def deep_recursion(x, y, z, n=6, T=3):
 # Deep Supervision
 for x_input, y_true in train_dataloader:
     y, z = y_init, z_init
-    ie_diff_ema = None
-    alpha = 0.9 # ema smoothing factor
     x_hs = LLM.forward(x_input).hidden_states[-4] # new, our input/context space is pretrained LLM hidden states (as in COCONUT)
     ie = LLM.get_input_embeddings()(x_input) # new, our output space is LLM input embeddings (as in COCONUT)
-    for step in range(N_supervision):
-        (y, z), ie_diff, q_hat = deep_recursion(x_hs.detach(), y, z)
 
-        # new: because LLM.forward is expensive in terms of memory/time, we use an EMA of input_embeddings_diff to stabilize training by providing supervision from multiple steps
-        if ie_diff_ema is None:
-            ie_diff_ema = ie_diff
-        else:
-            ie_diff_ema = alpha * ie_diff_ema + (1 - alpha) * ie_diff
-
-    y_hat = LLM.generate(input_embed=ie + ie_diff_ema).logits # new, our output is added to LLM input embeddings
+    # Instead of deep supervision we use curriculum learning (as in COCONUT)
+    for curriculum_stage in range(N_curriculum):
+      for step in range(N_supervision):
+          (y, z), ie_diff, q_hat = deep_recursion(x_hs.detach(), y, z)
+    y_hat = LLM.generate(input_embed=ie + ie_diff).logits # new, our output is added to LLM input embeddings
     loss = softmax_cross_entropy(y_hat, y_true)
-    loss += binary_cross_entropy(q_hat, (y_hat == y_true))
+    # loss += binary_cross_entropy(q_hat, (y_hat == y_true)) # not currently used
     loss.backward()
     opt.step()
     opt.zero_grad()
-    if q_hat > 0: # early-stopping
-        break
+    # if q_hat > 0: # early-stopping
+    #     break
 ```
 Figure 1: Our TRM deep supervision adaptation to recurse on LLM hidden states and use EMA for supervision
 

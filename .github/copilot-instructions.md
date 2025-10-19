@@ -2,11 +2,7 @@
 
 ## Project Overview
 
-This is a research implementation combining two approaches for latent reasoning in LLMs:
-- **COCONUT** (Training LLMs to Reason in Continuous Latent Space): Uses special `<|latent|>` tokens for internal reasoning
-- **TRM** (Tiny Recursive Models): Adds a small recursive adapter that iteratively refines latent representations with a frozen, quantized LLM
-
-The core idea: frozen 4-bit LLM handles perception/generation, while a tiny trainable TRM adapter (~7M params) performs recursive refinement on latent tokens. The TRM adapter uses an exponential moving average (EMA) of the hidden states during training to approximate deep supervision while avoiding the computational cost of full LLM-based supervision at each step.
+This is a research implementation combining two approaches for latent reasoning in LLMs see README.md for details:
 
 ## Architecture
 
@@ -27,10 +23,8 @@ Example: `"The capital of France is <start-latent> <latent> <latent> ... <end-la
 
 **TRM mode** (`use_trm=True`):
 - Frozen 4-bit LLM + trainable TRM adapter (`coconut/trm_adapter.py`)
-- TRM has dual networks (L_net, H_net) that recurse hierarchically
-- Detached recursions: early passes use `torch.no_grad()`, only last N passes backprop
-- Uses exponential moving average (EMA) of latent states during training for deep supervision approximation
 - See `CoconutTRM.hrm()` for recursive refinement matching paper pseudocode
+see README.md for more details
 
 ## Key Files
 
@@ -49,20 +43,31 @@ Training progresses through stages, gradually increasing latent tokens:
 - **Stage -1** (epochs 0-2): Pure CoT with `<start-latent>` and `<end-latent>` but no `<latent>` tokens
 - **Stage 0+**: Add `c_thought` latent tokens per reasoning step, up to `max_latent_stage`
 
-Controlled by: `cot_epochs`, `epochs_per_stage`, `max_latent_stage` in configs.
+example output
+
+    Full llm output: `['<<', '1', '0', '0', '/', '1', '2', '=', '8', '.', '3', '3', '>>\n', '###', ' ', '8', '.', '3', '3', '\n', '<|im_end|>',]`. 
+    Extracted llm Output: `8.33` (=? 300) ❌.
+    ideal_CoT = '<<4-2=2>>
+            <<2/.5=4>>
+            <<12/4=3>>
+            <<100*3=300>>'.
+    Answer = '300' .
+
+    Test accuracy: 0.25. eval_8: 100%|| 32/32 [01:55<00:00,  3.62s/it]
+    Correct=124, CoT_correct=6, Total=500. eval_8                                       
+    Accuracy on val:  124 / 500 =  24.8000%                                             
+    CoT match on val: 6 / 500 =  1.2000%                                                
+    ratio nll_ans/nll_corrupted_ans = 0.9249       
 
 ### Running Experiments
 ```bash
-# Use justfile recipes
-just run_smol          # Standard COCONUT training
-just run_trm           # TRM mode with frozen LLM
 
 # Or directly with tyro CLI
 uv run python scripts/run.py TRM --batch_size_training=8 --max_size=10000
 uv run python scripts/run.py Debug  # Fast iteration with tiny model
 ```
 
-Configs are Pydantic dataclasses in `coconut/configs.py`. CLI args override config fields via tyro.
+Configs are Pydantic dataclasses in `coconut/configs.py`. CLI args override config fields via tyro. `uv run scripts/run.py --help` for full options.
 
 ### Key Config Parameters
 
@@ -106,7 +111,7 @@ def get_dataset(path, tokenizer, ...):
 
 ## Common Pitfalls
 
-1. **Gradient flow in TRM mode**: LLM is frozen but `lm_head` must stay trainable for loss backprop. See `coconut/coconut.py:__init__()`.
+1. **Gradient flow in TRM mode**: LLM is frozen but used for grad in places.
 
 2. **Multi-pass processing**: `coconut.py` processes input in multiple passes (one per latent token). KV cache carries over between passes. Don't assume single forward pass.
 
@@ -114,19 +119,12 @@ def get_dataset(path, tokenizer, ...):
 
 4. **Detached recursions**: When `should_detach=True`, gradients don't flow through early passes. This is intentional (TRM paper design).
 
-5. **Dataset structure**: Each sample has `question_tokenized`, `steps_tokenized` (list), `answer_tokenized`. See `coconut/dataset.py:tokenize_sample()`.
 
-6. **TRM EMA implementation**: The exponential moving average of latent states is used during training to approximate deep supervision, avoiding expensive LLM rollouts for each step.
-
-## Debugging
-
-- Set `debug=True` in config for small dataset (1000 samples) and reduced batch size
-- Use `Debug` or `TRMDebug` configs with `yujiepan/qwen3-tiny-random` for fast iteration
-- Check `wandb` logs for loss curves, or set `WANDB_MODE=disabled` for local runs
 - Eval metrics: `get_answer_preference()` compares perplexity on good vs wrong answers as a ratio, lower is better
 
 ## References
 
+- README.md for public project description
 - COCONUT paper: https://arxiv.org/abs/2412.06769
 - TRM paper: https://arxiv.org/abs/2510.04871 (see `docs/trm_paper.md`)
 - Reference TRM code: `docs/trm_reference_code/`

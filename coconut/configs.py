@@ -201,7 +201,7 @@ class TRM(BaseConfig):
     use_trm: bool = True
 
     trm_n_sup: int = 16  # Deep supervision steps (N_sup in HRM paper)
-    trm_h_layers: int = 0  # Layers for H_net (0 for single net mode)
+    # trm_h_layers: int = 0  # Layers for H_net (0 for single net mode)
     trm_h_cycles: int = 3  # Outer cycles (T in paper)
     trm_l_cycles: int = 6  # Inner cycles (n in paper)
     trm_l_layers: int = 2  # Layers for L_net (or single net)
@@ -212,8 +212,8 @@ class TRM(BaseConfig):
 
     trm_persistent_steering: bool = False  # Whether to persistently steer all future latent embeddings
 
-    n_detached_recursions: int = 2  # Number of detached recursions (paper used >6)
-    n_gradient_recursions: int = 2  # Number of final recursions with gradients (paper uses 2)
+    # n_detached_recursions: int = 2  # Number of detached recursions (paper used >6)
+    # n_gradient_recursions: int = 2  # Number of final recursions with gradients (paper uses 2)
 
     max_size: int = 20_000  # Start very small for testing
     batch_size_training: int = 16  # Reduced from 16 due to OOM
