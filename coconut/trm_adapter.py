@@ -58,12 +58,12 @@ class TRMBlock(nn.Module):
 
 class L_net(nn.Module):
     """Low-level recursive reasoning module (HRM)."""
-    def __init__(self, hidden_size: int, num_layers: int, num_heads: int, expansion: float):
+    def __init__(self, hidden_size: int, llm_hidden_size: int, num_layers: int, num_heads: int, expansion: float):
         super().__init__()
         self.layers = nn.ModuleList([
             TRMBlock(hidden_size, num_heads, expansion) for _ in range(num_layers)
         ])
-        self.context_proj = CastedLinear(hidden_size, hidden_size, bias=False)
+        self.context_proj = CastedLinear(llm_hidden_size, hidden_size, bias=False)
 
     def forward(self, zL: z_b1h, zH: z_b1h, context_hs: hs_bsh) -> z_b1h:
         # Inject context and high-level state
@@ -92,12 +92,12 @@ class H_net(nn.Module):
 
 class TRMTranscoder(nn.Module):
     """Transcodes the final high-level state zH into the LLM's embedding space."""
-    def __init__(self, hidden_size: int, expansion: float = 4.0):
+    def __init__(self, hidden_size: int, llm_hidden_size: int, expansion: float = .0):
         super().__init__()
         self.proj = nn.Sequential(
             CastedLinear(hidden_size, int(hidden_size * expansion), bias=False),
             nn.GELU(),
-            CastedLinear(int(hidden_size * expansion), hidden_size, bias=False),
+            CastedLinear(int(hidden_size * expansion), llm_hidden_size, bias=False),
         )
         # In TRMTranscoder.__init__
         nn.init.xavier_uniform_(self.proj[2].weight)
@@ -114,34 +114,71 @@ class CoconutTRM(nn.Module):
     def __init__(
         self,
         hidden_size: int,
-        # trm_n_sup: int,
-        n_detached_recursions: int,
-        n_gradient_recursions: int,
-        num_layers: int,
-        num_heads: int,
-        expansion: float,
+        llm_hidden_size: int,
+        trm_h_layers: int = 0,
+        trm_l_layers: int = 2,
+        trm_h_cycles: int = 3,
+        trm_l_cycles: int = 6,
+        num_heads: int = 8,
+        expansion: float = 2.67,
+        trm_transcoder_layers: int = 1,
+        n_detached_recursions: int = 2,
+        n_gradient_recursions: int = 2,
+        use_act: bool = False,
     ):
         super().__init__()
         self.hidden_size = hidden_size
-        # self.n_sup = trm_n_sup
+        self.llm_hidden_size = llm_hidden_size
+        self.trm_h_layers = trm_h_layers
+        self.trm_l_layers = trm_l_layers
+        self.trm_h_cycles = trm_h_cycles
+        self.trm_l_cycles = trm_l_cycles
+        self.num_heads = num_heads
+        self.expansion = expansion
+        self.trm_transcoder_layers = trm_transcoder_layers
         self.n_detached = n_detached_recursions
         self.n_gradient = n_gradient_recursions
         
-        self.l_net = L_net(hidden_size, num_layers, num_heads, expansion)
-        self.h_net = H_net(hidden_size, num_layers, num_heads, expansion)
-        self.transcoder = TRMTranscoder(hidden_size, expansion=4.0)
+        # L_net always present
+        self.l_net = L_net(hidden_size, self.llm_hidden_size, self.trm_l_layers, num_heads, expansion)
         
-        # Learnable initial states for zL and zH
+        # H_net optional for dual net
+        if self.trm_h_layers > 0:
+            self.h_net = H_net(hidden_size, self.trm_h_layers, num_heads, expansion)
+        else:
+            self.h_net = None  # Single net mode: use l_net for both with conditional input
+        
+        # Configurable transcoder with SwiGLU layers
+        self.transcoder = TRMTranscoder(hidden_size, llm_hidden_size, expansion=expansion)
+        
+        # Learnable initial states
         self.zL_init = nn.Parameter(torch.randn(hidden_size) * 0.02)
         self.zH_init = nn.Parameter(torch.randn(hidden_size) * 0.02)
+        
+        # For SVD init of transcoder (call after loading LLM)
+        self.svd_initialized = False
 
-    def hrm(self, zL: z_bh, zH: z_bh, context_hs: hs_bsh, max_loops: int=22) -> tuple:
+    def init_svd(self, llm_embed: torch.Tensor):
+        """Initialize transcoder final layer using low-rank approx of LLM embed matrix."""
+        if self.svd_initialized:
+            return
+        # Low-rank approx of embed (vocab x h_llm) to get h_trm x h_llm projection
+        rank = min(512, self.hidden_size)
+        U, S, Vh = torch.svd_lowrank(llm_embed, q=rank)
+        low_rank_proj = U @ torch.diag(S) @ Vh  # h_llm x h_llm approx
+        # Take first h_trm rows to get h_trm x h_llm
+        with torch.no_grad():
+            self.transcoder[-1].weight.copy_(low_rank_proj[:self.hidden_size, :] * 0.1)
+        self.svd_initialized = True
+
+    def hrm(self, zL: z_bh, zH: z_bh, context_hs: hs_bsh) -> tuple:
         """
-        Single HRM recursion step matching the paper's hrm() function.
-        Does n_detached recursions without gradients, then n_gradient with gradients.
-        During training, computes EMA of zH over gradient recursions for deep supervision proxy.
+        Configurable recursion step.
+        For dual net (h_layers >0): T-1 detached full cycles (n L_steps + 1 H_step), then 1 full with grad.
+        For single net (h_layers=0): Use l_net for both, with input injection for z vs y update.
+        Computes EMA of zH during grad part for deep supervision proxy.
         """
-        # Add sequence dimension for processing
+        # Add sequence dimension
         zL_step, zH_step = zL.unsqueeze(1), zH.unsqueeze(1)
 
         # Detached recursions
@@ -150,7 +187,7 @@ class CoconutTRM(nn.Module):
                 zL_step = self.l_net(zL_step, zH_step, context_hs)
                 zH_step = self.h_net(zH_step, zL_step)
 
-        ema_decay = 0.9  # tunable
+        ema_decay = 0.9 # TODO add to config
 
         if self.training:
             # why do we do EMA? this is our proxy for deep supervision. Deep supervision would be too expensive to compute requiring LLM forward passes for each. So instead we use EMA to get a smoothed version of the final latent state. This means we can provide partial supervision to intermediate states, hopefully preventing collapse.
@@ -170,9 +207,9 @@ class CoconutTRM(nn.Module):
             
         return zL_step.squeeze(1), zH_step.squeeze(1), ema_zH.squeeze(1)
 
-    def forward(self, context_hs: hs_bsh, zL_prev: Optional[z_bh] = None, zH_prev: Optional[z_bh] = None, max_loops=22) -> tuple:
+    def forward(self, context_hs: hs_bsh, zL_prev: Optional[z_bh] = None, zH_prev: Optional[z_bh] = None) -> tuple:
         """
-        Performs one HRM step (not the full deep supervision loop).
+        Performs one configurable recursion step.
         Returns the embedding for LLM decoder and updated latent states.
         Uses EMA zH during training for supervision, final zH during inference.
         """

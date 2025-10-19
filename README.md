@@ -21,65 +21,103 @@ We have a sentence like ["The capital of France is <start-latent> <latent> <late
 
 The following pseudocode outlines this modified training loop, incorporating the LLM wrapper into the original TRM algorithm.
 
-```py
-# where output_head converts zH to input embeddings
-# where x are output hidden states from LLM
-# hs are embeddings 
-# where the llm is 4bit and frozen
 
-def hrm(z, x, n=2, T=2): # hierarchical reasoning
-    zH, zL = z
-    with torch.no_grad():
-        for i in range(nT - 2):
-            zL = L_net(zL, zH, x)
-            if (i + 1) % T == 0:
-                zH = H_net(zH, zL)
-    # 1-step grad
-    zL = L_net(zL, zH, x)
-    zH = H_net(zH, zL)
-    return (zH, zL), output_head(zH), 0 # Q_head(zH)
+# v2
 
-# def ACT_halt(q, y_hat, y_true):
-#     target_halt = (y_hat == y_true)
-#     loss = 0.5*binary_cross_entropy(q[0], target_halt)
-#     return loss
+TODO merge above and below into a coherent description
 
-# def ACT_continue(q, last_step):
-#     if last_step:
-#         target_continue = sigmoid(q[0])
-#     else:
-#         target_continue = sigmoid(max(q[0], q[1]))
-#     loss = 0.5*binary_cross_entropy(q[1], target_continue)
-#     return loss
+We combine [COCONUT](https://arxiv.org/abs/2412.06769)[[code](https://github.com/facebookresearch/coconut)] and [TRM](https://arxiv.org/abs/2510.04871) [[code](https://github.com/SamsungSAILMontreal/TinyRecursiveModels)]. 
+  - Like COCONUT we iterate on the hidden states of a pretrained LLM, using this to update the input_embeddings for the next LLM forward pass.
+  - Like TRM recursion happens in latent space, with latent z and output y being updated via multiple passes of net (the TRMTranscoder).
+    - Unlike TRM we use an approximation of deep supervision to account for expensive LLM forwards.
+    - We output both an input_embedding diff (like COCONUT) and a Q_hat (like TRM) to allow early stopping.
+- Note we might disable ACT for simplity
+- LLM is a 4bit frozen LLM (e.g. Qwen-3-0.6B)
 
-# Deep Supervision
-for x_input, y_true in train_dataloader:
-    z = z_init
-    for step in range(N_sup): # deep supervision
-        with torch.no_grad():
-            # LLM converts input tokens to output hidden states
-            x_hs = LLM(x_input).hidden_states[-1]
-        z, embed_pred, q = hrm(z, x_hs)
-        y_pred = LLM(embed_pred) # new
-        loss = loss_fn(y_pred, y_true)
-
-        # Note I have disabled ACT for now, it's only for efficiency
-        # Adaptive computational time (ACT) using Q-learning
-        # loss += ACT_halt(q, y_pred, y_true)  # ablation shows not needed
-        # _, _, q_next = hrm(z, x_hs) # extra forward pass
-        # loss += ACT_continue(q_next, step == N_sup - 1) # ablation shows not needed
-
-        z = z.detach()
-        loss.backward()
-        opt.step()
-        opt.zero_grad()
-        # if q[0] > q[1]: # early-stopping
-        #     break
-```
-Figure 2: Pseudocode of Hierarchical Reasoning Models (HRMs).
 
 
 Instead of applying deep supervision at every layer—which would require an expensive LLM rollout for each step—I perform a single LLM rollout using the exponential moving average (EMA) of the hidden states during training. This approach ensures that all hidden states receive some supervision, aiming to capture the stabilizing effects of deep supervision while avoiding the computational cost associated with full LLM-based supervision at each layer.
+
+
+
+```py
+def latent_recursion(x, y, z, n=6):
+    for i in range(n): # latent reasoning
+        z = net(x, y, z)
+    y = net(y, z) # refine output answer
+    return y, z
+
+def deep_recursion(x, y, z, n=6, T=3):
+    # recursing T-1 times to improve y and z (no gradients needed)
+    with torch.no_grad():
+        for j in range(T-1):
+            y, z = latent_recursion(x, y, z, n)
+    # recursing once to improve y and z
+    y, z = latent_recursion(x, y, z, n)
+    return (y.detach(), z.detach()), output_head(y), Q_head(y)
+
+# Deep Supervision
+for x_input, y_true in train_dataloader:
+    y, z = y_init, z_init
+    ie_diff_ema = None
+    alpha = 0.9 # ema smoothing factor
+    x_hs = LLM.forward(x_input).hidden_states[-4] # new, our input/context space is pretrained LLM hidden states (as in COCONUT)
+    ie = LLM.get_input_embeddings()(x_input) # new, our output space is LLM input embeddings (as in COCONUT)
+    for step in range(N_supervision):
+        (y, z), ie_diff, q_hat = deep_recursion(x_hs.detach(), y, z)
+
+        # new: because LLM.forward is expensive in terms of memory/time, we use an EMA of input_embeddings_diff to stabilize training by providing supervision from multiple steps
+        if ie_diff_ema is None:
+            ie_diff_ema = ie_diff
+        else:
+            ie_diff_ema = alpha * ie_diff_ema + (1 - alpha) * ie_diff
+
+    y_hat = LLM.generate(input_embed=ie + ie_diff_ema).logits # new, our output is added to LLM input embeddings
+    loss = softmax_cross_entropy(y_hat, y_true)
+    loss += binary_cross_entropy(q_hat, (y_hat == y_true))
+    loss.backward()
+    opt.step()
+    opt.zero_grad()
+    if q_hat > 0: # early-stopping
+        break
+```
+Figure 1: Our TRM deep supervision adaptation to recurse on LLM hidden states and use EMA for supervision
+
+
+```py
+def latent_recursion(x, y, z, n=6):
+    for i in range(n): # latent reasoning
+        z = net(x, y, z)
+    y = net(y, z) # refine output answer
+    return y, z
+
+def deep_recursion(x, y, z, n=6, T=3):
+    # recursing T-1 times to improve y and z (no gradients needed)
+    with torch.no_grad():
+        for j in range(T-1):
+            y, z = latent_recursion(x, y, z, n)
+    # recursing once to improve y and z
+    y, z = latent_recursion(x, y, z, n)
+    return (y.detach(), z.detach()), output_head(y), Q_head(y)
+
+# Deep Supervision
+for x_input, y_true in train_dataloader:
+    y, z = y_init, z_init
+    for step in range(N_supervision):
+        x = input_embedding(x_input)
+        (y, z), y_hat, q_hat = deep_recursion(x, y, z)
+        loss = softmax_cross_entropy(y_hat, y_true)
+        loss += binary_cross_entropy(q_hat, (y_hat == y_true))
+        loss.backward()
+        opt.step()
+        opt.zero_grad()
+        if q_hat > 0: # early-stopping
+            break
+```
+Figure 2: Original TRM deep supervision 
+
+
+
 ----
 
 # Replicating and Extending COCONUT  

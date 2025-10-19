@@ -59,12 +59,16 @@ class Coconut(nn.Module):
         if getattr(self.config, 'use_trm', False):
             logger.info("Initializing TRM adapter for frozen LLM")
             self.trm = CoconutTRM(
-                hidden_size=self.model.config.hidden_size,
-                # trm_n_sup=self.config.trm_n_sup,
-                n_detached_recursions=self.config.n_detached_recursions,
-                num_layers=self.config.trm_num_layers,
+                hidden_size=self.config.trm_hidden_size or self.model.config.hidden_size,
+                llm_hidden_size=self.model.config.hidden_size,
+                trm_h_layers=self.config.trm_h_layers,
+                trm_l_layers=self.config.trm_l_layers,
+                trm_h_cycles=self.config.trm_h_cycles,
+                trm_l_cycles=self.config.trm_l_cycles,
                 num_heads=self.config.trm_num_heads,
                 expansion=self.config.trm_expansion,
+                trm_transcoder_layers=self.config.trm_transcoder_layers,
+                n_detached_recursions=self.config.n_detached_recursions,
                 n_gradient_recursions=self.config.n_gradient_recursions
             )
             # Match LLM dtype (bfloat16)
