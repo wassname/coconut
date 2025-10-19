@@ -100,57 +100,75 @@ class H_net(nn.Module):
         return in_state
 
 class TRMTranscoder(nn.Module):
-    """Transcodes the final high-level state zH into the LLM's embedding space."""
+    """Transcodes TRM's latent state zH into LLM's hidden space.
+    
+    Architecture: zH [h_trm] -> MLP [h_trm*expansion] -> final_proj [h_llm]   
+
+    """
     def __init__(self, hidden_size: int, llm_hidden_size: int, expansion: float = 1.0, trm_transcoder_layers: int = 1, llm_embed: torch.Tensor = None):
         super().__init__()
         self.hidden_size = hidden_size
         self.llm_hidden_size = llm_hidden_size
 
-        layers = [
-            CastedLinear(hidden_size, int(hidden_size * expansion), bias=False),
-        ]
+        # MLP in TRM's latent space
+        layers = []
         for _ in range(trm_transcoder_layers):
+            layers.append(CastedLinear(hidden_size, int(hidden_size * expansion), bias=False))
             layers.append(nn.GELU())
-            layers.append(CastedLinear(int(hidden_size * expansion), int(hidden_size * expansion), bias=False))
-        self.proj = nn.Sequential(*layers)
+        self.mlp = nn.Sequential(*layers) if layers else nn.Identity()
+        
+        # Final projection to LLM space
+        input_dim = int(hidden_size * expansion) if trm_transcoder_layers > 0 else hidden_size
+        self.final_proj = CastedLinear(input_dim, llm_hidden_size, bias=False)
+        nn.init.xavier_uniform_(self.final_proj.weight, gain=0.01)
 
-        # In TRMTranscoder.__init__
-        nn.init.xavier_uniform_(self.proj[-1].weight)
-        self.proj[-1].weight.data *= 0.01  # scale down 100x
-
-        # TODO or consider init from LLM embedding matrix using SVD low-rank approx, this will help it transcode to the LLM space better.
+        # Optional SVD-based initialization
         self.svd_initialized = False
         self.init_svd(llm_embed)
     
     def forward(self, zH: z_bh) -> hs_b1h:
-        return self.proj(zH)
+        features = self.mlp(zH)  # [b, h_trm*expansion]
+        output = self.final_proj(features)  # [b, h_llm]
+        return output.unsqueeze(1)  # [b, 1, h_llm]
     
-    def init_svd(self, llm_embed: torch.Tensor):
-        """Initialize transcoder final layer using SVD basis of LLM embed matrix as prior."""
+    def init_svd(self, llm_embed: Float[Tensor, 'vocab h_llm']):
+        """Initialize final_proj using SVD basis of LLM embed matrix as prior.
+        
+        Logic:
+        - LLM embedding matrix [vocab, h_llm] maps tokens to semantic space
+        - SVD extracts principal components: Vh columns are the "semantic directions"
+        - Use these as initial weights to bias transcoder toward embedding-like outputs
+        - final_proj weight is [h_llm, input_dim] for nn.Linear
+        - We want each input_dim feature to map to a combo of semantic directions
+        - So we use Vh [h_llm, rank] as the basis, pad/slice to match input_dim
+        """
         if self.svd_initialized or llm_embed is None:
             return
         
         # SVD of embedding matrix: vocab x h_llm -> rank principal components
         rank = min(512, llm_embed.shape[0], llm_embed.shape[1])
         U, S, Vh = torch.svd_lowrank(llm_embed.float(), q=rank)
-        # Vh is [rank, h_llm] - the semantic basis vectors
+        # Vh is [h_llm, rank] - columns are the principal semantic directions
         
-        # Target weight is [h_llm, h_trm] (transposed for nn.Linear)
-        target_shape = self.proj[-1].weight.shape  # [h_llm, h_trm]
+        # Target weight is [h_llm, input_dim] for nn.Linear
+        target_shape = self.final_proj.weight.shape  # [h_llm, input_dim]
         
         with torch.no_grad():
-            # Use Vh rows as initial basis, pad/slice to match h_trm
-            if rank >= target_shape[1]:  # h_trm
-                # Slice top h_trm components
-                init_weight = Vh[:target_shape[1], :].T  # [h_llm, h_trm]
+            # Vh is already [h_llm, rank], no transpose needed
+            basis = Vh  # [h_llm, rank]
+            
+            # Pad or slice to match input_dim
+            if rank >= target_shape[1]:  # input_dim
+                # Slice top input_dim components
+                init_weight = basis[:, :target_shape[1]]  # [h_llm, input_dim]
             else:
-                # Pad with small random if rank < h_trm
-                init_weight = torch.zeros(target_shape, dtype=Vh.dtype, device=Vh.device)
-                init_weight[:, :rank] = Vh.T  # [h_llm, rank]
+                # Pad with small random if rank < input_dim
+                init_weight = torch.zeros(target_shape, dtype=basis.dtype, device=basis.device)
+                init_weight[:, :rank] = basis  # [h_llm, rank]
                 init_weight[:, rank:] = torch.randn_like(init_weight[:, rank:]) * 0.01
             
             # Scale down to avoid dominating early training
-            self.proj[-1].weight.copy_(init_weight * 0.1)
+            self.final_proj.weight.copy_(init_weight * 0.1)
             
         self.svd_initialized = True
         logger.info(f"Initialized transcoder with SVD basis: rank={rank}, weight_shape={target_shape}")
@@ -176,6 +194,7 @@ class CoconutTRM(nn.Module):
         llm_embed: torch.Tensor = None
     ):
         super().__init__()
+        self.forward_dtype = torch.bfloat16
         self.hidden_size = hidden_size
         self.llm_hidden_size = llm_hidden_size
         # self.h_layers = trm_h_layers
