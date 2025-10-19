@@ -92,72 +92,28 @@ class H_net(nn.Module):
 
 class TRMTranscoder(nn.Module):
     """Transcodes the final high-level state zH into the LLM's embedding space."""
-    def __init__(self, hidden_size: int, llm_hidden_size: int, expansion: float = .0):
+    def __init__(self, hidden_size: int, llm_hidden_size: int, expansion: float = 1.0, trm_transcoder_layers: int = 1, llm_embed: torch.Tensor = None):
         super().__init__()
-        self.proj = nn.Sequential(
+
+        layers = [
             CastedLinear(hidden_size, int(hidden_size * expansion), bias=False),
-            nn.GELU(),
-            CastedLinear(int(hidden_size * expansion), llm_hidden_size, bias=False),
-        )
+        ]
+        for _ in range(trm_transcoder_layers - 1):
+            layers.append(nn.GELU())
+            layers.append(CastedLinear(int(hidden_size * expansion), int(hidden_size * expansion), bias=False))
+        self.proj = nn.Sequential(*layers)
+
         # In TRMTranscoder.__init__
         nn.init.xavier_uniform_(self.proj[2].weight)
         self.proj[2].weight.data *= 0.01  # scale down 100x
+
+        # TODO or consider init from LLM embedding matrix using SVD low-rank approx, this will help it transcode to the LLM space better.
+        self.svd_initialized = False
+        self.init_svd(llm_embed)
     
     def forward(self, zH: z_bh) -> hs_b1h:
         return self.proj(zH)
-
-class CoconutTRM(nn.Module):
-    """
-    HRM-style wrapper for Coconut, implementing the dual-network recursive
-    model matching the paper's pseudocode.
-    """
-    def __init__(
-        self,
-        hidden_size: int,
-        llm_hidden_size: int,
-        trm_h_layers: int = 0,
-        trm_l_layers: int = 2,
-        trm_h_cycles: int = 3,
-        trm_l_cycles: int = 6,
-        num_heads: int = 8,
-        expansion: float = 2.67,
-        trm_transcoder_layers: int = 1,
-        n_detached_recursions: int = 2,
-        n_gradient_recursions: int = 2,
-        use_act: bool = False,
-    ):
-        super().__init__()
-        self.hidden_size = hidden_size
-        self.llm_hidden_size = llm_hidden_size
-        self.trm_h_layers = trm_h_layers
-        self.trm_l_layers = trm_l_layers
-        self.trm_h_cycles = trm_h_cycles
-        self.trm_l_cycles = trm_l_cycles
-        self.num_heads = num_heads
-        self.expansion = expansion
-        self.trm_transcoder_layers = trm_transcoder_layers
-        self.n_detached = n_detached_recursions
-        self.n_gradient = n_gradient_recursions
-        
-        # L_net always present
-        self.l_net = L_net(hidden_size, self.llm_hidden_size, self.trm_l_layers, num_heads, expansion)
-        
-        # H_net optional for dual net
-        if self.trm_h_layers > 0:
-            self.h_net = H_net(hidden_size, self.trm_h_layers, num_heads, expansion)
-        else:
-            self.h_net = None  # Single net mode: use l_net for both with conditional input
-        
-        # Configurable transcoder with SwiGLU layers
-        self.transcoder = TRMTranscoder(hidden_size, llm_hidden_size, expansion=expansion)
-        
-        # Learnable initial states
-        self.zL_init = nn.Parameter(torch.randn(hidden_size) * 0.02)
-        self.zH_init = nn.Parameter(torch.randn(hidden_size) * 0.02)
-        
-        # For SVD init of transcoder (call after loading LLM)
-        self.svd_initialized = False
-
+    
     def init_svd(self, llm_embed: torch.Tensor):
         """Initialize transcoder final layer using low-rank approx of LLM embed matrix."""
         if self.svd_initialized:
@@ -171,6 +127,51 @@ class CoconutTRM(nn.Module):
             self.transcoder[-1].weight.copy_(low_rank_proj[:self.hidden_size, :] * 0.1)
         self.svd_initialized = True
 
+class CoconutTRM(nn.Module):
+    """
+    Configurable TRM/HRM-style wrapper for Coconut, with optional dual/single net and transcoder layers.
+    """
+    def __init__(
+        self,
+        hidden_size: int,
+        llm_hidden_size: int,
+        trm_h_layers: int,
+        trm_l_layers: int,
+        trm_h_cycles: int,
+        trm_l_cycles: int,
+        num_heads: int,
+        expansion: float,
+        trm_transcoder_layers: int,
+        # n_detached_recursions: int,
+        # n_gradient_recursions: int,
+        llm_embed: torch.Tensor = None
+    ):
+        super().__init__()
+        self.hidden_size = hidden_size
+        self.llm_hidden_size = llm_hidden_size
+        self.trm_h_layers = trm_h_layers
+        self.trm_l_layers = trm_l_layers
+        self.trm_h_cycles = trm_h_cycles
+        self.trm_l_cycles = trm_l_cycles
+        self.num_heads = num_heads
+        self.expansion = expansion
+        # self.trm_transcoder_layers = trm_transcoder_layers
+        # self.n_detached = n_detached_recursions
+        # self.n_gradient = n_gradient_recursions
+        
+        # L_net always present
+        self.l_net = L_net(hidden_size, self.llm_hidden_size, self.trm_l_layers, num_heads, expansion)
+
+        self.h_net = H_net(hidden_size, self.trm_h_layers, num_heads, expansion)
+        
+        # Configurable transcoder with SwiGLU layers
+        self.transcoder = TRMTranscoder(hidden_size, llm_hidden_size, expansion=expansion, trm_transcoder_layers=trm_transcoder_layers, 
+                                        llm_embed=llm_embed)
+        
+        # Learnable initial states
+        self.zL_init = nn.Parameter(torch.randn(hidden_size) * 0.02)
+        self.zH_init = nn.Parameter(torch.randn(hidden_size) * 0.02)
+
     def hrm(self, zL: z_bh, zH: z_bh, context_hs: hs_bsh) -> tuple:
         """
         Configurable recursion step.
@@ -183,8 +184,10 @@ class CoconutTRM(nn.Module):
 
         # Detached recursions
         with torch.no_grad():
-            for _ in range(self.n_detached):
-                zL_step = self.l_net(zL_step, zH_step, context_hs)
+            for H_step in range(self.config.H_cycles-1):
+                # FIXME in TRM l_net and h_net are the same layer with swapped inputs
+                for L_step in range(self.config.L_cycles):
+                    zL_step = self.l_net(zL_step, zH_step, context_hs)
                 zH_step = self.h_net(zH_step, zL_step)
 
         ema_decay = 0.9 # TODO add to config
@@ -229,7 +232,7 @@ class CoconutTRM(nn.Module):
             assert zH.ndim == 2
 
         # Run one HRM recursion
-        zL_next, _, zH_next = self.hrm(zL, zH, context_hs, max_loops=max_loops)
+        zL_next, _, zH_next = self.hrm(zL, zH, context_hs)
         
 
         diff_to_hs = self.transcoder(zH_next)

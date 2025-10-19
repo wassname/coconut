@@ -25,14 +25,14 @@ def rotate_half(x: torch.Tensor):
 
 
 def apply_rotary_pos_emb(q: torch.Tensor, k: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor):
-    # q, k: [bs, num_heads, seq_len, head_dim] or similar
+    # q, k: [bs, num_heads, seq_len, head_dim]
     # cos, sin: [seq_len, head_dim]
     orig_dtype = q.dtype
     q = q.to(cos.dtype)
     k = k.to(cos.dtype)
 
-    q_embed = (q * cos.unsqueeze(1 if q.ndim == 3 else (0,1))) + (rotate_half(q) * sin.unsqueeze(1 if q.ndim == 3 else (0,1)))
-    k_embed = (k * cos.unsqueeze(1 if k.ndim == 3 else (0,1))) + (rotate_half(k) * sin.unsqueeze(1 if k.ndim == 3 else (0,1)))
+    q_embed = (q * cos.unsqueeze(-2)) + (rotate_half(q) * sin.unsqueeze(-2))
+    k_embed = (k * cos.unsqueeze(-2)) + (rotate_half(k) * sin.unsqueeze(-2))
 
     return q_embed.to(orig_dtype), k_embed.to(orig_dtype)
 
@@ -110,7 +110,6 @@ class Attention(nn.Module):
         
         if cos_sin is not None:
             cos, sin = cos_sin
-            # Assume cos/sin are [seq_len, head_dim//2 * 2]; broadcast to [1, seq_len, head_dim] if needed
             if sin.shape[0] != seq_len:
                 cos = cos[:seq_len]
                 sin = sin[:seq_len]

@@ -6,7 +6,7 @@ This is a research implementation combining two approaches for latent reasoning 
 - **COCONUT** (Training LLMs to Reason in Continuous Latent Space): Uses special `<|latent|>` tokens for internal reasoning
 - **TRM** (Tiny Recursive Models): Adds a small recursive adapter that iteratively refines latent representations with a frozen, quantized LLM
 
-The core idea: frozen 4-bit LLM handles perception/generation, while a tiny trainable TRM (~7M params) performs recursive refinement on latent tokens.
+The core idea: frozen 4-bit LLM handles perception/generation, while a tiny trainable TRM adapter (~7M params) performs recursive refinement on latent tokens. The TRM adapter uses an exponential moving average (EMA) of the hidden states during training to approximate deep supervision while avoiding the computational cost of full LLM-based supervision at each step.
 
 ## Architecture
 
@@ -29,6 +29,7 @@ Example: `"The capital of France is <start-latent> <latent> <latent> ... <end-la
 - Frozen 4-bit LLM + trainable TRM adapter (`coconut/trm_adapter.py`)
 - TRM has dual networks (L_net, H_net) that recurse hierarchically
 - Detached recursions: early passes use `torch.no_grad()`, only last N passes backprop
+- Uses exponential moving average (EMA) of latent states during training for deep supervision approximation
 - See `CoconutTRM.hrm()` for recursive refinement matching paper pseudocode
 
 ## Key Files
@@ -38,7 +39,7 @@ Example: `"The capital of France is <start-latent> <latent> <latent> ... <end-la
 - `coconut/configs.py`: All experiment configs as Pydantic dataclasses (TRM, Debug, etc.)
 - `coconut/dataset.py`: Tokenizes GSM8K with latent tokens, handles staged training
 - `coconut/hs2ie.py`: Hidden-state replacement methods, including novel "suppressed activations" experiment
-- `coconut/vcr_loss.py`: SEQ-VCR loss for intermediate state stability (experimental)
+<!-- - `coconut/vcr_loss.py`: SEQ-VCR loss for intermediate state stability (experimental) -->
 - `scripts/run.py`: Training loop with staged curriculum (CoT → 1 latent → 2 latents → ...)
 
 ## Training Workflow
@@ -64,11 +65,8 @@ uv run python scripts/run.py Debug  # Fast iteration with tiny model
 Configs are Pydantic dataclasses in `coconut/configs.py`. CLI args override config fields via tyro.
 
 ### Key Config Parameters
-- `n_detached_recursions`: Number of early passes to detach gradients (TRM-style)
-- `replacement_method`: How to inject latent hidden states (`"supressed[0.75:]"` uses top 25% layers)
-- `loss_seq_vcr`: Enable experimental VCR loss for latent stability
-- `use_position_ids`: Add positional encoding to latent tokens
-- `trm_n_sup`, `trm_num_layers`, `trm_num_heads`: TRM architecture params
+
+see ./coconut/configs.py for full details
 
 ## Development Patterns
 
@@ -91,7 +89,8 @@ logger.debug("Hidden states shape: {}", hs.shape)
 ```
 
 ### Caching
-Use anycache for expensive preprocessing:
+Use anycache for expensive preprocessing this wraps a function and caches to disc based on a hash of the function arguments
+
 ```python
 from anycache import anycache
 
@@ -105,8 +104,6 @@ def get_dataset(path, tokenizer, ...):
 - `FIXME`: Known bug or suboptimal code
 - `HACK`: Temporary workaround
 
-Current TODOs in `coconut/trm_adapter.py` and `coconut/hs2ie.py` relate to context pooling and cache invalidation.
-
 ## Common Pitfalls
 
 1. **Gradient flow in TRM mode**: LLM is frozen but `lm_head` must stay trainable for loss backprop. See `coconut/coconut.py:__init__()`.
@@ -119,12 +116,14 @@ Current TODOs in `coconut/trm_adapter.py` and `coconut/hs2ie.py` relate to conte
 
 5. **Dataset structure**: Each sample has `question_tokenized`, `steps_tokenized` (list), `answer_tokenized`. See `coconut/dataset.py:tokenize_sample()`.
 
+6. **TRM EMA implementation**: The exponential moving average of latent states is used during training to approximate deep supervision, avoiding expensive LLM rollouts for each step.
+
 ## Debugging
 
 - Set `debug=True` in config for small dataset (1000 samples) and reduced batch size
 - Use `Debug` or `TRMDebug` configs with `yujiepan/qwen3-tiny-random` for fast iteration
 - Check `wandb` logs for loss curves, or set `WANDB_MODE=disabled` for local runs
-- Eval metrics: `get_answer_preference()` compares latent vs non-latent perplexity
+- Eval metrics: `get_answer_preference()` compares perplexity on good vs wrong answers as a ratio, lower is better
 
 ## References
 
