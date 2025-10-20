@@ -361,6 +361,8 @@ def get_answer_preference(
     with torch.no_grad():
 
         ratios = []
+        nll_chos = []
+        nll_refs = []
 
         for batch_n, batch in enumerate(valid_gen_dataloader):
 
@@ -382,6 +384,8 @@ def get_answer_preference(
             nll_ref = calc_ans_nll(batch2, model, tokenizer, device, dtype, verbose=batch_n < 1)
             ratio = nll_cho - nll_ref
             ratios.append(ratio)
+            nll_chos.append(nll_cho)
+            nll_refs.append(nll_ref)
 
 
 
@@ -390,4 +394,6 @@ def get_answer_preference(
     logger.info(f"ratio nll_ans/nll_corrupted_ans = {ratios:2.4f}")
     return {
         "eval/ratios": ratios,
+        "eval/nll_chos_avg": np.mean(nll_chos),
+        "eval/nll_refs_avg": np.mean(nll_refs),
     }
