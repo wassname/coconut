@@ -81,19 +81,19 @@ class L_net(nn.Module):
             hidden_states = layer(hidden_states=hidden_states, **kwargs)
         return hidden_states
 
-class H_net(nn.Module):
-    """High-level recursive reasoning module (HRM)."""
-    def __init__(self, hidden_size: int, num_layers: int, num_heads: int, expansion: float):
-        super().__init__()
-        self.layers = nn.ModuleList([
-            TRMBlock(hidden_size, num_heads, expansion) for _ in range(num_layers)
-        ])
+# class H_net(nn.Module):
+#     """High-level recursive reasoning module (HRM)."""
+#     def __init__(self, hidden_size: int, num_layers: int, num_heads: int, expansion: float):
+#         super().__init__()
+#         self.layers = nn.ModuleList([
+#             TRMBlock(hidden_size, num_heads, expansion) for _ in range(num_layers)
+#         ])
 
-    def forward(self, zH: z_b1h, zL: z_b1h) -> z_b1h:
-        in_state = zH + zL
-        for layer in self.layers:
-            in_state = layer(in_state)
-        return in_state
+#     def forward(self, zH: z_b1h, zL: z_b1h) -> z_b1h:
+#         in_state = zH + zL
+#         for layer in self.layers:
+#             in_state = layer(in_state)
+#         return in_state
 
 class TRMTranscoder(nn.Module):
     """Transcodes TRM's latent state zH into LLM's hidden space.
@@ -290,7 +290,7 @@ class CoconutTRM(nn.Module):
 
         # LM outputs
         # output = self.lm_head(zHs)[:, self.puzzle_emb_len:]
-        diff_to_hs = self.transcoder(zH_next)
+        diff_to_ie = self.transcoder(zH_next)
         q_logits = self.q_head(zH_next).to(torch.float32)
 
 
@@ -309,8 +309,8 @@ class CoconutTRM(nn.Module):
                 wandb.log({
                     "zH_norm": zH_next.norm(dim=-1).mean().item(),
                     "context_hs_norm": context_hs.norm(dim=-1).mean().item(),
-                    "diff_to_hs_norm": diff_to_hs.norm(dim=-1).mean().item(),
-                    "diff_context_ratio": (diff_to_hs.norm(dim=-1) / context_hs.norm(dim=-1)).mean().item() # note it should go up as the model gets confidence
+                    "diff_to_hs_norm": diff_to_ie.norm(dim=-1).mean().item(),
+                    "diff_context_ratio": (diff_to_ie.norm(dim=-1) / context_hs.norm(dim=-1)).mean().item() # note it should go up as the model gets confidence
                 })
 
-        return diff_to_hs.squeeze(1), zL_next, zH_next
+        return diff_to_ie.squeeze(1), zL_next, zH_next
