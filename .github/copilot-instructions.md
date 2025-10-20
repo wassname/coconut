@@ -57,7 +57,23 @@ example output
     Correct=124, CoT_correct=6, Total=500. eval_8                                       
     Accuracy on val:  124 / 500 =  24.8000%                                             
     CoT match on val: 6 / 500 =  1.2000%                                                
-    ratio nll_ans/nll_corrupted_ans = 0.9249       
+    ratio nll_ans/nll_corrupted_ans = 0.9249   (lower is better)
+
+
+
+# Results: trm-qwen3-0.6b_20251019-204459
+{'project': 'coconut', 'save_path': 'outputs/', 'name': 'trm-qwen3-0.6b', 'model_id': 'outputs/qwen3-0.6b_20250514-194730/checkpoint_2', 'only_eval': False, 'load_model_path': '', 'resume_epochs': 8, 'replacement_method': 'supressed[0.75:]', 'use_position_ids': True, 'bf16': True, 'bf16_weight': False, 'opt_8b': False, 'cot_epochs': 0, 'epochs_per_stage': 8, 'max_latent_stage': 3, 'num_epochs': 30, 'batch_size_training': 16, 'gradient_accumulation_steps': 8, 'lr': 5e-05, 'weight_decay': 0.1, 'grad_clip': 10.0, 'scheduler': 'linear', 'debug': False, 'seed': 42, 'reset_optimizer': False, 'loss_seq_vcr': False, 'n_detached_recursions': 2, 'use_trm': True, 'load_in_4bit': True, 'load_in_8bit': False, 'max_size': 20000, 'c_thought': 1, 'pad_latent_to_max': True, 'uniform_prob': 0.0, 'train_path': 'data/gsm_train.json', 'val_path': 'data/gsm_valid.json', 'system_prompt': '', 'latent_token_id': None, 'eval_first_epoch': False, 'trm_n_sup': 16, 'trm_h_cycles': 3, 'trm_l_cycles': 6, 'trm_l_layers': 2, 'trm_hidden_size': None, 'trm_num_heads': 8, 'trm_expansion': 2.67, 'trm_transcoder_layers': 1, 'trm_persistent_steering': True}
+
+
+|    |   eval/acc |   eval/cot_em |   eval/ratios |   epoch |   stage |   train/minutes |   train/loss |   eval/loss |
+|---:|-----------:|--------------:|--------------:|--------:|--------:|----------------:|-------------:|------------:|
+|  0 |      0.434 |         0.028 |        0.9543 |       8 |       1 |         13.6735 |     0.693636 |      0.8054 |
+
+Example results where
+
+- cot_em is exact match of chain-of-thought reasoning steps
+- ratios is perplexity ratio of correct vs corrupted answers (lower is better)
+- acc is the final answer accuracy
 
 ### Running Experiments
 ```bash

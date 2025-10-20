@@ -433,13 +433,22 @@ def main():
                     total_loss += loss.item()
 
                 if wandb_run:
+                    eval_loss = total_loss / len(valid_loss_dataloader)
+                    eval_perplexity = torch.exp(torch.tensor(eval_loss)).item()  # Absolute perplexity
                     eval_log_dict = {
-                        "eval/loss": total_loss / len(valid_loss_dataloader),
+                        "eval/loss": eval_loss,
+                        "eval/perplexity": eval_perplexity,  # Track absolute confidence
                         **{f'eval/{k}': outputs.log[k] for k in outputs.log},
                     }
                     wandb_run.log(eval_log_dict)
                     
-                    print("eval loss", total_loss / len(valid_loss_dataloader))
+                    print("eval loss", eval_loss)
+                    print("eval perplexity", eval_perplexity)
+                    
+                    # What to look for:
+                    # - Perplexity decreasing: Model gaining confidence on predictions
+                    # - Perplexity increasing while loss decreases: Potential overconfidence/miscalibration
+                    # - Stable low perplexity with improving ratios: Good sign of latent reasoning
 
             clear_memory()
 

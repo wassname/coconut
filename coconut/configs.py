@@ -192,8 +192,8 @@ class TRM(BaseConfig):
     resume_epochs: int = 8
     # epochs_per_stage: int = 8
     cot_epochs: int = 0
-    num_epochs: int = 16  # More epochs to let TRM adapter learn
-    lr: float = 5e-5  # Slightly lower LR for adapter training
+    num_epochs: int = 30  # More epochs to let TRM adapter learn
+    lr: float = 1e-4  # Slightly lower LR for adapter training
 
     eval_first_epoch: bool = True  # Evaluate before training
 
@@ -210,7 +210,7 @@ class TRM(BaseConfig):
     trm_expansion: float = 2.67  # MLP expansion factor in TRM (4 in paper)
     trm_transcoder_layers: int = 1  # Number of SwiGLU layers in transcoder (configurable)
 
-    trm_persistent_steering: bool = False  # Whether to persistently steer all future latent embeddings
+    trm_persistent_steering: bool = True  # Whether to persistently steer all future latent embeddings
 
     # n_detached_recursions: int = 2  # Number of detached recursions (paper used >6)
     # n_gradient_recursions: int = 2  # Number of final recursions with gradients (paper uses 2)

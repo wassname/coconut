@@ -1353,7 +1353,102 @@ The other configs are:
 And here is the actuall TRM forward https://github.com/SamsungSAILMontreal/TinyRecursiveModels/blob/e7b68717f0a6c4cbb4ce6fbef787b14f42083bd9/models/recursive_reasoning/trm.py#L196
 
 
+# 2025-10-19 15:50:44
+
 Oh good I was using the wrong psudocode, I keep mixing up TRM and HRM. OK
+updated readme, updated code
+- [ ] no Q head
+- [ ] now use cirriculum instead of deep supervision
+- [ ] init transcoder from SVD basis, V from `We` as a prior for embedding space
+
+runnning, trm_persistent_steering=False, initial loss 1
 
 
 
+
+
+
+2025-10-19 16:10:42.822 | INFO     | coconut.eval:evaluate:112 - Correct=185, CoT_correct=8, Total=500. eval_8                                                                         
+2025-10-19 16:10:42.828 | INFO     | coconut.eval:evaluate:113 - Accuracy on val:  185 / 500 =  37.0000%                                                                               
+2025-10-19 16:10:42.834 | INFO     | coconut.eval:evaluate:114 - CoT match on val: 8 / 500 =  1.6000%    
+loss=0.43
+
+
+# 2025-10-19 18:39:02
+
+
+# Results: trm-qwen3-0.6b_20251019-154941
+{'project': 'coconut', 'save_path': 'outputs/', 'name': 'trm-qwen3-0.6b', 'model_id': 'outputs/qwen3-0.6b_20250514-194730/checkpoint_2', 'only_eval': False, 'load_model_path': '', 'resume_epochs': 8, 'replacement_method': 'supressed[0.75:]', 'use_position_ids': True, 'bf16': True, 'bf16_weight': False, 'opt_8b': False, 'cot_epochs': 0, 'epochs_per_stage': 8, 'max_latent_stage': 3, 'num_epochs': 16, 'batch_size_training': 16, 'gradient_accumulation_steps': 8, 'lr': 5e-05, 'weight_decay': 0.1, 'grad_clip': 10.0, 'scheduler': 'linear', 'debug': False, 'seed': 42, 'reset_optimizer': False, 'loss_seq_vcr': False, 'n_detached_recursions': 2, 'use_trm': True, 'load_in_4bit': True, 'load_in_8bit': False, 'max_size': 20000, 'c_thought': 1, 'pad_latent_to_max': True, 'uniform_prob': 0.0, 'train_path': 'data/gsm_train.json', 'val_path': 'data/gsm_valid.json', 'system_prompt': '', 'latent_token_id': None, 'eval_first_epoch': False, 'trm_n_sup': 16, 'trm_h_cycles': 3, 'trm_l_cycles': 6, 'trm_l_layers': 2, 'trm_hidden_size': None, 'trm_num_heads': 8, 'trm_expansion': 2.67, 'trm_transcoder_layers': 1, 'trm_persistent_steering': False}
+|    |   eval/acc |   eval/cot_em |   eval/ratios |   epoch |   stage |   train/minutes |   train/loss |   eval/loss |
+|---:|-----------:|--------------:|--------------:|--------:|--------:|----------------:|-------------:|------------:|
+|  0 |      0.37  |         0.016 |        0.9266 |       8 |       1 |         21.4294 |     0.421252 |      0.549  |
+|  1 |      0.328 |         0.014 |        0.9298 |       9 |       1 |         20.8754 |     0.459505 |      0.5293 |
+|  2 |      0.312 |         0.014 |        0.9311 |      10 |       1 |         20.8222 |     0.349655 |      0.5216 |
+|  3 |      0.306 |         0.012 |        0.9315 |      11 |       1 |         21.0609 |     0.366589 |      0.518  |
+|  4 |      0.296 |         0.012 |        0.9316 |      12 |       1 |         21.3691 |     0.426163 |      0.5139 |
+|  5 |      0.268 |         0.012 |        0.9317 |      13 |       1 |         21.0347 |     0.403238 |      0.5109 |
+|  6 |      0.27  |         0.012 |        0.9315 |      14 |       1 |         20.9655 |     0.45056  |      0.5067 |
+|  7 |      0.268 |         0.014 |        0.9309 |      15 |       1 |         21.0347 |     0.387177 |      0.5044 |
+wandb: 
+
+
+# 2025-10-20 06:08:06
+
+# Results: trm-qwen3-0.6b_20251019-204459
+{'project': 'coconut', 'save_path': 'outputs/', 'name': 'trm-qwen3-0.6b', 'model_id': 'outputs/qwen3-0.6b_20250514-194730/checkpoint_2', 'only_eval': False, 'load_model_path': '', 'resume_epochs': 8, 'replacement_method': 'supressed[0.75:]', 'use_position_ids': True, 'bf16': True, 'bf16_weight': False, 'opt_8b': False, 'cot_epochs': 0, 'epochs_per_stage': 8, 'max_latent_stage': 3, 'num_epochs': 30, 'batch_size_training': 16, 'gradient_accumulation_steps': 8, 'lr': 5e-05, 'weight_decay': 0.1, 'grad_clip': 10.0, 'scheduler': 'linear', 'debug': False, 'seed': 42, 'reset_optimizer': False, 'loss_seq_vcr': False, 'n_detached_recursions': 2, 'use_trm': True, 'load_in_4bit': True, 'load_in_8bit': False, 'max_size': 20000, 'c_thought': 1, 'pad_latent_to_max': True, 'uniform_prob': 0.0, 'train_path': 'data/gsm_train.json', 'val_path': 'data/gsm_valid.json', 'system_prompt': '', 'latent_token_id': None, 'eval_first_epoch': False, 'trm_n_sup': 16, 'trm_h_cycles': 3, 'trm_l_cycles': 6, 'trm_l_layers': 2, 'trm_hidden_size': None, 'trm_num_heads': 8, 'trm_expansion': 2.67, 'trm_transcoder_layers': 1, 'trm_persistent_steering': True}
+|    |   eval/acc |   eval/cot_em |   eval/ratios |   epoch |   stage |   train/minutes |   train/loss |   eval/loss |
+|---:|-----------:|--------------:|--------------:|--------:|--------:|----------------:|-------------:|------------:|
+|  0 |      0.434 |         0.028 |        0.9543 |       8 |       1 |         13.6735 |     0.693636 |      0.8054 |
+|  1 |      0.462 |         0.03  |        0.9468 |       9 |       1 |         13.8391 |     0.688966 |      0.7145 |
+|  2 |      0.45  |         0.03  |        0.9433 |      10 |       1 |         13.8354 |     0.547561 |      0.6614 |
+|  3 |      0.442 |         0.018 |        0.9422 |      11 |       1 |         13.9457 |     0.557111 |      0.6342 |
+|  4 |      0.44  |         0.018 |        0.943  |      12 |       1 |         13.687  |     0.572101 |      0.6175 |
+|  5 |      0.426 |         0.016 |        0.9444 |      13 |       1 |         13.7035 |     0.60038  |      0.6071 |
+|  6 |      0.432 |         0.018 |        0.9439 |      14 |       1 |         13.702  |     0.536857 |      0.6008 |
+|  7 |      0.43  |         0.016 |        0.9434 |      15 |       1 |         13.6208 |     0.575433 |      0.5953 |
+|  8 |      0.38  |         0.024 |        0.6976 |      16 |       2 |         20.1121 |     0.635938 |      0.7869 |
+|  9 |      0.348 |         0.02  |        0.6987 |      17 |       2 |         20.1906 |     0.838113 |      0.7786 |
+| 10 |      0.33  |         0.022 |        0.7001 |      18 |       2 |         20.1416 |     0.700116 |      0.7749 |
+| 11 |      0.324 |         0.022 |        0.7014 |      19 |       2 |         19.9205 |     0.733533 |      0.7708 |
+| 12 |      0.306 |         0.024 |        0.702  |      20 |       2 |         20.2084 |     0.68219  |      0.7683 |
+| 13 |      0.28  |         0.022 |        0.7041 |      21 |       2 |         20.1077 |     0.633149 |      0.7647 |
+| 14 |      0.27  |         0.026 |        0.7052 |      22 |       2 |         19.8475 |     0.630443 |      0.7625 |
+| 15 |      0.25  |         0.02  |        0.7071 |      23 |       2 |         20.0469 |     0.663379 |      0.76   |
+| 16 |      0.074 |         0.018 |        0.5485 |      24 |       3 |         16.7198 |     0.774709 |      0.8572 |
+| 17 |      0.046 |         0.014 |        0.5498 |      25 |       3 |         16.6994 |     0.865078 |      0.8458 |
+| 18 |      0.038 |         0.014 |        0.5532 |      26 |       3 |         16.7742 |     0.838326 |      0.8389 |
+| 19 |      0.026 |         0.014 |        0.5543 |      27 |       3 |         16.6039 |     0.789819 |      0.8333 |
+| 20 |      0.026 |         0.014 |        0.5558 |      28 |       3 |         16.7808 |     0.769315 |      0.8266 |
+| 21 |      0.022 |         0.014 |        0.5584 |      29 |       3 |         16.6993 |     0.669265 |      0.8245 |l
+
+
+6 hour run
+
+hmm ok the results are in,
+- loss doesn't really go down, 
+- but acc does, 
+- but ratios went down which is good!!! confusing. that's the perplexity of the good answer vs the bad... I guess the ratio got better but the absolute answer got less likely but not as fast as the corrupted answer
+
+I guess I should add intermentate things too? Maybe load the checkpoints to prototype?
+
+q:
+
+- does each resursion make the loss go down... this is hard to measure I think.
+- does the transcoder project to embedding space or blow up or down
+- does the absoute perplexity go down, need to log this?
+
+
+oh but note the stages, the ratios took a jump down with an extra stage. and acc a jump down. maybe I need longer to do it
+
+well loss did trend down, but then bump up again with stages. so that supports the hypothesis that it was learnign with stages
+
+I could also consider adding in the ema deep supervision proxy along with the existing cirriculu
+
+could be the lr is too low too
+
+
+
+exp
+- without svd init
+- without persistent steering
+  - monitor diff_content_ratio it shoudl get bigger, and not go to zero

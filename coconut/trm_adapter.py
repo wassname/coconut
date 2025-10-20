@@ -18,6 +18,7 @@ from typing import Optional
 from jaxtyping import Float, Int, Bool
 from torch import Tensor
 from .trm_layers import Attention, SwiGLU, rms_norm, CastedLinear, trunc_normal_init_
+import wandb
 
 hs_bsh = Float[Tensor, 'b s h']
 hs_b1h = Float[Tensor, 'b 1 h']
@@ -56,6 +57,7 @@ class TRMBlock(nn.Module):
             hidden_states + self.mlp(hidden_states),
             variance_epsilon=self.norm_eps
         )
+
         return hidden_states
 
 
@@ -123,6 +125,18 @@ class TRMTranscoder(nn.Module):
     def forward(self, zH: z_bh) -> hs_b1h:
         features = self.mlp(zH)  # [b, h_trm*expansion]
         output = self.final_proj(features)  # [b, h_llm]
+        
+        # Log for debugging transcoder projection
+        if self.training:
+            wandb.log({
+                "transcoder_weight_norm": self.final_proj.weight.norm().item(),  # Stable: 1-10; Explode: >100; Vanish: <0.1
+                "output_projection_scale": output.norm(dim=-1).mean().item()  # Should approach ~500 (embedding scale)
+            })
+            # What to look for:
+            # - weight_norm stable/growing moderately: Healthy learning
+            # - output_projection_scale increasing toward context_hs_norm: Learning amplification
+            # - If too small persistently: Scale mismatch; too large: Potential instability
+        
         return output.unsqueeze(1)  # [b, 1, h_llm]
     
     def init_svd(self, llm_embed: Float[Tensor, 'vocab h_llm']):
@@ -163,7 +177,7 @@ class TRMTranscoder(nn.Module):
             
             # Scale down to avoid dominating early training
             self.final_proj.weight.copy_(init_weight * 0.1)
-            
+
         self.svd_initialized = True
         logger.info(f"Initialized transcoder with SVD basis: rank={rank}, weight_shape={target_shape}")
 
@@ -214,7 +228,7 @@ class CoconutTRM(nn.Module):
             self.q_head.weight.zero_()
             self.q_head.bias.fill_(-5)  # type: ignore
         
-    def hrm(self, zL: z_bh, zH: z_bh, context_hs: hs_bsh) -> tuple:
+    def hrm(self, zL: z_bh, zH: z_b1h, context_hs: hs_bsh) -> tuple:
         """
         Configurable recursion step.
         For dual net (h_layers >0): T-1 detached full cycles (n L_steps + 1 H_step), then 1 full with grad.
@@ -222,6 +236,8 @@ class CoconutTRM(nn.Module):
         """
         # Add sequence dimension
         zLs, zHs = zL.unsqueeze(1), zH.unsqueeze(1)
+
+        recursion_losses = []  # Track per-recursion loss for debugging
 
         # H_cycles-1 without grad
         with torch.no_grad():
@@ -233,7 +249,19 @@ class CoconutTRM(nn.Module):
         # 1 with grad
         for L_step in range(self.l_cycles):
             zLs = self.l_net(zLs, zHs + context_hs)
+            # Log per-recursion loss: MSE between current and previous zL (proxy for refinement)
+            if self.training and L_step > 0:
+                recursion_loss = F.mse_loss(zLs, zLs_prev.detach())
+                recursion_losses.append(recursion_loss.item())
+                if len(recursion_losses) % 5 == 0:  # Log every 5 steps to avoid spam
+                    wandb.log({"recursion_loss": recursion_loss.item()})
+            zLs_prev = zLs.clone()  # Track previous for next iteration
         zHs = self.l_net(zHs, zLs)
+
+        # What to look for: recursion_loss should decrease over iterations (model refining states)
+        # If it increases/explodes: unstable recursion; if flat: no refinement happening
+        if self.training and recursion_losses:
+            wandb.log({"avg_recursion_loss": sum(recursion_losses) / len(recursion_losses)})
 
         return zHs.squeeze(1), zLs.squeeze(1)
 
@@ -264,5 +292,25 @@ class CoconutTRM(nn.Module):
         # output = self.lm_head(zHs)[:, self.puzzle_emb_len:]
         diff_to_hs = self.transcoder(zH_next)
         q_logits = self.q_head(zH_next).to(torch.float32)
+
+
+        # Add more detailed logging
+        if self.training:  # Only log during training
+            with torch.no_grad():
+                # Check if states are actually changing
+                if zL_prev is not None:
+                    zL_change = (zL_next - zL_prev).norm(dim=-1).mean()
+                    wandb.log({"zL_change": zL_change.item()})
+                if zH_prev is not None:
+                    zH_change = (zH_next - zH_prev).norm(dim=-1).mean()
+                    wandb.log({"zH_change": zH_change.item(), })
+                
+                # Check transcoder output scale
+                wandb.log({
+                    "zH_norm": zH_next.norm(dim=-1).mean().item(),
+                    "context_hs_norm": context_hs.norm(dim=-1).mean().item(),
+                    "diff_to_hs_norm": diff_to_hs.norm(dim=-1).mean().item(),
+                    "diff_context_ratio": (diff_to_hs.norm(dim=-1) / context_hs.norm(dim=-1)).mean().item() # note it should go up as the model gets confidence
+                })
 
         return diff_to_hs.squeeze(1), zL_next, zH_next

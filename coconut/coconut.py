@@ -32,7 +32,7 @@ from coconut.configs import BaseConfig
 
 
 Outputs = namedtuple(
-    "Outputs", ["loss", "inputs_embeds", "logits", "past_key_values", "hidden_states", "log", ] # loss_ar loss_vcr
+    "Outputs", ["loss", "inputs_embeds", "logits", "past_key_values", "hidden_states", "log", "input_embed_diff" ] # loss_ar loss_vcr
 )
 
 # max during gen
@@ -76,9 +76,9 @@ class Coconut(nn.Module):
             logger.info("Freezing base LLM parameters")
             for param in self.model.parameters():
                 param.requires_grad = False
-            # Unfreeze the LM head to allow gradients from the loss
-            for param in self.model.lm_head.parameters():
-                param.requires_grad = True
+            # # Unfreeze the LM head to allow gradients from the loss
+            # for param in self.model.lm_head.parameters():
+            #     param.requires_grad = True
 
             self.model.enable_input_require_grads()
 
@@ -108,6 +108,9 @@ class Coconut(nn.Module):
         ]  # bs, num_latent_tokens_in_the_instance (difference across the batch)
 
         max_n_latents = max([len(l) for l in latent_lists])
+
+        
+
 
         next_compute_range = (0, input_ids.shape[1])
         inputs_embeds = self.model.get_input_embeddings()(input_ids)
@@ -229,30 +232,25 @@ class Coconut(nn.Module):
                 if filling_indices:
                     batch_indices, token_indices = zip(*filling_indices)
                     # Get hidden states only for batches with latents at this pass
-                    last_hidden_states = hidden_states[-4][list(batch_indices), -1:, :]  # [b, 1, h]
+                    last_hidden_states = hidden_states[-4][:, -1:, :]  # [b, h]
                     
-                    # Get previous states for these batches (if they exist)
-                    zL_batch = zL_prev[list(batch_indices)] if zL_prev is not None else None
-                    zH_batch = zH_prev[list(batch_indices)] if zH_prev is not None else None
+                    # # Get previous states for these batches (if they exist)
+                    # zL_batch = zL_prev if zL_prev is not None else None
+                    # zH_batch = zH_prev if zH_prev is not None else None
                     
                     # TRM only on relevant batches
-                    input_embed_diff, zL_next, zH_next = self.trm(last_hidden_states, zL_batch, zH_batch)  # [b, h]
+                    input_embed_diff, zL_next, zH_next = self.trm(last_hidden_states, zL_prev, zH_prev)  # [b, h]
+
+                    # mask it to only appy to batch that has has at least one latents so far
+                    batch_latent_mask = (input_ids[:, next_compute_range[0] : next_compute_range[1]] == self.config.latent_token_id).any(1).float().unsqueeze(-1) # [b, 1]
+                    input_embed_diff = (input_embed_diff * batch_latent_mask).unsqueeze(1)  # [b, 1, h]
                     
-                    # Initialize full state if needed
-                    if zL_prev is None:
-                        hidden_size = last_hidden_states.shape[-1]
-                        zL_prev = torch.zeros(input_ids.shape[0], hidden_size, 
-                                            device=last_hidden_states.device, dtype=last_hidden_states.dtype)
-                        zH_prev = torch.zeros(input_ids.shape[0], hidden_size, 
-                                            device=last_hidden_states.device, dtype=last_hidden_states.dtype)
-                    
-                    # Update only the batches that were processed (match dtype)
-                    zL_prev[list(batch_indices)] = zL_next.to(zL_prev.dtype)
-                    zH_prev[list(batch_indices)] = zH_next.to(zH_prev.dtype)
-                    
+                    zL_prev = zL_next
+                    zH_prev = zH_next
+
                     # Apply embeddings
                     for batch_idx, token_idx in filling_indices:
-                        tensor_list[batch_idx][token_idx] = tensor_list[batch_idx][token_idx] + input_embed_diff[batch_idx]
+                        tensor_list[batch_idx][token_idx] = tensor_list[batch_idx][token_idx] + input_embed_diff[batch_idx][0]
                 # Note: keep input_embed_diff from last pass for persistent steering
 
 
@@ -290,9 +288,13 @@ class Coconut(nn.Module):
         ]
         if self.config.trm_persistent_steering and input_embed_diff is not None and filling_indices:
             # Apply steering only to batches that had latents in the last pass
-            batch_indices_last = [idx for idx, _ in filling_indices]
-            for filling_idx, batch_idx in enumerate(batch_indices_last):
-                inputs_embeds[batch_idx] = inputs_embeds[batch_idx] + input_embed_diff[batch_idx]
+            # FIXME it should be all that had latents ever?
+            inputs_embeds = inputs_embeds + input_embed_diff
+            # ODL
+            # batch_indices_last = [idx for idx, _ in filling_indices]
+            # for filling_idx, batch_idx in enumerate(batch_indices_last):
+            #     inputs_embeds[batch_idx] = inputs_embeds[batch_idx] + input_embed_diff[batch_idx]
+        # Ensure persistent steering is applied consistently in generate too
         outputs = self.model.forward(
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask[:, : next_compute_range[1]],
@@ -332,6 +334,7 @@ class Coconut(nn.Module):
 
         return Outputs(loss=loss, inputs_embeds=inputs_embeds, logits=logits, past_key_values=outputs.past_key_values,
                         hidden_states=[],#list(all_hs), 
+                        input_embed_diff=input_embed_diff,
                         log=extra)
 
 
@@ -362,15 +365,18 @@ class Coconut(nn.Module):
         # Use self.forward (Coconut) not self.model.forward (base LLM) to enable TRM
         with torch.no_grad():
             coconut_outputs = self.forward(input_ids, attention_mask)
-        outputs = type('obj', (object,), {
+        coconut_outputs = type('obj', (object,), {
             'logits': coconut_outputs.logits,
             'past_key_values': coconut_outputs.past_key_values
         })()
 
         # get the first token using the current hidden state
-        next_token = outputs.logits[:, -1].argmax(-1).detach().unsqueeze(1)
+        next_token = coconut_outputs.logits[:, -1].argmax(-1).detach().unsqueeze(1)
         tokens = torch.cat((tokens, next_token), dim=1)
         new_inputs_embeds = lyr_embed(next_token)
+
+        if config.persistent_steering:
+            new_inputs_embeds = new_inputs_embeds + coconut_outputs.input_embed_diff
         # new_inputs_embeds = torch.cat((inputs_embeds, new_token_embed), dim=1)
         B = tokens.shape[0]
         new_att_mask = torch.cat(
@@ -378,7 +384,7 @@ class Coconut(nn.Module):
         )
 
         # get other tokens
-        kv_cache = outputs.past_key_values
+        kv_cache = coconut_outputs.past_key_values
         for _ in range(max_new_tokens - 1):
             # Use base model forward for answer generation (latents already processed above)
             check_input_lens(new_inputs_embeds, new_att_mask, kv_cache)
@@ -398,6 +404,7 @@ class Coconut(nn.Module):
                     break
 
             new_inputs_embeds = lyr_embed(next_token)
+            new_inputs_embeds = new_inputs_embeds + coconut_outputs.input_embed_diff
             new_att_mask = torch.cat(
                 (new_att_mask, torch.ones((B, 1), device=new_att_mask.device)), dim=1
             )
