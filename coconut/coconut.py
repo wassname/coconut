@@ -360,17 +360,13 @@ class Coconut(nn.Module):
         # Use self.forward (Coconut) not self.model.forward (base LLM) to enable TRM
         with torch.no_grad():
             coconut_outputs = self.forward(input_ids, attention_mask)
-        coconut_outputs = type('obj', (object,), {
-            'logits': coconut_outputs.logits,
-            'past_key_values': coconut_outputs.past_key_values
-        })()
 
         # get the first token using the current hidden state
         next_token = coconut_outputs.logits[:, -1].argmax(-1).detach().unsqueeze(1)
         tokens = torch.cat((tokens, next_token), dim=1)
         new_inputs_embeds = lyr_embed(next_token)
 
-        if config.persistent_steering:
+        if self.config.trm_persistent_steering:
             new_inputs_embeds = new_inputs_embeds + coconut_outputs.input_embed_diff
         # new_inputs_embeds = torch.cat((inputs_embeds, new_token_embed), dim=1)
         B = tokens.shape[0]
@@ -399,7 +395,8 @@ class Coconut(nn.Module):
                     break
 
             new_inputs_embeds = lyr_embed(next_token)
-            new_inputs_embeds = new_inputs_embeds + coconut_outputs.input_embed_diff
+            if self.config.trm_persistent_steering:
+                new_inputs_embeds = new_inputs_embeds + coconut_outputs.input_embed_diff
             new_att_mask = torch.cat(
                 (new_att_mask, torch.ones((B, 1), device=new_att_mask.device)), dim=1
             )
