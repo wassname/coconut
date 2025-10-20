@@ -286,15 +286,10 @@ class Coconut(nn.Module):
         inputs_embeds=inputs_embeds[
                 :, next_compute_range[0] : next_compute_range[1], :
         ]
-        if self.config.trm_persistent_steering and input_embed_diff is not None and filling_indices:
+        if self.config.trm_persistent_steering and input_embed_diff is not None:
+            # Ensure persistent steering is applied consistently in generate too
             # Apply steering only to batches that had latents in the last pass
-            # FIXME it should be all that had latents ever?
             inputs_embeds = inputs_embeds + input_embed_diff
-            # ODL
-            # batch_indices_last = [idx for idx, _ in filling_indices]
-            # for filling_idx, batch_idx in enumerate(batch_indices_last):
-            #     inputs_embeds[batch_idx] = inputs_embeds[batch_idx] + input_embed_diff[batch_idx]
-        # Ensure persistent steering is applied consistently in generate too
         outputs = self.model.forward(
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask[:, : next_compute_range[1]],

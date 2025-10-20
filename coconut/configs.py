@@ -52,8 +52,8 @@ class BaseConfig:
     # https://github.com/QwenLM/Qwen3/blob/714df5bce80a67c698e37034e71dc2efa19ceaf3/examples/llama-factory/qwen2-7b-full-sft.yaml#L27
     lr: float = 1e-4 # 1e-4 in coconut, but 1e-6 in verl
     weight_decay: float = 0.1 # 0.01 in coconut, 0 in verl # 0.1 anmd 1 in TRM paper
-    grad_clip: float = 10.0
-    scheduler: str = "linear" # "constant" or "cosine" or "linear"
+    grad_clip: float = 1.0
+    scheduler: str = "cosine" # "constant" or "cosine" or "linear"
 
     debug: bool = False
 
@@ -192,7 +192,7 @@ class TRM(BaseConfig):
     resume_epochs: int = 8
     # epochs_per_stage: int = 8
     cot_epochs: int = 0
-    num_epochs: int = 30  # More epochs to let TRM adapter learn
+    num_epochs: int = 25  # More epochs to let TRM adapter learn
     lr: float = 1e-4  # Slightly lower LR for adapter training
 
     eval_first_epoch: bool = True  # Evaluate before training
@@ -212,7 +212,7 @@ class TRM(BaseConfig):
 
     trm_svd_init: bool = True  # Whether to use SVD-based initialization for TRM transcoder
 
-    trm_persistent_steering: bool = True  # Whether to persistently steer all future latent embeddings
+    trm_persistent_steering: bool = False  # Whether to persistently steer all future latent embeddings
 
     # n_detached_recursions: int = 2  # Number of detached recursions (paper used >6)
     # n_gradient_recursions: int = 2  # Number of final recursions with gradients (paper uses 2)
