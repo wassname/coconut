@@ -67,7 +67,7 @@ class Coconut(nn.Module):
                 num_heads=self.config.trm_num_heads,
                 expansion=self.config.trm_expansion,
                 trm_transcoder_layers=self.config.trm_transcoder_layers,
-                llm_embed=self.model.get_input_embeddings().weight,
+                llm_embed=self.model.get_input_embeddings().weight if config.trm_svd_init else None,
             )
             # Match LLM dtype (bfloat16)
             self.trm = self.trm.to(self.model.dtype)
