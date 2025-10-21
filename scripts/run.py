@@ -1,4 +1,21 @@
 import argparse
+# Early warning filter: suppress noisy Pydantic UnsupportedFieldAttributeWarning
+# which can be emitted when generating schemas for dataclasses used by tyro.
+import warnings
+try:
+    from pydantic._internal._generate_schema import UnsupportedFieldAttributeWarning
+    warnings.filterwarnings("ignore", category=UnsupportedFieldAttributeWarning)
+except Exception:
+    # Fallback: filter by message substrings if pydantic internals path changes
+    warnings.filterwarnings(
+        "ignore",
+        message="The 'repr' attribute with value False was provided to the `Field()` function",
+    )
+    warnings.filterwarnings(
+        "ignore",
+        message="The 'frozen' attribute with value True was provided to the `Field()` function",
+    )
+
 import gc
 import json
 import os

@@ -1550,6 +1550,9 @@ and
 
 
 next experiment:
-- cosine scheduler
-- stronger transcoder
-- margin loss, on whole input nll
+- [x] cosine scheduler
+- [x] stronger transcoder
+- [x] margin loss, on whole input nll
+
+```
+uv run scripts/run.py TRM 
