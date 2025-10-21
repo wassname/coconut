@@ -83,13 +83,13 @@ class Coconut(nn.Module):
             self.model.enable_input_require_grads()
 
 
-    def forward(self, input_ids, attention_mask=None, labels=None, position_ids=None, **kwargs):
+    def forward(self, input_ids, attention_mask=None, labels=None, position_ids=None, collect_hs=False, **kwargs):
 
         
         if attention_mask is None:
             attention_mask=torch.ones_like(input_ids, device=input_ids.device)
-        if labels is None:
-            labels=input_ids.clone()
+        # if labels is None:
+        #     labels=input_ids.clone()
         if position_ids is None:
             position_ids=torch.arange(
                 0, input_ids.shape[1], dtype=torch.long, device=input_ids.device
@@ -108,8 +108,32 @@ class Coconut(nn.Module):
         ]  # bs, num_latent_tokens_in_the_instance (difference across the batch)
 
         max_n_latents = max([len(l) for l in latent_lists])
+            
+        # question_mask = # TODO make this as attention mask, and remove latents
 
-        
+        def get_nll(logits, labels, attention_mask):
+            shift_logits = logits[..., :-1, :].contiguous()
+            shift_labels = labels[..., 1:].contiguous()
+            loss_fct = CrossEntropyLoss(reduction='none')
+            loss_per_token = loss_fct(
+                shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1)
+            )
+            nll = (loss_per_token * attention_mask).sum() / (attention_mask.sum() + 1e-8)
+            return nll, loss_per_token
+
+        all_labels = input_ids.clone()[..., 1:].contiguous()
+        if self.configs.loss_nll_ratio_margin:
+            # do a forward without trm
+            with torch.no_grad():
+                base_outputs = self.model.forward(
+                    input_ids=input_ids,
+                    attention_mask=attention_mask,
+                    position_ids=position_ids,
+                    output_hidden_states=False,
+                )
+                base_logits = base_outputs.logits
+                nll_base, _ = get_nll(base_outputs.logits, all_labels, attention_mask)
+                del base_outputs
 
 
         next_compute_range = (0, input_ids.shape[1])
@@ -121,7 +145,7 @@ class Coconut(nn.Module):
 
         kv_cache = None
 
-        # all_hs = []
+        all_hs = []
         
         # TRM state carryover across passes (for recursive refinement)
         zL_prev, zH_prev = None, None
@@ -261,6 +285,10 @@ class Coconut(nn.Module):
                         for batch_idx in range(inputs_embeds.shape[0])
                     ]
                 )
+
+            if collect_hs:
+                hs = rearrange(list(outputs.hidden_states), "l b t h -> l b t h").detach().cpu()
+                all_hs.append(hs)
             
             # Detach inputs_embeds after detached passes to prevent gradients flowing back
             if should_detach:
@@ -278,9 +306,6 @@ class Coconut(nn.Module):
                         else None
                     )
         past_key_values= DynamicCache.from_legacy_cache(past_key_values)
-
-        # if steer_all=
-
 
         # final pass
         inputs_embeds=inputs_embeds[
@@ -300,24 +325,48 @@ class Coconut(nn.Module):
 
         logits.append(outputs.logits)
 
-        # # collect hs
-        # hs = rearrange(list(outputs.hidden_states), "l b t h -> l b t h").detach().cpu()
-        # all_hs.append(hs)
-        # all_hs = torch.concat(all_hs, dim=2)
+
+        if collect_hs:
+            hs = rearrange(list(outputs.hidden_states), "l b t h -> l b t h").detach().cpu()
+            all_hs.append(hs)
+            all_hs = torch.concat(all_hs, dim=2)
 
         self.gen_forward_cnt += max_n_latents + 1
 
+        losses = {}
+
         logits = torch.cat(logits, dim=-2)
-        shift_logits = logits[..., :-1, :].contiguous()
-        shift_labels = labels[..., 1:].contiguous()
-        loss_fct = CrossEntropyLoss()
-        loss = loss_fct(
-            shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1)
-        )
+
+        question_nll, loss_per_token = get_nll(logits, labels, attention_mask)
+
+        answer_mask = labels != -100 # the data loader should do this
+
+        # consider loss to regularise `mse_loss(input_embed_diff, 0)`
+        loss_diff = 0.0
+        if self.config.loss_reg_ie_diff:
+            loss_diff = torch.mean(input_embed_diff**2) / 100.0
+            
+        # Answer loss (primary objective)
+        answer_loss = (loss_per_token * answer_mask).sum() / (answer_mask.sum() + 1e-8)
+
+        # Question margin loss (regularization: penalize if NLL > threshold)
+        question_margin_loss = torch.mean(F.relu(question_nll - nll_base - .1) ** 4)
+
+        # Combined loss
+        total_loss = answer_loss + question_margin_loss + loss_diff
 
         # # Seq-VCR loss
         # # in the paper they apply it to the last hidden state, we apply it to all
-        extra = {}
+        extra = {
+            "loss/answer": answer_loss,
+            "loss/question_margin": question_margin_loss,
+            'loss/input_embed_diff': loss_diff,
+            "loss/total": total_loss,
+            'nll/question': question_nll,
+            'nll/base': nll_base,
+        }
+        extra = {k: v.mean().detach().cpu().item() for k, v in extra.items()}
+
         # if self.config.loss_seq_vcr:
         #     with torch.autocast(device_type=input_ids.device.type):
         #         loss_vcr, extra2 = self.vcr_loss(all_hs)
@@ -325,10 +374,16 @@ class Coconut(nn.Module):
         #     extra.update(extra2)
         #     loss += loss_vcr
 
-        assert torch.isfinite(loss).all(), f"Loss is {loss}"
 
-        return Outputs(loss=loss, inputs_embeds=inputs_embeds, logits=logits, past_key_values=outputs.past_key_values,
-                        hidden_states=[],#list(all_hs), 
+        # Log components for monitoring
+        if self.training:
+            import wandb
+            wandb.log(extra)
+
+        assert torch.isfinite(total_loss).all(), f"Loss is {total_loss}"
+
+        return Outputs(loss=total_loss, inputs_embeds=inputs_embeds, logits=logits, past_key_values=outputs.past_key_values,
+                        hidden_states=list(all_hs), 
                         input_embed_diff=input_embed_diff,
                         log=extra)
 

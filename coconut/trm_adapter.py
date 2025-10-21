@@ -106,6 +106,8 @@ class TRMTranscoder(nn.Module):
         self.hidden_size = hidden_size
         self.llm_hidden_size = llm_hidden_size
 
+        # FIXME consider using TRMBlock, or at layer or batch norm
+
         # MLP in TRM's latent space
         layers = []
         for _ in range(trm_transcoder_layers):

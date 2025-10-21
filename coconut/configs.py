@@ -214,6 +214,8 @@ class TRM(BaseConfig):
 
     trm_persistent_steering: bool = False  # Whether to persistently steer all future latent embeddings
 
+    loss_reg_ie_diff: bool = False  # Whether to regularize input-embedding differences
+
     # n_detached_recursions: int = 2  # Number of detached recursions (paper used >6)
     # n_gradient_recursions: int = 2  # Number of final recursions with gradients (paper uses 2)
 

@@ -1104,50 +1104,50 @@ nll_ans/nll_corrupted_ans = 0.6478
 
 # Results: trm-qwen3-0.6b_20251017-154402
 {'project': 'coconut', 'save_path': 'outputs/', 'name': 'trm-qwen3-0.6b', 'model_id': 'outputs/qwen3-0.6b_20250514-194730/checkpoint_2', 'only_eval': False, 'load_model_path': '', 'resume_epochs': 8, 'replacement_method': 'supressed[0.75:]', 'use_position_ids': True, 'bf16': True, 'bf16_weight': False, 'opt_8b': False, 'cot_epochs': 0, 'epochs_per_stage': 8, 'max_latent_stage': 3, 'num_epochs': 50, 'batch_size_training': 16, 'gradient_accumulation_steps': 8, 'lr': 0.0001, 'weight_decay': 0.5, 'grad_clip': 10.0, 'scheduler': 'cosine', 'debug': False, 'seed': 42, 'reset_optimizer': False, 'loss_seq_vcr': False, 'n_detached_recursions': 2, 'use_trm': True, 'load_in_4bit': True, 'load_in_8bit': False, 'trm_n_sup': 4, 'trm_num_layers': 2, 'trm_num_heads': 8, 'trm_expansion': 2.67, 'max_size': 20000, 'c_thought': 2, 'pad_latent_to_max': True, 'uniform_prob': 0.0, 'train_path': 'data/gsm_train.json', 'val_path': 'data/gsm_valid.json', 'system_prompt': '', 'latent_token_id': None, 'eval_first_epoch': False, 'n_gradient_recursions': 2}
-|    |   eval/acc |   eval/cot_em |   eval/ratios |   epoch |   stage |   train/minutes |   train/loss |   eval/loss |
-|---:|-----------:|--------------:|--------------:|--------:|--------:|----------------:|-------------:|------------:|
-|  0 |      0.486 |         0.016 |        0.9312 |       8 |       1 |         21.5086 |     0.561535 |      0.6984 |
-|  1 |      0.492 |         0.016 |        0.9315 |       9 |       1 |         22.7353 |     0.44593  |      0.5652 |
-|  2 |      0.492 |         0.016 |        0.9317 |      10 |       1 |         22.6433 |     0.392704 |      0.5235 |
-|  3 |      0.488 |         0.016 |        0.9322 |      11 |       1 |         21.784  |     0.326752 |      0.5187 |
-|  4 |      0.484 |         0.016 |        0.9312 |      12 |       1 |         21.7898 |     0.32877  |      0.5095 |
-|  5 |      0.492 |         0.016 |        0.9334 |      13 |       1 |         21.8261 |     0.437547 |      0.5079 |
-|  6 |      0.48  |         0.016 |        0.9312 |      14 |       1 |         21.833  |     0.366916 |      0.5013 |
-|  7 |      0.494 |         0.016 |        0.9305 |      15 |       1 |         22.3296 |     0.344434 |      0.5006 |
-|  8 |      0.484 |         0.018 |        0.6817 |      16 |       2 |         22.2727 |     0.514602 |      0.6541 |
-|  9 |      0.48  |         0.018 |        0.6934 |      17 |       2 |         22.1381 |     0.479511 |      0.6479 |
-| 10 |      0.482 |         0.018 |        0.7048 |      18 |       2 |         18.5789 |     0.534687 |      0.6368 |
-| 11 |      0.486 |         0.018 |        0.7079 |      19 |       2 |         18.2682 |     0.470743 |      0.6315 |
-| 12 |      0.484 |         0.018 |        0.7107 |      20 |       2 |         18.3157 |     0.507592 |      0.6268 |
-| 13 |      0.492 |         0.018 |        0.7115 |      21 |       2 |         18.4808 |     0.431141 |      0.6293 |
-| 14 |      0.484 |         0.018 |        0.7142 |      22 |       2 |         18.2401 |     0.411453 |      0.6298 |
-| 15 |      0.486 |         0.018 |        0.7046 |      23 |       2 |         18.3428 |     0.504539 |      0.6339 |
-| 16 |      0.492 |         0.018 |        0.5844 |      24 |       3 |         20.962  |     0.445394 |      0.7045 |
-| 17 |      0.496 |         0.018 |        0.5847 |      25 |       3 |         20.5289 |     0.487632 |      0.7121 |
-| 18 |      0.5   |         0.018 |        0.5905 |      26 |       3 |         20.5692 |     0.497739 |      0.7127 |
-| 19 |      0.502 |         0.018 |        0.5861 |      27 |       3 |         20.4389 |     0.549286 |      0.7074 |
-| 20 |      0.502 |         0.018 |        0.5908 |      28 |       3 |         20.3751 |     0.458084 |      0.7296 |
-| 21 |      0.502 |         0.018 |        0.5873 |      29 |       3 |         20.5997 |     0.623392 |      0.7353 |
-| 22 |      0.502 |         0.018 |        0.5839 |      30 |       3 |         20.6925 |     0.545111 |      0.7474 |
-| 23 |      0.5   |         0.018 |        0.5799 |      31 |       3 |         20.5603 |     0.535096 |      0.7552 |
-| 24 |      0.496 |         0.018 |        0.5852 |      32 |       3 |         21.0831 |     0.45221  |      0.7714 |
-| 25 |      0.496 |         0.018 |        0.5836 |      33 |       3 |         21.5744 |     0.540627 |      0.7576 |
-| 26 |      0.494 |         0.018 |        0.5829 |      34 |       3 |         21.3658 |     0.581768 |      0.7979 |
-| 27 |      0.506 |         0.018 |        0.5863 |      35 |       3 |         21.5139 |     0.6375   |      0.8009 |
-| 28 |      0.496 |         0.018 |        0.58   |      36 |       3 |         21.5572 |     0.475648 |      0.7865 |
-| 29 |      0.496 |         0.018 |        0.579  |      37 |       3 |         21.7109 |     0.527833 |      0.8089 |
-| 30 |      0.498 |         0.018 |        0.5907 |      38 |       3 |         21.7482 |     0.581697 |      0.7583 |
-| 31 |      0.5   |         0.018 |        0.5853 |      39 |       3 |         21.5036 |     0.644376 |      0.7743 |
-| 32 |      0.49  |         0.018 |        0.5833 |      40 |       3 |         21.5312 |     0.539744 |      0.7824 |
-| 33 |      0.498 |         0.018 |        0.583  |      41 |       3 |         21.5114 |     0.592342 |      0.7168 |
-| 34 |      0.496 |         0.018 |        0.5925 |      42 |       3 |         21.4841 |     0.543578 |      0.7813 |
-| 35 |      0.496 |         0.018 |        0.5856 |      43 |       3 |         21.531  |     0.604821 |      0.7597 |
-| 36 |      0.498 |         0.018 |        0.5825 |      44 |       3 |         21.5864 |     0.612349 |      0.7686 |
-| 37 |      0.5   |         0.018 |        0.5826 |      45 |       3 |         21.1743 |     0.544882 |      0.7106 |
-| 38 |      0.496 |         0.018 |        0.5931 |      46 |       3 |         21.5019 |     0.617497 |      0.6941 |
-| 39 |      0.504 |         0.018 |        0.599  |      47 |       3 |         21.1994 |     0.611732 |      0.7067 |
-| 40 |      0.498 |         0.018 |        0.5882 |      48 |       3 |         21.4256 |     0.530537 |      0.7298 |
-| 41 |      0.5   |         0.018 |        0.5853 |      49 |       3 |         22.1675 |     0.510084 |      0.7242 |
+|      | eval/acc | eval/cot_em | eval/ratios | epoch | stage | train/minutes | train/loss | eval/loss |
+| ---: | -------: | ----------: | ----------: | ----: | ----: | ------------: | ---------: | --------: |
+|    0 |    0.486 |       0.016 |      0.9312 |     8 |     1 |       21.5086 |   0.561535 |    0.6984 |
+|    1 |    0.492 |       0.016 |      0.9315 |     9 |     1 |       22.7353 |    0.44593 |    0.5652 |
+|    2 |    0.492 |       0.016 |      0.9317 |    10 |     1 |       22.6433 |   0.392704 |    0.5235 |
+|    3 |    0.488 |       0.016 |      0.9322 |    11 |     1 |        21.784 |   0.326752 |    0.5187 |
+|    4 |    0.484 |       0.016 |      0.9312 |    12 |     1 |       21.7898 |    0.32877 |    0.5095 |
+|    5 |    0.492 |       0.016 |      0.9334 |    13 |     1 |       21.8261 |   0.437547 |    0.5079 |
+|    6 |     0.48 |       0.016 |      0.9312 |    14 |     1 |        21.833 |   0.366916 |    0.5013 |
+|    7 |    0.494 |       0.016 |      0.9305 |    15 |     1 |       22.3296 |   0.344434 |    0.5006 |
+|    8 |    0.484 |       0.018 |      0.6817 |    16 |     2 |       22.2727 |   0.514602 |    0.6541 |
+|    9 |     0.48 |       0.018 |      0.6934 |    17 |     2 |       22.1381 |   0.479511 |    0.6479 |
+|   10 |    0.482 |       0.018 |      0.7048 |    18 |     2 |       18.5789 |   0.534687 |    0.6368 |
+|   11 |    0.486 |       0.018 |      0.7079 |    19 |     2 |       18.2682 |   0.470743 |    0.6315 |
+|   12 |    0.484 |       0.018 |      0.7107 |    20 |     2 |       18.3157 |   0.507592 |    0.6268 |
+|   13 |    0.492 |       0.018 |      0.7115 |    21 |     2 |       18.4808 |   0.431141 |    0.6293 |
+|   14 |    0.484 |       0.018 |      0.7142 |    22 |     2 |       18.2401 |   0.411453 |    0.6298 |
+|   15 |    0.486 |       0.018 |      0.7046 |    23 |     2 |       18.3428 |   0.504539 |    0.6339 |
+|   16 |    0.492 |       0.018 |      0.5844 |    24 |     3 |        20.962 |   0.445394 |    0.7045 |
+|   17 |    0.496 |       0.018 |      0.5847 |    25 |     3 |       20.5289 |   0.487632 |    0.7121 |
+|   18 |      0.5 |       0.018 |      0.5905 |    26 |     3 |       20.5692 |   0.497739 |    0.7127 |
+|   19 |    0.502 |       0.018 |      0.5861 |    27 |     3 |       20.4389 |   0.549286 |    0.7074 |
+|   20 |    0.502 |       0.018 |      0.5908 |    28 |     3 |       20.3751 |   0.458084 |    0.7296 |
+|   21 |    0.502 |       0.018 |      0.5873 |    29 |     3 |       20.5997 |   0.623392 |    0.7353 |
+|   22 |    0.502 |       0.018 |      0.5839 |    30 |     3 |       20.6925 |   0.545111 |    0.7474 |
+|   23 |      0.5 |       0.018 |      0.5799 |    31 |     3 |       20.5603 |   0.535096 |    0.7552 |
+|   24 |    0.496 |       0.018 |      0.5852 |    32 |     3 |       21.0831 |    0.45221 |    0.7714 |
+|   25 |    0.496 |       0.018 |      0.5836 |    33 |     3 |       21.5744 |   0.540627 |    0.7576 |
+|   26 |    0.494 |       0.018 |      0.5829 |    34 |     3 |       21.3658 |   0.581768 |    0.7979 |
+|   27 |    0.506 |       0.018 |      0.5863 |    35 |     3 |       21.5139 |     0.6375 |    0.8009 |
+|   28 |    0.496 |       0.018 |        0.58 |    36 |     3 |       21.5572 |   0.475648 |    0.7865 |
+|   29 |    0.496 |       0.018 |       0.579 |    37 |     3 |       21.7109 |   0.527833 |    0.8089 |
+|   30 |    0.498 |       0.018 |      0.5907 |    38 |     3 |       21.7482 |   0.581697 |    0.7583 |
+|   31 |      0.5 |       0.018 |      0.5853 |    39 |     3 |       21.5036 |   0.644376 |    0.7743 |
+|   32 |     0.49 |       0.018 |      0.5833 |    40 |     3 |       21.5312 |   0.539744 |    0.7824 |
+|   33 |    0.498 |       0.018 |       0.583 |    41 |     3 |       21.5114 |   0.592342 |    0.7168 |
+|   34 |    0.496 |       0.018 |      0.5925 |    42 |     3 |       21.4841 |   0.543578 |    0.7813 |
+|   35 |    0.496 |       0.018 |      0.5856 |    43 |     3 |        21.531 |   0.604821 |    0.7597 |
+|   36 |    0.498 |       0.018 |      0.5825 |    44 |     3 |       21.5864 |   0.612349 |    0.7686 |
+|   37 |      0.5 |       0.018 |      0.5826 |    45 |     3 |       21.1743 |   0.544882 |    0.7106 |
+|   38 |    0.496 |       0.018 |      0.5931 |    46 |     3 |       21.5019 |   0.617497 |    0.6941 |
+|   39 |    0.504 |       0.018 |       0.599 |    47 |     3 |       21.1994 |   0.611732 |    0.7067 |
+|   40 |    0.498 |       0.018 |      0.5882 |    48 |     3 |       21.4256 |   0.530537 |    0.7298 |
+|   41 |      0.5 |       0.018 |      0.5853 |    49 |     3 |       22.1675 |   0.510084 |    0.7242 |
  14h 44m 17s
 wandb: 
 wandb: 🚀 View run trm-qwen3-0.6b_20251017-154402 at: 
@@ -1183,12 +1183,12 @@ So I fixed generate so that eval now uses TRM, and I got an initial drop, but th
 
 ## Results: trm-qwen3-0.6b_20251018-141208
 {'project': 'coconut', 'save_path': 'outputs/', 'name': 'trm-qwen3-0.6b', 'model_id': 'outputs/qwen3-0.6b_20250514-194730/checkpoint_2', 'only_eval': False, 'load_model_path': '', 'resume_epochs': 8, 'replacement_method': 'supressed[0.75:]', 'use_position_ids': True, 'bf16': True, 'bf16_weight': False, 'opt_8b': False, 'cot_epochs': 0, 'epochs_per_stage': 8, 'max_latent_stage': 3, 'num_epochs': 12, 'batch_size_training': 16, 'gradient_accumulation_steps': 8, 'lr': 0.0001, 'weight_decay': 0.1, 'grad_clip': 10.0, 'scheduler': 'linear', 'debug': False, 'seed': 42, 'reset_optimizer': False, 'loss_seq_vcr': False, 'n_detached_recursions': 2, 'use_trm': True, 'load_in_4bit': True, 'load_in_8bit': False, 'trm_n_sup': 4, 'trm_num_layers': 2, 'trm_num_heads': 8, 'trm_expansion': 2.67, 'max_size': 20000, 'c_thought': 2, 'pad_latent_to_max': True, 'uniform_prob': 0.0, 'train_path': 'data/gsm_train.json', 'val_path': 'data/gsm_valid.json', 'system_prompt': '', 'latent_token_id': None, 'eval_first_epoch': False, 'n_gradient_recursions': 2}
-|    |   eval/acc |   eval/cot_em |   eval/ratios |   epoch |   stage |   train/minutes |   train/loss |   eval/loss |
-|---:|-----------:|--------------:|--------------:|--------:|--------:|----------------:|-------------:|------------:|
-|  0 |      0.304 |         0.022 |        0.9298 |       8 |       1 |         20.7967 |     0.479528 |      0.5213 |
-|  1 |      0.328 |         0.014 |        0.9301 |       9 |       1 |         20.3774 |     0.361955 |      0.4921 |
-|  2 |      0.326 |         0.014 |        0.932  |      10 |       1 |         21.0332 |     0.295458 |      0.4851 |
-|  3 |      0.288 |         0.012 |        0.9358 |      11 |       1 |         21.0486 |     0.258795 |      0.4792 |
+|      | eval/acc | eval/cot_em | eval/ratios | epoch | stage | train/minutes | train/loss | eval/loss |
+| ---: | -------: | ----------: | ----------: | ----: | ----: | ------------: | ---------: | --------: |
+|    0 |    0.304 |       0.022 |      0.9298 |     8 |     1 |       20.7967 |   0.479528 |    0.5213 |
+|    1 |    0.328 |       0.014 |      0.9301 |     9 |     1 |       20.3774 |   0.361955 |    0.4921 |
+|    2 |    0.326 |       0.014 |       0.932 |    10 |     1 |       21.0332 |   0.295458 |    0.4851 |
+|    3 |    0.288 |       0.012 |      0.9358 |    11 |     1 |       21.0486 |   0.258795 |    0.4792 |
 
 
 - [x] use 1 latent per stage: c_thought->1
@@ -1250,16 +1250,16 @@ Do you think so, or is input_embedding just as rich. I mean it goes directly int
 
 # Results: trm-qwen3-0.6b_20251018-155617
 {'project': 'coconut', 'save_path': 'outputs/', 'name': 'trm-qwen3-0.6b', 'model_id': 'outputs/qwen3-0.6b_20250514-194730/checkpoint_2', 'only_eval': False, 'load_model_path': '', 'resume_epochs': 8, 'replacement_method': 'supressed[0.75:]', 'use_position_ids': True, 'bf16': True, 'bf16_weight': False, 'opt_8b': False, 'cot_epochs': 0, 'epochs_per_stage': 8, 'max_latent_stage': 3, 'num_epochs': 16, 'batch_size_training': 16, 'gradient_accumulation_steps': 8, 'lr': 0.0001, 'weight_decay': 0.1, 'grad_clip': 10.0, 'scheduler': 'linear', 'debug': False, 'seed': 42, 'reset_optimizer': False, 'loss_seq_vcr': False, 'n_detached_recursions': 2, 'use_trm': True, 'load_in_4bit': True, 'load_in_8bit': False, 'trm_n_sup': 4, 'trm_num_layers': 2, 'trm_num_heads': 8, 'trm_expansion': 2.67, 'max_size': 20000, 'c_thought': 1, 'pad_latent_to_max': True, 'uniform_prob': 0.0, 'train_path': 'data/gsm_train.json', 'val_path': 'data/gsm_valid.json', 'system_prompt': '', 'latent_token_id': None, 'eval_first_epoch': False, 'n_gradient_recursions': 2}
-|    |   eval/acc |   eval/cot_em |   eval/ratios |   epoch |   stage |   train/minutes |   train/loss |   eval/loss |
-|---:|-----------:|--------------:|--------------:|--------:|--------:|----------------:|-------------:|------------:|
-|  0 |      0.318 |         0.014 |        0.9313 |       8 |       1 |         13.5332 |     0.532149 |      0.5204 |
-|  1 |      0.272 |         0.012 |        0.9305 |       9 |       1 |         13.6789 |     0.353447 |      0.4924 |
-|  2 |      0.252 |         0.01  |        0.9281 |      10 |       1 |         14.4978 |     0.296711 |      0.4819 |
-|  3 |      0.254 |         0.01  |        0.9247 |      11 |       1 |         14.8083 |     0.272362 |      0.4771 |
-|  4 |      0.25  |         0.01  |        0.928  |      12 |       1 |         14.531  |     0.292608 |      0.4744 |
-|  5 |      0.218 |         0.008 |        0.9256 |      13 |       1 |         14.801  |     0.371305 |      0.4723 |
-|  6 |      0.226 |         0.01  |        0.9247 |      14 |       1 |         14.551  |     0.324713 |      0.4692 |
-|  7 |      0.202 |         0.012 |        0.9293 |      15 |       1 |         13.2352 |     0.308156 |      0.468  |
+|      | eval/acc | eval/cot_em | eval/ratios | epoch | stage | train/minutes | train/loss | eval/loss |
+| ---: | -------: | ----------: | ----------: | ----: | ----: | ------------: | ---------: | --------: |
+|    0 |    0.318 |       0.014 |      0.9313 |     8 |     1 |       13.5332 |   0.532149 |    0.5204 |
+|    1 |    0.272 |       0.012 |      0.9305 |     9 |     1 |       13.6789 |   0.353447 |    0.4924 |
+|    2 |    0.252 |        0.01 |      0.9281 |    10 |     1 |       14.4978 |   0.296711 |    0.4819 |
+|    3 |    0.254 |        0.01 |      0.9247 |    11 |     1 |       14.8083 |   0.272362 |    0.4771 |
+|    4 |     0.25 |        0.01 |       0.928 |    12 |     1 |        14.531 |   0.292608 |    0.4744 |
+|    5 |    0.218 |       0.008 |      0.9256 |    13 |     1 |        14.801 |   0.371305 |    0.4723 |
+|    6 |    0.226 |        0.01 |      0.9247 |    14 |     1 |        14.551 |   0.324713 |    0.4692 |
+|    7 |    0.202 |       0.012 |      0.9293 |    15 |     1 |       13.2352 |   0.308156 |     0.468 |
 
 Well that seems disapointing, the loss went down, it did not overfit, but the acc went down.
 
@@ -1271,16 +1271,16 @@ big loss of 7 to start with
 
 # Results: trm-qwen3-0.6b_20251018-201519
 {'project': 'coconut', 'save_path': 'outputs/', 'name': 'trm-qwen3-0.6b', 'model_id': 'outputs/qwen3-0.6b_20250514-194730/checkpoint_2', 'only_eval': False, 'load_model_path': '', 'resume_epochs': 8, 'replacement_method': 'supressed[0.75:]', 'use_position_ids': True, 'bf16': True, 'bf16_weight': False, 'opt_8b': False, 'cot_epochs': 0, 'epochs_per_stage': 8, 'max_latent_stage': 3, 'num_epochs': 16, 'batch_size_training': 16, 'gradient_accumulation_steps': 8, 'lr': 0.0001, 'weight_decay': 0.1, 'grad_clip': 10.0, 'scheduler': 'linear', 'debug': False, 'seed': 42, 'reset_optimizer': False, 'loss_seq_vcr': False, 'n_detached_recursions': 2, 'use_trm': True, 'load_in_4bit': True, 'load_in_8bit': False, 'trm_n_sup': 4, 'trm_num_layers': 2, 'trm_num_heads': 8, 'trm_expansion': 2.67, 'trm_persistent_steering': True, 'max_size': 20000, 'c_thought': 1, 'pad_latent_to_max': True, 'uniform_prob': 0.0, 'train_path': 'data/gsm_train.json', 'val_path': 'data/gsm_valid.json', 'system_prompt': '', 'latent_token_id': None, 'eval_first_epoch': False, 'n_gradient_recursions': 2}
-|    |   eval/acc |   eval/cot_em |   eval/ratios |   epoch |   stage |   train/minutes |   train/loss |   eval/loss |
-|---:|-----------:|--------------:|--------------:|--------:|--------:|----------------:|-------------:|------------:|
-|  0 |      0.322 |         0.046 |        0.9715 |       8 |       1 |         14.4724 |      5.85434 |      6.1491 |
-|  1 |      0.29  |         0.036 |        0.9655 |       9 |       1 |         14.4789 |      5.55748 |      5.9305 |
-|  2 |      0.27  |         0.038 |        0.9726 |      10 |       1 |         14.5137 |      5.37045 |      5.7498 |
-|  3 |      0.258 |         0.03  |        0.9827 |      11 |       1 |         14.5729 |      5.19475 |      5.5971 |
-|  4 |      0.258 |         0.034 |        0.9927 |      12 |       1 |         14.5285 |      5.16986 |      5.4678 |
-|  5 |      0.242 |         0.026 |        0.9813 |      13 |       1 |         14.5436 |      5.21671 |      5.3621 |
-|  6 |      0.236 |         0.026 |        0.9954 |      14 |       1 |         14.612  |      4.68249 |      5.2943 |
-|  7 |      0.252 |         0.026 |        1.0032 |      15 |       1 |         14.5252 |      4.74156 |      5.2109 |
+|      | eval/acc | eval/cot_em | eval/ratios | epoch | stage | train/minutes | train/loss | eval/loss |
+| ---: | -------: | ----------: | ----------: | ----: | ----: | ------------: | ---------: | --------: |
+|    0 |    0.322 |       0.046 |      0.9715 |     8 |     1 |       14.4724 |    5.85434 |    6.1491 |
+|    1 |     0.29 |       0.036 |      0.9655 |     9 |     1 |       14.4789 |    5.55748 |    5.9305 |
+|    2 |     0.27 |       0.038 |      0.9726 |    10 |     1 |       14.5137 |    5.37045 |    5.7498 |
+|    3 |    0.258 |        0.03 |      0.9827 |    11 |     1 |       14.5729 |    5.19475 |    5.5971 |
+|    4 |    0.258 |       0.034 |      0.9927 |    12 |     1 |       14.5285 |    5.16986 |    5.4678 |
+|    5 |    0.242 |       0.026 |      0.9813 |    13 |     1 |       14.5436 |    5.21671 |    5.3621 |
+|    6 |    0.236 |       0.026 |      0.9954 |    14 |     1 |        14.612 |    4.68249 |    5.2943 |
+|    7 |    0.252 |       0.026 |      1.0032 |    15 |     1 |       14.5252 |    4.74156 |    5.2109 |
 
 
 wih trm_persistent_steering, loss starts at 6
@@ -1327,16 +1327,16 @@ Trying longer run with lower lr
 
 # Results: trm-qwen3-0.6b_20251019-070624
 {'project': 'coconut', 'save_path': 'outputs/', 'name': 'trm-qwen3-0.6b', 'model_id': 'outputs/qwen3-0.6b_20250514-194730/checkpoint_2', 'only_eval': False, 'load_model_path': '', 'resume_epochs': 8, 'replacement_method': 'supressed[0.75:]', 'use_position_ids': True, 'bf16': True, 'bf16_weight': False, 'opt_8b': False, 'cot_epochs': 0, 'epochs_per_stage': 8, 'max_latent_stage': 3, 'num_epochs': 16, 'batch_size_training': 16, 'gradient_accumulation_steps': 8, 'lr': 0.0001, 'weight_decay': 0.1, 'grad_clip': 10.0, 'scheduler': 'linear', 'debug': False, 'seed': 42, 'reset_optimizer': False, 'loss_seq_vcr': False, 'n_detached_recursions': 2, 'use_trm': True, 'load_in_4bit': True, 'load_in_8bit': False, 'trm_n_sup': 4, 'trm_num_layers': 2, 'trm_num_heads': 8, 'trm_expansion': 2.67, 'trm_persistent_steering': False, 'max_size': 20000, 'c_thought': 1, 'pad_latent_to_max': True, 'uniform_prob': 0.0, 'train_path': 'data/gsm_train.json', 'val_path': 'data/gsm_valid.json', 'system_prompt': '', 'latent_token_id': None, 'eval_first_epoch': False, 'n_gradient_recursions': 2}
-|    |   eval/acc |   eval/cot_em |   eval/ratios |   epoch |   stage |   train/minutes |   train/loss |   eval/loss |
-|---:|-----------:|--------------:|--------------:|--------:|--------:|----------------:|-------------:|------------:|
-|  0 |      0.248 |         0.012 |        0.9249 |       8 |       1 |         13.2342 |     0.471396 |      0.4976 |
-|  1 |      0.194 |         0.012 |        0.9226 |       9 |       1 |         13.2039 |     0.331766 |      0.481  |
-|  2 |      0.242 |         0.01  |        0.924  |      10 |       1 |         13.18   |     0.314844 |      0.4776 |
-|  3 |      0.228 |         0.014 |        0.9251 |      11 |       1 |         13.0798 |     0.413031 |      0.4737 |
-|  4 |      0.256 |         0.012 |        0.924  |      12 |       1 |         13.0448 |     0.287812 |      0.4749 |
-|  5 |      0.212 |         0.01  |        0.9254 |      13 |       1 |         13.0954 |     0.295502 |      0.4734 |
-|  6 |      0.214 |         0.012 |        0.9234 |      14 |       1 |         12.9535 |     0.295184 |      0.4739 |
-|  7 |      0.206 |         0.01  |        0.9283 |      15 |       1 |         12.9635 |     0.36557  |      0.473  |
+|      | eval/acc | eval/cot_em | eval/ratios | epoch | stage | train/minutes | train/loss | eval/loss |
+| ---: | -------: | ----------: | ----------: | ----: | ----: | ------------: | ---------: | --------: |
+|    0 |    0.248 |       0.012 |      0.9249 |     8 |     1 |       13.2342 |   0.471396 |    0.4976 |
+|    1 |    0.194 |       0.012 |      0.9226 |     9 |     1 |       13.2039 |   0.331766 |     0.481 |
+|    2 |    0.242 |        0.01 |       0.924 |    10 |     1 |         13.18 |   0.314844 |    0.4776 |
+|    3 |    0.228 |       0.014 |      0.9251 |    11 |     1 |       13.0798 |   0.413031 |    0.4737 |
+|    4 |    0.256 |       0.012 |       0.924 |    12 |     1 |       13.0448 |   0.287812 |    0.4749 |
+|    5 |    0.212 |        0.01 |      0.9254 |    13 |     1 |       13.0954 |   0.295502 |    0.4734 |
+|    6 |    0.214 |       0.012 |      0.9234 |    14 |     1 |       12.9535 |   0.295184 |    0.4739 |
+|    7 |    0.206 |        0.01 |      0.9283 |    15 |     1 |       12.9635 |    0.36557 |     0.473 |
 
 # 2025-10-19 10:59:15 original papert configs
 
@@ -1379,16 +1379,16 @@ loss=0.43
 
 # Results: trm-qwen3-0.6b_20251019-154941
 {'project': 'coconut', 'save_path': 'outputs/', 'name': 'trm-qwen3-0.6b', 'model_id': 'outputs/qwen3-0.6b_20250514-194730/checkpoint_2', 'only_eval': False, 'load_model_path': '', 'resume_epochs': 8, 'replacement_method': 'supressed[0.75:]', 'use_position_ids': True, 'bf16': True, 'bf16_weight': False, 'opt_8b': False, 'cot_epochs': 0, 'epochs_per_stage': 8, 'max_latent_stage': 3, 'num_epochs': 16, 'batch_size_training': 16, 'gradient_accumulation_steps': 8, 'lr': 5e-05, 'weight_decay': 0.1, 'grad_clip': 10.0, 'scheduler': 'linear', 'debug': False, 'seed': 42, 'reset_optimizer': False, 'loss_seq_vcr': False, 'n_detached_recursions': 2, 'use_trm': True, 'load_in_4bit': True, 'load_in_8bit': False, 'max_size': 20000, 'c_thought': 1, 'pad_latent_to_max': True, 'uniform_prob': 0.0, 'train_path': 'data/gsm_train.json', 'val_path': 'data/gsm_valid.json', 'system_prompt': '', 'latent_token_id': None, 'eval_first_epoch': False, 'trm_n_sup': 16, 'trm_h_cycles': 3, 'trm_l_cycles': 6, 'trm_l_layers': 2, 'trm_hidden_size': None, 'trm_num_heads': 8, 'trm_expansion': 2.67, 'trm_transcoder_layers': 1, 'trm_persistent_steering': False}
-|    |   eval/acc |   eval/cot_em |   eval/ratios |   epoch |   stage |   train/minutes |   train/loss |   eval/loss |
-|---:|-----------:|--------------:|--------------:|--------:|--------:|----------------:|-------------:|------------:|
-|  0 |      0.37  |         0.016 |        0.9266 |       8 |       1 |         21.4294 |     0.421252 |      0.549  |
-|  1 |      0.328 |         0.014 |        0.9298 |       9 |       1 |         20.8754 |     0.459505 |      0.5293 |
-|  2 |      0.312 |         0.014 |        0.9311 |      10 |       1 |         20.8222 |     0.349655 |      0.5216 |
-|  3 |      0.306 |         0.012 |        0.9315 |      11 |       1 |         21.0609 |     0.366589 |      0.518  |
-|  4 |      0.296 |         0.012 |        0.9316 |      12 |       1 |         21.3691 |     0.426163 |      0.5139 |
-|  5 |      0.268 |         0.012 |        0.9317 |      13 |       1 |         21.0347 |     0.403238 |      0.5109 |
-|  6 |      0.27  |         0.012 |        0.9315 |      14 |       1 |         20.9655 |     0.45056  |      0.5067 |
-|  7 |      0.268 |         0.014 |        0.9309 |      15 |       1 |         21.0347 |     0.387177 |      0.5044 |
+|      | eval/acc | eval/cot_em | eval/ratios | epoch | stage | train/minutes | train/loss | eval/loss |
+| ---: | -------: | ----------: | ----------: | ----: | ----: | ------------: | ---------: | --------: |
+|    0 |     0.37 |       0.016 |      0.9266 |     8 |     1 |       21.4294 |   0.421252 |     0.549 |
+|    1 |    0.328 |       0.014 |      0.9298 |     9 |     1 |       20.8754 |   0.459505 |    0.5293 |
+|    2 |    0.312 |       0.014 |      0.9311 |    10 |     1 |       20.8222 |   0.349655 |    0.5216 |
+|    3 |    0.306 |       0.012 |      0.9315 |    11 |     1 |       21.0609 |   0.366589 |     0.518 |
+|    4 |    0.296 |       0.012 |      0.9316 |    12 |     1 |       21.3691 |   0.426163 |    0.5139 |
+|    5 |    0.268 |       0.012 |      0.9317 |    13 |     1 |       21.0347 |   0.403238 |    0.5109 |
+|    6 |     0.27 |       0.012 |      0.9315 |    14 |     1 |       20.9655 |    0.45056 |    0.5067 |
+|    7 |    0.268 |       0.014 |      0.9309 |    15 |     1 |       21.0347 |   0.387177 |    0.5044 |
 wandb: 
 
 
@@ -1396,30 +1396,30 @@ wandb:
 
 # Results: trm-qwen3-0.6b_20251019-204459
 {'project': 'coconut', 'save_path': 'outputs/', 'name': 'trm-qwen3-0.6b', 'model_id': 'outputs/qwen3-0.6b_20250514-194730/checkpoint_2', 'only_eval': False, 'load_model_path': '', 'resume_epochs': 8, 'replacement_method': 'supressed[0.75:]', 'use_position_ids': True, 'bf16': True, 'bf16_weight': False, 'opt_8b': False, 'cot_epochs': 0, 'epochs_per_stage': 8, 'max_latent_stage': 3, 'num_epochs': 30, 'batch_size_training': 16, 'gradient_accumulation_steps': 8, 'lr': 5e-05, 'weight_decay': 0.1, 'grad_clip': 10.0, 'scheduler': 'linear', 'debug': False, 'seed': 42, 'reset_optimizer': False, 'loss_seq_vcr': False, 'n_detached_recursions': 2, 'use_trm': True, 'load_in_4bit': True, 'load_in_8bit': False, 'max_size': 20000, 'c_thought': 1, 'pad_latent_to_max': True, 'uniform_prob': 0.0, 'train_path': 'data/gsm_train.json', 'val_path': 'data/gsm_valid.json', 'system_prompt': '', 'latent_token_id': None, 'eval_first_epoch': False, 'trm_n_sup': 16, 'trm_h_cycles': 3, 'trm_l_cycles': 6, 'trm_l_layers': 2, 'trm_hidden_size': None, 'trm_num_heads': 8, 'trm_expansion': 2.67, 'trm_transcoder_layers': 1, 'trm_persistent_steering': True}
-|    |   eval/acc |   eval/cot_em |   eval/ratios |   epoch |   stage |   train/minutes |   train/loss |   eval/loss |
-|---:|-----------:|--------------:|--------------:|--------:|--------:|----------------:|-------------:|------------:|
-|  0 |      0.434 |         0.028 |        0.9543 |       8 |       1 |         13.6735 |     0.693636 |      0.8054 |
-|  1 |      0.462 |         0.03  |        0.9468 |       9 |       1 |         13.8391 |     0.688966 |      0.7145 |
-|  2 |      0.45  |         0.03  |        0.9433 |      10 |       1 |         13.8354 |     0.547561 |      0.6614 |
-|  3 |      0.442 |         0.018 |        0.9422 |      11 |       1 |         13.9457 |     0.557111 |      0.6342 |
-|  4 |      0.44  |         0.018 |        0.943  |      12 |       1 |         13.687  |     0.572101 |      0.6175 |
-|  5 |      0.426 |         0.016 |        0.9444 |      13 |       1 |         13.7035 |     0.60038  |      0.6071 |
-|  6 |      0.432 |         0.018 |        0.9439 |      14 |       1 |         13.702  |     0.536857 |      0.6008 |
-|  7 |      0.43  |         0.016 |        0.9434 |      15 |       1 |         13.6208 |     0.575433 |      0.5953 |
-|  8 |      0.38  |         0.024 |        0.6976 |      16 |       2 |         20.1121 |     0.635938 |      0.7869 |
-|  9 |      0.348 |         0.02  |        0.6987 |      17 |       2 |         20.1906 |     0.838113 |      0.7786 |
-| 10 |      0.33  |         0.022 |        0.7001 |      18 |       2 |         20.1416 |     0.700116 |      0.7749 |
-| 11 |      0.324 |         0.022 |        0.7014 |      19 |       2 |         19.9205 |     0.733533 |      0.7708 |
-| 12 |      0.306 |         0.024 |        0.702  |      20 |       2 |         20.2084 |     0.68219  |      0.7683 |
-| 13 |      0.28  |         0.022 |        0.7041 |      21 |       2 |         20.1077 |     0.633149 |      0.7647 |
-| 14 |      0.27  |         0.026 |        0.7052 |      22 |       2 |         19.8475 |     0.630443 |      0.7625 |
-| 15 |      0.25  |         0.02  |        0.7071 |      23 |       2 |         20.0469 |     0.663379 |      0.76   |
-| 16 |      0.074 |         0.018 |        0.5485 |      24 |       3 |         16.7198 |     0.774709 |      0.8572 |
-| 17 |      0.046 |         0.014 |        0.5498 |      25 |       3 |         16.6994 |     0.865078 |      0.8458 |
-| 18 |      0.038 |         0.014 |        0.5532 |      26 |       3 |         16.7742 |     0.838326 |      0.8389 |
-| 19 |      0.026 |         0.014 |        0.5543 |      27 |       3 |         16.6039 |     0.789819 |      0.8333 |
-| 20 |      0.026 |         0.014 |        0.5558 |      28 |       3 |         16.7808 |     0.769315 |      0.8266 |
-| 21 |      0.022 |         0.014 |        0.5584 |      29 |       3 |         16.6993 |     0.669265 |      0.8245 |l
+|      | eval/acc | eval/cot_em | eval/ratios | epoch | stage | train/minutes | train/loss | eval/loss |
+| ---: | -------: | ----------: | ----------: | ----: | ----: | ------------: | ---------: | --------: |
+|    0 |    0.434 |       0.028 |      0.9543 |     8 |     1 |       13.6735 |   0.693636 |    0.8054 |
+|    1 |    0.462 |        0.03 |      0.9468 |     9 |     1 |       13.8391 |   0.688966 |    0.7145 |
+|    2 |     0.45 |        0.03 |      0.9433 |    10 |     1 |       13.8354 |   0.547561 |    0.6614 |
+|    3 |    0.442 |       0.018 |      0.9422 |    11 |     1 |       13.9457 |   0.557111 |    0.6342 |
+|    4 |     0.44 |       0.018 |       0.943 |    12 |     1 |        13.687 |   0.572101 |    0.6175 |
+|    5 |    0.426 |       0.016 |      0.9444 |    13 |     1 |       13.7035 |    0.60038 |    0.6071 |
+|    6 |    0.432 |       0.018 |      0.9439 |    14 |     1 |        13.702 |   0.536857 |    0.6008 |
+|    7 |     0.43 |       0.016 |      0.9434 |    15 |     1 |       13.6208 |   0.575433 |    0.5953 |
+|    8 |     0.38 |       0.024 |      0.6976 |    16 |     2 |       20.1121 |   0.635938 |    0.7869 |
+|    9 |    0.348 |        0.02 |      0.6987 |    17 |     2 |       20.1906 |   0.838113 |    0.7786 |
+|   10 |     0.33 |       0.022 |      0.7001 |    18 |     2 |       20.1416 |   0.700116 |    0.7749 |
+|   11 |    0.324 |       0.022 |      0.7014 |    19 |     2 |       19.9205 |   0.733533 |    0.7708 |
+|   12 |    0.306 |       0.024 |       0.702 |    20 |     2 |       20.2084 |    0.68219 |    0.7683 |
+|   13 |     0.28 |       0.022 |      0.7041 |    21 |     2 |       20.1077 |   0.633149 |    0.7647 |
+|   14 |     0.27 |       0.026 |      0.7052 |    22 |     2 |       19.8475 |   0.630443 |    0.7625 |
+|   15 |     0.25 |        0.02 |      0.7071 |    23 |     2 |       20.0469 |   0.663379 |      0.76 |
+|   16 |    0.074 |       0.018 |      0.5485 |    24 |     3 |       16.7198 |   0.774709 |    0.8572 |
+|   17 |    0.046 |       0.014 |      0.5498 |    25 |     3 |       16.6994 |   0.865078 |    0.8458 |
+|   18 |    0.038 |       0.014 |      0.5532 |    26 |     3 |       16.7742 |   0.838326 |    0.8389 |
+|   19 |    0.026 |       0.014 |      0.5543 |    27 |     3 |       16.6039 |   0.789819 |    0.8333 |
+|   20 |    0.026 |       0.014 |      0.5558 |    28 |     3 |       16.7808 |   0.769315 |    0.8266 |
+|   21 |    0.022 |       0.014 |      0.5584 |    29 |     3 |       16.6993 |   0.669265 |    0.8245 | l |
 
 
 6 hour run
@@ -1452,3 +1452,104 @@ exp
 - without svd init
 - without persistent steering
   - monitor diff_content_ratio it shoudl get bigger, and not go to zero
+
+
+# 2025-10-21 03:58:52
+
+I'm going to create a tiny todo list (marking the table generation as in-progress), then output the requested Markdown table here. After that I'll mark the todo as completed. 
+
+Created 1 todo
+
+## Experiment summary (markdown table)
+
+| Eval                     | Accuracy (val)   | CoT match     | Eval perplexity | Eval loss (approx) | Ratio nll_ans/nll_corrupted_ans | Stage |
+| ----                     | -------------:   | --------:     | --------------: | -----------------: | ------------------------------: | ----: |
+| eval_8                   | 20.40% (102/500) | 2.00% (10/500)|          1.9209 |             0.6528 |                          0.9402 |     1 |
+| eval_9                   | 23.80% (119/500) | 1.20% (6/500) |          1.8317 |             0.6053 |                          0.9431 |     1 |
+| eval_10                  | 22.20% (111/500) | 1.40% (7/500) |          1.7980 |             0.5867 |                          0.9409 |     1 |
+| eval_11                  | 22.80% (114/500) | 1.20% (6/500) |          1.7798 |             0.5765 |                          0.9376 |     1 |
+| eval_12                  | 23.80% (119/500) | 1.40% (7/500) |          1.7686 |             0.5702 |                          0.9380 |     1 |
+| eval_13                  | 21.80% (109/500) | 1.40% (7/500) |          1.7595 |             0.5650 |                          0.9364 |     1 |
+| eval_14                  | 23.00% (115/500) | 1.40% (7/500) |          1.7537 |             0.5617 |                          0.9369 |     1 |
+| eval_15                  | 23.00% (115/500) | 1.40% (7/500) |          1.7484 |             0.5587 |                          0.9359 |     1 |
+| eval_16                  |  16.80% (84/500) | 1.00% (5/500) |          2.0950 |             0.7396 |                          0.7027 |     2 |
+| eval_17                  |  13.00% (65/500) | 1.20% (6/500) |          2.0813 |             0.7330 |                          0.7017 |     2 |
+| eval_18                  |  12.00% (60/500) | 1.40% (7/500) |          2.0664 |             0.7258 |                          0.7014 |     2 |
+| eval_19                  |  10.80% (54/500) | 1.60% (8/500) |          2.0542 |             0.7199 |                          0.7023 |     2 |
+| eval_20                  |   9.00% (45/500) | 1.40% (7/500) |          2.0367 |             0.7113 |                          0.6999 |     2 |
+| eval_21                  |   7.40% (37/500) | 1.40% (7/500) |          2.0196 |             0.7029 |                          0.7039 |     2 |
+| eval_22                  |   7.00% (35/500) | 1.20% (6/500) |          2.0072 |             0.6967 |                          0.7032 |     2 |
+| eval_23                  |   7.60% (38/500) | 1.20% (6/500) |          1.9953 |             0.6908 |                          0.7035 |   2→3 |
+| eval_24                  |   2.80% (14/500) | 1.20% (6/500) |          2.1882 |             0.7831 |                          0.5702 |     3 |
+| eval_25                  |   2.60% (13/500) | 1.20% (6/500) |          2.1730 |             0.7761 |                          0.5798 |     3 |
+| eval_26                  |   2.20% (11/500) | 1.20% (6/500) |          2.1651 |             0.7725 |                          0.5876 |     3 |
+| eval_27                  |   2.60% (13/500) | 1.20% (6/500) |          2.1503 |             0.7656 |                          0.5885 |     3 |
+| eval_28                  |   2.40% (12/500) | 1.20% (6/500) |          2.1442 |             0.7628 |                          0.5906 |     3 |
+| eval_29                  |   2.80% (14/500) | 1.20% (6/500) |          2.1353 |             0.7586 |                          0.5936 |     3 |
+| eval_30                  |   3.00% (15/500) | 1.40% (7/500) |          2.1342 |             0.7581 |                          0.5970 |     3 |
+
+
+
+
+# 2025-10-21 06:01:10
+
+Why does the loss go down but the accuracy gets worse? Why the disconnect. It happens within stages. I've looked for differences in train and eval/generate but they seem fine now.
+
+    Here's how this would work:
+
+    The Task: The TRM's only learning signal comes from the final cross-entropy loss after its generated embedding difference (diff_to_hs) is added and the frozen LLM generates text.
+    The Exploit: The TRM discoversthat it can minimize loss by outputting a diff_to_hs that nudges the final embedding towards a "safe," high-probability region of the LLM's vocabulary space. This could be a vector that corresponds to generating common numbers, short answers, or sequences that are syntactically plausible but numerically wrong. The frozen LLM sees an embedding that "looks good" and confidently outputs a low-loss (but incorrect) token stream.
+    Accuracy vs. Loss Divergence:
+    Loss goes down because the model gets better and better at producing these "safe," plausible-looking embeddings. The LLM's confidence in the generated tokens increases, reducing the negative log-likelihood.
+    Accuracy goes down because this exploit is entirely divorced from the actual mathematical reasoning required by GSM8k. The model isn't solving the problem; it's just learning to produce outputs that feel right to the LLM. persistent_steering would accelerate this process, as the TRM continually refines its state towards this "low-loss" basin of attraction over multiple steps.
+
+    Revised Diagnosis: Latent Space Collapse
+
+    The core problem is that the TRM is not learning to solve the math problems. Instead, under the pressure of a simple cross-entropy loss, it has learned to generate a latent vector (diff_to_hs) that nudges the final embedding into a "safe" region that the frozen LLM decodes with high confidence, regardless of factual accuracy. This explains the paradoxical metrics:
+
+Another idea
+
+    __What I Meant__: Yes, both apply the *last* diff— in train, to the final inputs_embeds before last model.forward (coconut.py line 283); in generate, to each new token's embed (lines 373, 394). The difference is context: Train applies it to the remaining input sequence (including ground-truth answer tokens), optimizing loss with known continuations. Generate applies it to *generated* tokens, so if the last diff accumulates noise (from multiple recursions), it could amplify errors in auto-regressive generation (e.g., steering new tokens off-course, collapsing acc).
+
+Possible I guess.
+
+
+    Consolidated Action Plan
+    Validate Generated Outputs (Immediate)
+
+    Load a checkpoint from early training (before divergence) and a late checkpoint
+    Generate responses for the same set of problems
+    Compare:
+    Coherence of reasoning steps
+    Numerical accuracy
+    Output diversity
+    Look for patterns like repeated numbers, safe answers, or degraded reasoning quality
+    Implement Regularization (Next Step)
+
+    Add your proposed margin loss:
+    # Calculate logprobs for shifted input
+    shift_logprobs = logprobs[..., :-1, :]  # Remove last token
+    shift_targets = input_ids[..., 1:]       # Shifted targets
+
+    # Calculate NLL for shifted sequence
+    nll_shifted = F.cross_entropy(shift_logprobs.view(-1, shift_logprobs.size(-1)), 
+                                shift_targets.view(-1), 
+                                reduction='none')
+
+    # Margin loss
+    margin_loss = torch.mean(F.relu(10 - nll_shifted)**4)
+    total_loss = ce_loss + 0.1 * margin_loss  # Weighted addition
+    This penalizes the model when it becomes too confident in incorrect predictions
+
+and
+
+    If the hypothesis is correct:
+
+    Stronger transcoder: Should allow the TRM to make more meaningful modifications to the embedding space, improving the coupling between latent reasoning and output quality
+    Margin loss: Should prevent the model from becoming overconfident in incorrect outputs, forcing it to maintain plausibility of the full reasoning chain
+
+
+next experiment:
+- cosine scheduler
+- stronger transcoder
+- margin loss, on whole input nll
