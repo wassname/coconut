@@ -111,15 +111,17 @@ class TRMTranscoder(nn.Module):
 
         layers = []
         for i in range(trm_transcoder_layers):
-            layers.append(CastedLinear(in_size if i==0 else hs_exp, hs_exp, bias=False))
-            layers.append(nn.RMSNorm(hs_exp, eps=1e-5))  # Post-norm
-            layers.append(nn.GELU())
+            # TODO or should it be SwiGLU
+            # layers.append(CastedLinear(in_size if i==0 else hs_exp, hs_exp, bias=False))
+            layers.append(SwiGLU(hidden_size=hidden_size, expansion=expansion))
+            # layers.append(nn.RMSNorm(hidden_size, eps=1e-5))  # Post-norm
+            # layers.append(nn.GELU())
         self.mlp = nn.Sequential(*layers)
 
         
         # Final projection to LLM space
-        input_dim = int(hidden_size * expansion) if trm_transcoder_layers > 0 else hidden_size
-        self.final_proj = CastedLinear(input_dim, llm_hidden_size, bias=False)
+        # input_dim = int(hidden_size) if trm_transcoder_layers > 0 else hidden_size
+        self.final_proj = CastedLinear(hidden_size, llm_hidden_size, bias=False)
         nn.init.xavier_uniform_(self.final_proj.weight, gain=0.01)
 
         # Optional SVD-based initialization
@@ -127,9 +129,13 @@ class TRMTranscoder(nn.Module):
         self.init_svd(llm_embed)
     
     def forward(self, zH: z_bh) -> hs_b1h:
-        features = self.mlp(zH)  # [b, h_trm*expansion]
-        output = self.final_proj(features)  # [b, h_llm]
+    
+        for layer in self.mlp:
+            zH = rms_norm(layer(zH), variance_epsilon=1e-5)
         
+        # features = self.mlp(zH)  # [b, h_trm*expansion]
+        output = self.final_proj(zH)  # [b, h_llm]
+
         # Log for debugging transcoder projection
         if self.training:
             wandb.log({

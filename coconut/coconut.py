@@ -77,9 +77,6 @@ class Coconut(nn.Module):
             logger.info("Freezing base LLM parameters")
             for param in self.model.parameters():
                 param.requires_grad = False
-            # # Unfreeze the LM head to allow gradients from the loss
-            # for param in self.model.lm_head.parameters():
-            #     param.requires_grad = True
 
             self.model.enable_input_require_grads()
 
@@ -110,8 +107,6 @@ class Coconut(nn.Module):
 
         max_n_latents = max([len(l) for l in latent_lists])
             
-        # question_mask = # TODO make this as attention mask, and remove latents
-
         def get_nll(logits, labels, attention_mask):
             shift_logits = logits[..., :-1, :].contiguous()
             shift_labels = labels[..., 1:].contiguous()
@@ -124,10 +119,9 @@ class Coconut(nn.Module):
             loss_per_token = loss_fct(
                 shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1)
             ).view(-1, shift_logits.size(1)) # [b, s]
-            # TODO check -100 is ignored
             loss_per_token = loss_per_token * shift_mask.float()
             nll = (loss_per_token * shift_mask).sum() / (shift_mask.sum() + 1e-8)
-            return nll, loss_per_token
+            return nll
 
         all_labels = input_ids.clone()#[..., 1:].contiguous()
         # remove latents from loss computation
@@ -145,8 +139,8 @@ class Coconut(nn.Module):
                     position_ids=position_ids,
                     output_hidden_states=False,
                 )
-                base_logits = base_outputs.logits
-                nll_base, _ = get_nll(base_outputs.logits, all_labels, attention_mask)
+                nll_base = get_nll(base_outputs.logits, all_labels, attention_mask)
+                nll_base = nll_base.detach()
                 del base_outputs
 
 
@@ -351,7 +345,7 @@ class Coconut(nn.Module):
 
         logits = torch.cat(logits, dim=-2)
 
-        question_nll, loss_per_token = get_nll(logits, all_labels, attention_mask)
+        question_nll = get_nll(logits, all_labels, attention_mask)
 
         # consider loss to regularise `mse_loss(input_embed_diff, 0)`
         loss_diff = 0.0
@@ -359,7 +353,7 @@ class Coconut(nn.Module):
             loss_diff = torch.mean(input_embed_diff**2) / 100.0
             
         # Answer loss (primary objective)
-        answer_loss, _ = get_nll(logits, labels, attention_mask)
+        answer_loss = get_nll(logits, labels, attention_mask)
 
         # Question margin loss (regularization: penalize if NLL > threshold)
         question_margin_loss = torch.mean(F.relu(question_nll - nll_base - .1) ** 4)
@@ -367,8 +361,6 @@ class Coconut(nn.Module):
         # Combined loss
         total_loss = answer_loss + question_margin_loss + loss_diff
 
-        # # Seq-VCR loss
-        # # in the paper they apply it to the last hidden state, we apply it to all
         extra = {
             "loss/answer": answer_loss,
             "loss/question_margin": question_margin_loss,
@@ -379,6 +371,9 @@ class Coconut(nn.Module):
         }
         extra = {k: v.mean().detach().cpu().item() for k, v in extra.items()}
 
+        # # Seq-VCR loss
+        # # in the paper they apply it to the last hidden state, we apply it to all
+        # TODO I guess we would apply it to latent inside TRM
         # if self.config.loss_seq_vcr:
         #     with torch.autocast(device_type=input_ids.device.type):
         #         loss_vcr, extra2 = self.vcr_loss(all_hs)

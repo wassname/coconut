@@ -412,7 +412,7 @@ def main():
                     f"T Epoch: {epoch}/{conf.num_epochs}, batch {step}/{len(train_dataloader)} "
                     f"(loss: {round(float(loss.detach().float() * conf.gradient_accumulation_steps), 4):2.2f}"
                 )
-                if step % 100 == 0:
+                if step % 10 == 0:
                     clear_memory()
             pbar.close()
 

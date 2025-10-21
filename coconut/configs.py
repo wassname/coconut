@@ -210,7 +210,7 @@ class TRM(BaseConfig):
     trm_hidden_size: Optional[int] = None  # Dynamic from base model if None
     trm_num_heads: int = 8  # Number of attention heads in TRM (12 in paper)
     trm_expansion: float = 2.67  # MLP expansion factor in TRM (4 in paper)
-    trm_transcoder_layers: int = 3  # Number of SwiGLU layers in transcoder (configurable)
+    trm_transcoder_layers: int = 1  # Number of SwiGLU layers in transcoder (configurable)
 
     trm_svd_init: bool = False  # Whether to use SVD-based initialization for TRM transcoder
 
