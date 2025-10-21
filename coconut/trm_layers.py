@@ -110,6 +110,9 @@ class CastedLinear(nn.Module):
                  out_features: int,
                  bias: bool):
         super().__init__()
+        self.in_features = in_features
+        self.out_features = out_features
+
         # Truncated LeCun normal init
         self.weight = nn.Parameter(
             trunc_normal_init_(torch.empty((out_features, in_features)), std=1.0 / (in_features ** 0.5))
@@ -118,6 +121,12 @@ class CastedLinear(nn.Module):
         if bias:
             # Zero init bias
             self.bias = nn.Parameter(torch.zeros((out_features, )))
+
+    def extra_repr(self) -> str:
+        """
+        Return the extra representation of the module.
+        """
+        return f"in_features={self.in_features}, out_features={self.out_features}, bias={self.bias is not None}"
 
     def forward(self, input: torch.Tensor) -> torch.Tensor:
         return F.linear(input, self.weight.to(input.dtype), bias=self.bias.to(input.dtype) if self.bias is not None else None)

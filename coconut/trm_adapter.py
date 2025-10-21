@@ -106,14 +106,16 @@ class TRMTranscoder(nn.Module):
         self.hidden_size = hidden_size
         self.llm_hidden_size = llm_hidden_size
 
-        # FIXME consider using TRMBlock, or at layer or batch norm
+        hs_exp = int(hidden_size * expansion)
+        in_size = hidden_size
 
-        # MLP in TRM's latent space
         layers = []
-        for _ in range(trm_transcoder_layers):
-            layers.append(CastedLinear(hidden_size, int(hidden_size * expansion), bias=False))
+        for i in range(trm_transcoder_layers):
+            layers.append(CastedLinear(in_size if i==0 else hs_exp, hs_exp, bias=False))
+            layers.append(nn.RMSNorm(hs_exp, eps=1e-5))  # Post-norm
             layers.append(nn.GELU())
-        self.mlp = nn.Sequential(*layers) if layers else nn.Identity()
+        self.mlp = nn.Sequential(*layers)
+
         
         # Final projection to LLM space
         input_dim = int(hidden_size * expansion) if trm_transcoder_layers > 0 else hidden_size
@@ -166,6 +168,10 @@ class TRMTranscoder(nn.Module):
         with torch.no_grad():
             # Vh is already [h_llm, rank], no transpose needed
             basis = Vh  # [h_llm, rank]
+        
+            # Normalize each column (semantic direction) to unit length
+            basis = F.normalize(basis, dim=0)  # Each direction has norm=1
+            
             
             # Pad or slice to match input_dim
             if rank >= target_shape[1]:  # input_dim
@@ -178,7 +184,7 @@ class TRMTranscoder(nn.Module):
                 init_weight[:, rank:] = torch.randn_like(init_weight[:, rank:]) * 0.01
             
             # Scale down to avoid dominating early training
-            self.final_proj.weight.copy_(init_weight * 0.1)
+            self.final_proj.weight.copy_(init_weight * 0.05)
 
         self.svd_initialized = True
         logger.info(f"Initialized transcoder with SVD basis: rank={rank}, weight_shape={target_shape}")

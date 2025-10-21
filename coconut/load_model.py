@@ -31,6 +31,8 @@ def load_new_model(conf: BaseConfig, device, dtype):
     eot_id = tokenizer.convert_tokens_to_ids("<|end-latent|>")
 
     conf.latent_token_id = latent_id
+    conf.bot_token_id = bot_id
+    conf.eot_token_id = eot_id
 
     # load base model
     model_config = AutoConfig.from_pretrained(

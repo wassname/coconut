@@ -98,6 +98,8 @@ class BaseConfig:
     # system_prompt: str = "Solve this math question with multiple steps like `<<5*0+1*2=?>>` OR silently within `<|start-latent|><|end-latent|>`. Then return the final answer like `### 2\n`. Save all comments until after the answer."
 
     latent_token_id: Optional[int] = None  # to be set when loading model
+    bot_token_id: Optional[int] = None  # beginning of thought token id
+    eot_token_id: Optional[int] = None  # end of thought token id
 
 # @dataclass
 # class GSMQwen(BaseConfig):
@@ -210,11 +212,13 @@ class TRM(BaseConfig):
     trm_expansion: float = 2.67  # MLP expansion factor in TRM (4 in paper)
     trm_transcoder_layers: int = 3  # Number of SwiGLU layers in transcoder (configurable)
 
-    trm_svd_init: bool = True  # Whether to use SVD-based initialization for TRM transcoder
+    trm_svd_init: bool = False  # Whether to use SVD-based initialization for TRM transcoder
 
-    trm_persistent_steering: bool = False  # Whether to persistently steer all future latent embeddings
+    trm_persistent_steering: bool = True  # Whether to persistently steer all future latent embeddings
 
-    loss_reg_ie_diff: bool = False  # Whether to regularize input-embedding differences
+    loss_reg_ie_diff: bool = True  # Whether to regularize input-embedding difference to be small
+    loss_nll_ratio_margin: bool = True  # Whether to use NLL ratio margin loss, this aims to keep the question at least as likely and TRM making unlikely embeddings, that make the answer very likely but the quesiton incoherent. Think of it like a hard boundary for keeping the questio coherent.
+
 
     # n_detached_recursions: int = 2  # Number of detached recursions (paper used >6)
     # n_gradient_recursions: int = 2  # Number of final recursions with gradients (paper uses 2)

@@ -3,6 +3,7 @@
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from torch.nn import CrossEntropyLoss
 from collections import namedtuple
 from collections import defaultdict
@@ -114,15 +115,28 @@ class Coconut(nn.Module):
         def get_nll(logits, labels, attention_mask):
             shift_logits = logits[..., :-1, :].contiguous()
             shift_labels = labels[..., 1:].contiguous()
+            shift_mask = attention_mask[..., 1:].contiguous().clone()
+
+            # also mask the -100 loss positions
+            shift_mask[shift_labels == -100] = 0
+
             loss_fct = CrossEntropyLoss(reduction='none')
             loss_per_token = loss_fct(
                 shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1)
-            )
-            nll = (loss_per_token * attention_mask).sum() / (attention_mask.sum() + 1e-8)
+            ).view(-1, shift_logits.size(1)) # [b, s]
+            # TODO check -100 is ignored
+            loss_per_token = loss_per_token * shift_mask.float()
+            nll = (loss_per_token * shift_mask).sum() / (shift_mask.sum() + 1e-8)
             return nll, loss_per_token
 
-        all_labels = input_ids.clone()[..., 1:].contiguous()
-        if self.configs.loss_nll_ratio_margin:
+        all_labels = input_ids.clone()#[..., 1:].contiguous()
+        # remove latents from loss computation
+        all_labels[input_ids == self.config.latent_token_id] = -100
+        all_labels[input_ids == self.config.bot_token_id] = -100
+        all_labels[input_ids == self.config.eot_token_id] = -100
+
+
+        if self.config.loss_nll_ratio_margin:
             # do a forward without trm
             with torch.no_grad():
                 base_outputs = self.model.forward(
@@ -337,9 +351,7 @@ class Coconut(nn.Module):
 
         logits = torch.cat(logits, dim=-2)
 
-        question_nll, loss_per_token = get_nll(logits, labels, attention_mask)
-
-        answer_mask = labels != -100 # the data loader should do this
+        question_nll, loss_per_token = get_nll(logits, all_labels, attention_mask)
 
         # consider loss to regularise `mse_loss(input_embed_diff, 0)`
         loss_diff = 0.0
@@ -347,7 +359,7 @@ class Coconut(nn.Module):
             loss_diff = torch.mean(input_embed_diff**2) / 100.0
             
         # Answer loss (primary objective)
-        answer_loss = (loss_per_token * answer_mask).sum() / (answer_mask.sum() + 1e-8)
+        answer_loss, _ = get_nll(logits, labels, attention_mask)
 
         # Question margin loss (regularization: penalize if NLL > threshold)
         question_margin_loss = torch.mean(F.relu(question_nll - nll_base - .1) ** 4)
