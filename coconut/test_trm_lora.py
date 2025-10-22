@@ -1,11 +1,11 @@
 import torch
 from coconut.load_model import load_new_model
-from coconut.configs import BaseConfig
+from coconut.configs import TRM  # Use TRM config instead of BaseConfig
 from loguru import logger
 from transformers import AutoTokenizer
 import yaml
 
-# Simple config for test
+# Simple config for test - use TRM config which has all the TRM parameters
 conf_dict = {
     'model_id': 'Qwen/Qwen2.5-Coder-0.5B',
     'use_trm_lora': True,
@@ -13,8 +13,12 @@ conf_dict = {
     'use_position_ids': False,
     'pad_token_id': None,
     'eos_token_id': None,
+    'max_size': 1000,  # Small for testing
+    'debug': True,
+    # Add target_modules for PEFT
+    'target_modules': ['all-linear'],  # Target all linear layers
 }
-conf = BaseConfig(**conf_dict)
+conf = TRM(**conf_dict)
 logger.info(f"Config: {conf}")
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'

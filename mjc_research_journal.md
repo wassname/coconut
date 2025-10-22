@@ -1664,3 +1664,34 @@ Ah when loading the model is seem that it's mainly just trained it to output <<
 
 yeah it does seem like it either needs a richer connection point
 or I need a strong transcoder, this is two layers... should be enougth for a change but if it's a complicated one then hmm. but I do want most of the logic to be in the recursive layers not the transcoder and to prevent overfitting
+
+# 2025-10-22 20:44:53 Update
+
+Adding to the input_embeddings seems to fragile, I'm going to try a peft style adapter in this branch
+
+# 2025-10-23 06:39:27
+
+ok I need to make sure that this is a proper peft model, right now it is not
+I'm 
+
+if you need a reference of how peft works look at these files I've downloaded for you
+
+./docs/peft/model.py
+./docs/peft/config.py
+./docs/peft/layer.py
+./docs/peft/README.md
+
+
+Our code is in coconut/recursive_lora.py, load_model.py, train.py, coconut.py
+
+to be precise our TRMConfig is not a proper peft config, our TRMLoraLayer is not a proper layer, and our TRMModel is not a proper model!
+
+I've prepared a test to check they are proper peft models
+
+to test `uv run pytest --beartype-packages='' -k adapter -v 2>&1 | head -60`
+
+personally I think that we should load like this
+`model = get_peft_model(model, peft_config)`
+not like the current
+`base_model = TRMModel(base_model, peft_config, adapter_name="default")` in load_model.py
+

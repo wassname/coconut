@@ -79,16 +79,8 @@ def load_new_model(conf: BaseConfig, device, dtype):
         inference_mode=False,
         r=16,
         lora_alpha=32,
-        # lora_dropout=0.0,
-        # target_modules=[
-        #     "model.layers.20.self_attn.q_proj",
-        #     "model.layers.20.self_attn.k_proj",
-        #     "model.layers.20.self_attn.v_proj",
-        #     "model.layers.20.self_attn.o_proj",
-        #     "model.layers.20.mlp.gate_proj",
-        #     "model.layers.20.mlp.up_proj",
-        #     "model.layers.20.mlp.down_proj"
-        # ],
+        lora_dropout=0.0,
+        target_modules="all-linear",  # Target all linear layers
         l_cycles=conf.trm_l_cycles,
         h_cycles=conf.trm_h_cycles,
         hidden_size=conf.trm_hidden_size,
@@ -97,8 +89,8 @@ def load_new_model(conf: BaseConfig, device, dtype):
         l_layers=conf.trm_l_layers,
         num_heads=conf.trm_num_heads,
         update_mode='lora',
-        # bias="none",
-        # modules_to_save=None,
+        bias="none",
+        modules_to_save=None,
     )
     base_model = TRMModel(base_model, peft_config, adapter_name="default")
 

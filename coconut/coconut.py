@@ -28,6 +28,7 @@ from transformers import (
 
 from coconut.hs2ie import hs2ie, get_supressed_activations
 from coconut.configs import BaseConfig
+from coconut.adapters import set_adapter
 
 
 Outputs = namedtuple(
@@ -98,28 +99,19 @@ class Coconut(nn.Module):
 
         # Compute base NLL without adapter if margin loss enabled
         nll_base = None
+        assert self.model.active_adapter is not None, "Adapter must be active during forward"
         if self.config.loss_nll_ratio_margin and all_labels is not None:
-            # FIXME redo as "with self.model.disable_adapters():" and don't fail silently
-            try:
-                active_adapters = self.model.active_adapters
-                adapter_was_enabled = len(active_adapters) > 0
-            except ValueError:
-                1/0
-                adapter_was_enabled = False
-            if adapter_was_enabled:
-                self.model.model.disable_adapters()
-            with torch.no_grad():
-                base_outputs = self.model.model(
-                    input_ids=input_ids,
-                    attention_mask=attention_mask,
-                    position_ids=position_ids,
-                    output_hidden_states=False,
-                )
-                nll_base = get_nll(base_outputs.logits, all_labels, attention_mask)[1]
-                nll_base = nll_base.detach()
-            if adapter_was_enabled:
-                self.model.model.enable_adapters()
-            del base_outputs
+            with set_adapter(self.model, None):
+                with torch.no_grad():
+                    base_outputs = self.model.model(
+                        input_ids=input_ids,
+                        attention_mask=attention_mask,
+                        position_ids=position_ids,
+                        output_hidden_states=False,
+                    )
+                    nll_base = get_nll(base_outputs.logits, all_labels, attention_mask)[1]
+                    nll_base = nll_base.detach()
+                    del base_outputs
 
         # Single forward pass with inline adapter
         outputs = self.model(

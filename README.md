@@ -7,6 +7,8 @@ The core idea is to use a frozen, quantized LLM for perception and generation, w
 
 `uv run scripts/run.py TRM`
 
+`uv run pytest --beartype-packages='coconut'`
+
 ### Proposed Architecture and Training
 
 The process integrates the LLM and the TRM as follows:
