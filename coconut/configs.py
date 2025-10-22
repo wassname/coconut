@@ -249,6 +249,30 @@ class TRMDebug(TRM):
 
     eval_first_epoch: bool = False  # Skip eval for speed
 
+
+@dataclass
+class TRMLoRA(TRM):
+    """
+    TRM LoRA mode: inline recursive LoRA adapter on frozen LLM.
+    """
+    name: str = "trm-lora-qwen3-0.6b"
+    use_trm_lora: bool = True
+    use_trm: bool = False  # Disable original external TRM
+
+    # Short test settings
+    load_in_4bit: bool = True
+    only_eval: bool = True  # Just eval for quick test
+    num_epochs: int = 1
+    max_size: int = 1000  # Small subset
+    batch_size_training: int = 4
+    gradient_accumulation_steps: int = 8  # Effective batch ~32
+    eval_first_epoch: bool = True
+    debug: bool = True
+
+    # LoRA-specific: lower LR, target layer 20
+    lr: float = 5e-5
+    weight_decay: float = 0.01
+
 # @dataclass
 # class TRM_H100(GsmQwen_H100):
 #     """

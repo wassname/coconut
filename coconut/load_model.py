@@ -12,6 +12,9 @@ import safetensors.torch
 import toml
 from transformers import BitsAndBytesConfig
 
+from coconut.recursive_lora import TRMConfig, TRMModel
+from peft import PeftModel
+
 def load_new_model(conf: BaseConfig, device, dtype):
     # load tokenizer
     tokenizer = AutoTokenizer.from_pretrained(
@@ -44,22 +47,22 @@ def load_new_model(conf: BaseConfig, device, dtype):
         use_position_ids=conf.use_position_ids,
     )
     
-    # TRM mode: load with quantization
-    if getattr(conf, 'use_trm', False):
+    # Load with quantization if specified (for TRM or LoRA)
+    quantization_config = None
+    if getattr(conf, 'load_in_4bit', False):
+        logger.info("Loading in 4bit")
+        quantization_config = BitsAndBytesConfig(
+            load_in_4bit=True,
+            bnb_4bit_compute_dtype=dtype,
+            bnb_4bit_use_double_quant=True,
+            bnb_4bit_quant_type="nf4"
+        )
+    elif getattr(conf, 'load_in_8bit', False):
+        logger.info("Loading in 8bit")
+        quantization_config = BitsAndBytesConfig(load_in_8bit=True)
+    elif getattr(conf, 'use_trm', False):
         logger.info("TRM mode: loading model with quantization")
-        
-        quantization_config = None
-        if getattr(conf, 'load_in_4bit', False):
-            logger.info("Loading in 4bit")
-            quantization_config = BitsAndBytesConfig(
-                load_in_4bit=True,
-                bnb_4bit_compute_dtype=dtype,
-                bnb_4bit_use_double_quant=True,
-                bnb_4bit_quant_type="nf4"
-            )
-        elif getattr(conf, 'load_in_8bit', False):
-            logger.info("Loading in 8bit")
-            quantization_config = BitsAndBytesConfig(load_in_8bit=True)
+        quantization_config = None  # Default no quant for TRM if not specified
 
     base_model = AutoModelForCausalLM.from_pretrained(
         conf.model_id, config=model_config, device_map=device, torch_dtype=dtype, quantization_config=quantization_config
@@ -69,6 +72,27 @@ def load_new_model(conf: BaseConfig, device, dtype):
 
     base_model.resize_token_embeddings(len(tokenizer))
 
+    if getattr(conf, 'use_trm_lora', False):
+        logger.info("Loading TRM LoRA adapter")
+        peft_config = TRMConfig(
+            task_type="CAUSAL_LM",
+            inference_mode=False,
+            r=16,
+            lora_alpha=32,
+            lora_dropout=0.0,
+            target_modules="layers.20",
+            cycles=6,
+            hidden_size=base_model.config.hidden_size,
+            llm_hidden_size=base_model.config.hidden_size,
+            expansion=2.67,
+            l_layers=1,
+            num_heads=base_model.config.num_attention_heads,
+            update_mode='add_dora',
+            bias="none",
+            modules_to_save=None,
+        )
+        base_model = TRMModel(base_model, peft_config)
+
     model = Coconut(base_model, conf)
     return model, tokenizer
 
@@ -76,9 +100,14 @@ def resume_model(conf: BaseConfig, device="auto", dtype=torch.bfloat16):
 
     model, tokenizer = load_new_model(conf, device, dtype)
 
-    state_dict = safetensors.torch.load_file(conf.load_model_path, device=device)
-    model.load_state_dict(state_dict, strict=False)
-    logger.warning(f"Resumed model from {conf.load_model_path}")
+    if getattr(conf, 'use_trm_lora', False):
+        logger.info("Loading TRM LoRA adapter weights")
+        model.model.load_adapter(conf.load_model_path)
+        logger.info(f"Resumed TRM LoRA adapter from {conf.load_model_path}")
+    else:
+        state_dict = safetensors.torch.load_file(conf.load_model_path, device=device)
+        model.load_state_dict(state_dict, strict=False)
+        logger.warning(f"Resumed model from {conf.load_model_path}")
 
     # set the configuration
     return model, tokenizer
