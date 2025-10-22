@@ -13,6 +13,8 @@ from peft.utils.other import get_pattern_key
 
 from .trm_adapter import L_net, TRMTranscoder, rms_norm  # Assuming rms_norm is available; adjust if needed
 
+from peft.utils import register_peft_method
+
 
 @dataclass
 class TRMConfig(PeftConfig):
@@ -59,7 +61,7 @@ class TRMConfig(PeftConfig):
 
     def __post_init__(self):
         super().__post_init__()
-        self.peft_type = PeftType.LORA  # Use LORA type for compatibility
+        self.peft_type = "TRM"  # Custom TRM type
         if isinstance(self.target_modules, list):
             self.target_modules = set(self.target_modules)
 
@@ -458,6 +460,9 @@ class TRMModel(BaseTuner):
             config = list(self.peft_config.values())[0]
             if hasattr(config, 'cycles'):
                 print(f"TRM-specific params: cycles={config.cycles}, expansion={config.expansion}")
+
+PeftType.TRM = PeftType('TRM', 'TRM')
+register_peft_method(name="trm", model_cls=TRMModel, config_cls=TRMConfig)
 
 
 # Helper function to load the model with TRMConfig

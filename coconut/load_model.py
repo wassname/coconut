@@ -12,8 +12,8 @@ import safetensors.torch
 import toml
 from transformers import BitsAndBytesConfig
 
-from coconut.recursive_lora import TRMConfig, TRMModel
-from peft import PeftModel
+from coconut.recursive_lora import TRMConfig
+from peft import PeftModel, get_peft_model
 
 def load_new_model(conf: BaseConfig, device, dtype):
     # load tokenizer
@@ -92,7 +92,7 @@ def load_new_model(conf: BaseConfig, device, dtype):
         bias="none",
         modules_to_save=None,
     )
-    base_model = TRMModel(base_model, peft_config, adapter_name="default")
+    base_model = get_peft_model(base_model, peft_config)
 
     model = Coconut(base_model, conf)
     return model, tokenizer

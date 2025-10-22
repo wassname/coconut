@@ -1688,10 +1688,13 @@ to be precise our TRMConfig is not a proper peft config, our TRMLoraLayer is not
 
 I've prepared a test to check they are proper peft models
 
-to test `uv run pytest --beartype-packages='' -k adapter -v 2>&1 | head -60`
 
 personally I think that we should load like this
 `model = get_peft_model(model, peft_config)`
 not like the current
 `base_model = TRMModel(base_model, peft_config, adapter_name="default")` in load_model.py
 
+ first iterate untill
+`uv run pytest --beartype-packages='' -k adapter -v 2>&1 | head -60`
+passed, then
+`uv run scripts/run.py TRMLoRA`
