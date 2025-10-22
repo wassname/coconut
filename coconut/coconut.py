@@ -73,12 +73,12 @@ class Coconut(nn.Module):
 
         self.gen_forward_cnt = 0
 
-        # TRM LoRA mode: freeze base LLM parameters (PEFT handles adapters)
-        if getattr(self.config, 'use_trm_lora', False):
-            logger.info("Freezing base LLM parameters for TRM LoRA")
-            for param in self.model.base_model.parameters():
-                param.requires_grad = False
-            self.model.enable_input_require_grads()
+        # # TRM LoRA mode: freeze base LLM parameters (PEFT handles adapters)
+        # if getattr(self.config, 'use_trm_lora', False):
+        #     logger.info("Freezing base LLM parameters for TRM LoRA")
+        #     for param in self.model.base_model.parameters():
+        #         param.requires_grad = False
+        #     self.model.enable_input_require_grads()
 
 
     def forward(self, input_ids, attention_mask=None, labels=None, position_ids=None, collect_hs=False, **kwargs):
@@ -99,10 +99,17 @@ class Coconut(nn.Module):
         # Compute base NLL without adapter if margin loss enabled
         nll_base = None
         if self.config.loss_nll_ratio_margin and all_labels is not None:
-            if hasattr(self.model, 'disable_adapters'):
-                self.model.disable_adapters()
+            # FIXME redo as "with self.model.disable_adapters():" and don't fail silently
+            try:
+                active_adapters = self.model.active_adapters
+                adapter_was_enabled = len(active_adapters) > 0
+            except ValueError:
+                1/0
+                adapter_was_enabled = False
+            if adapter_was_enabled:
+                self.model.model.disable_adapters()
             with torch.no_grad():
-                base_outputs = self.model(
+                base_outputs = self.model.model(
                     input_ids=input_ids,
                     attention_mask=attention_mask,
                     position_ids=position_ids,
@@ -110,7 +117,8 @@ class Coconut(nn.Module):
                 )
                 nll_base = get_nll(base_outputs.logits, all_labels, attention_mask)[1]
                 nll_base = nll_base.detach()
-            self.model.enable_adapters()  # Re-enable if possible
+            if adapter_was_enabled:
+                self.model.model.enable_adapters()
             del base_outputs
 
         # Single forward pass with inline adapter
@@ -184,10 +192,7 @@ class Coconut(nn.Module):
                 input_ids=input_ids,
                 attention_mask=attention_mask,
                 max_new_tokens=max_new_tokens,
-                min_new_tokens=min_new_tokens,
                 do_sample=False,  # Greedy for consistency
-                pad_token_id=self.config.eos_token_id,
-                eos_token_id=self.config.eos_token_id,
                 **kwargs
             )
 

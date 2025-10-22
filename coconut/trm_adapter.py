@@ -242,7 +242,7 @@ class CoconutTRM(nn.Module):
             self.q_head.weight.zero_()
             self.q_head.bias.fill_(-5)  # type: ignore
         
-    def hrm(self, zL: z_bh, zH: z_b1h, context_hs: hs_bsh) -> tuple:
+    def hrm(self, zL: z_bh, zH: z_bh, context_hs: hs_bsh) -> tuple:
         """
         Configurable recursion step.
         For dual net (h_layers >0): T-1 detached full cycles (n L_steps + 1 H_step), then 1 full with grad.
@@ -250,9 +250,6 @@ class CoconutTRM(nn.Module):
         """
         # Add sequence dimension
         zLs, zHs = zL.unsqueeze(1), zH.unsqueeze(1)
-
-        recursion_losses = []  # Track per-recursion loss for debugging
-
         # H_cycles-1 without grad
         with torch.no_grad():
             for H_step in range(self.h_cycles-1):
@@ -263,21 +260,7 @@ class CoconutTRM(nn.Module):
         # 1 with grad
         for L_step in range(self.l_cycles):
             zLs = self.l_net(zLs, zHs + context_hs)
-            # Log per-recursion loss: MSE between current and previous zL (proxy for refinement)
-            if self.training and L_step > 0:
-                recursion_loss = F.mse_loss(zLs, zLs_prev.detach())
-                recursion_losses.append(recursion_loss.item())
-                if len(recursion_losses) % 5 == 0:  # Log every 5 steps to avoid spam
-                    if wandb.run is not None:
-                        wandb.log({"recursion_loss": recursion_loss.item()})
-            zLs_prev = zLs.clone()  # Track previous for next iteration
         zHs = self.l_net(zHs, zLs)
-
-        # What to look for: recursion_loss should decrease over iterations (model refining states)
-        # If it increases/explodes: unstable recursion; if flat: no refinement happening
-        if self.training and recursion_losses:
-            if wandb.run is not None:
-                wandb.log({"avg_recursion_loss": sum(recursion_losses) / len(recursion_losses)})
 
         return zHs.squeeze(1), zLs.squeeze(1)
 

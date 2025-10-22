@@ -60,7 +60,7 @@ def evaluate(dataloader, model, tokenizer, ds, max_new_tokens=64, device='cuda',
                 min_new_tokens=max_new_tokens,
                 early_stopping=False,
                 pad_token_id=tokenizer.pad_token_id,
-                # pad_size='left',
+                pad_size='left',
             )
 
         for i in range(len(outputs)):

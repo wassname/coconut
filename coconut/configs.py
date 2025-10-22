@@ -100,6 +100,7 @@ class BaseConfig:
     latent_token_id: Optional[int] = None  # to be set when loading model
     bot_token_id: Optional[int] = None  # beginning of thought token id
     eot_token_id: Optional[int] = None  # end of thought token id
+    eos_token_id: Optional[int] = None  # for generate pad/eos
 
 # @dataclass
 # class GSMQwen(BaseConfig):
@@ -216,7 +217,7 @@ class TRM(BaseConfig):
 
     trm_svd_init: bool = False  # Whether to use SVD-based initialization for TRM transcoder
 
-    trm_persistent_steering: bool = True  # Whether to persistently steer all future latent embeddings
+    # trm_persistent_steering: bool = True  # Whether to persistently steer all future latent embeddings
 
     loss_reg_ie_diff: bool = True  # Whether to regularize input-embedding difference to be small
     loss_nll_ratio_margin: bool = True  # Whether to use NLL ratio margin loss, this aims to keep the question at least as likely and TRM making unlikely embeddings, that make the answer very likely but the quesiton incoherent. Think of it like a hard boundary for keeping the questio coherent.
@@ -260,17 +261,22 @@ class TRMLoRA(TRM):
     use_trm: bool = False  # Disable original external TRM
 
     # Short test settings
-    load_in_4bit: bool = True
-    only_eval: bool = True  # Just eval for quick test
+    load_in_4bit: bool = False
+    # only_eval: bool = False  # Enable train/eval for short run
     num_epochs: int = 1
     max_size: int = 1000  # Small subset
-    batch_size_training: int = 4
-    gradient_accumulation_steps: int = 8  # Effective batch ~32
-    eval_first_epoch: bool = True
-    debug: bool = True
+    batch_size_training: int = 8
+    gradient_accumulation_steps: int = 16  # Effective batch ~32
+    resume_epochs: int = 8  # Start from epoch 0
+    cot_epochs: int = 0
+    epochs_per_stage: int = 3
+    total_epochs: int = 20
+
+    eval_first_epoch: bool = False
+    debug: bool = False
 
     # LoRA-specific: lower LR, target layer 20
-    lr: float = 5e-5
+    lr: float = 1e-4
     weight_decay: float = 0.01
 
 # @dataclass

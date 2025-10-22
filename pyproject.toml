@@ -31,6 +31,7 @@ dependencies = [
     "tyro>=0.9.20",
     "beartype>=0.22.2",
     "anycache>=2.4.0",
+    "torchinfo>=1.8.0",
 ]
 
 [dependency-groups]

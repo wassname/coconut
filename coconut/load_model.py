@@ -36,6 +36,7 @@ def load_new_model(conf: BaseConfig, device, dtype):
     conf.latent_token_id = latent_id
     conf.bot_token_id = bot_id
     conf.eot_token_id = eot_id
+    conf.eos_token_id = tokenizer.eos_token_id
 
     # load base model
     model_config = AutoConfig.from_pretrained(
@@ -72,26 +73,34 @@ def load_new_model(conf: BaseConfig, device, dtype):
 
     base_model.resize_token_embeddings(len(tokenizer))
 
-    if getattr(conf, 'use_trm_lora', False):
-        logger.info("Loading TRM LoRA adapter")
-        peft_config = TRMConfig(
-            task_type="CAUSAL_LM",
-            inference_mode=False,
-            r=16,
-            lora_alpha=32,
-            lora_dropout=0.0,
-            target_modules="layers.20",
-            cycles=6,
-            hidden_size=base_model.config.hidden_size,
-            llm_hidden_size=base_model.config.hidden_size,
-            expansion=2.67,
-            l_layers=1,
-            num_heads=base_model.config.num_attention_heads,
-            update_mode='add_dora',
-            bias="none",
-            modules_to_save=None,
-        )
-        base_model = TRMModel(base_model, peft_config)
+    logger.info("Loading TRM LoRA adapter")
+    peft_config = TRMConfig(
+        task_type="CAUSAL_LM",
+        inference_mode=False,
+        r=16,
+        lora_alpha=32,
+        # lora_dropout=0.0,
+        # target_modules=[
+        #     "model.layers.20.self_attn.q_proj",
+        #     "model.layers.20.self_attn.k_proj",
+        #     "model.layers.20.self_attn.v_proj",
+        #     "model.layers.20.self_attn.o_proj",
+        #     "model.layers.20.mlp.gate_proj",
+        #     "model.layers.20.mlp.up_proj",
+        #     "model.layers.20.mlp.down_proj"
+        # ],
+        l_cycles=conf.trm_l_cycles,
+        h_cycles=conf.trm_h_cycles,
+        hidden_size=conf.trm_hidden_size,
+        llm_hidden_size=base_model.config.hidden_size,
+        expansion=conf.trm_expansion,
+        l_layers=conf.trm_l_layers,
+        num_heads=conf.trm_num_heads,
+        update_mode='lora',
+        # bias="none",
+        # modules_to_save=None,
+    )
+    base_model = TRMModel(base_model, peft_config, adapter_name="default")
 
     model = Coconut(base_model, conf)
     return model, tokenizer

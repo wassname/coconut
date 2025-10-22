@@ -2,6 +2,7 @@ import argparse
 # Early warning filter: suppress noisy Pydantic UnsupportedFieldAttributeWarning
 # which can be emitted when generating schemas for dataclasses used by tyro.
 import warnings
+from torchinfo import summary
 try:
     from pydantic._internal._generate_schema import UnsupportedFieldAttributeWarning
     warnings.filterwarnings("ignore", category=UnsupportedFieldAttributeWarning)
@@ -194,11 +195,14 @@ def main():
         tie_embeddings(model, tokenizer)
     model = model.to(device)
 
-    if conf.bf16_weight is True:
-        convert_to_bfloat16(model)
+    # if conf.bf16_weight is True:
+    #     convert_to_bfloat16(model)
 
     # setup eval
     logger.debug(model)
+    summary(model, input_size=(4, 12), dtypes=[torch.long], depth=4)
+
+
     max_size = 32 if conf.debug is True else (conf.max_size or 100000000)
     base_dataset_valid = get_dataset(
         conf.val_path,
