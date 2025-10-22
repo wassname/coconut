@@ -137,7 +137,7 @@ class TRMTranscoder(nn.Module):
         output = self.final_proj(zH)  # [b, h_llm]
 
         # Log for debugging transcoder projection
-        if self.training:
+        if self.training and wandb.run is not None:
             wandb.log({
                 "transcoder_weight_norm": self.final_proj.weight.norm().item(),  # Stable: 1-10; Explode: >100; Vanish: <0.1
                 "output_projection_scale": output.norm(dim=-1).mean().item()  # Should approach ~500 (embedding scale)
@@ -268,14 +268,16 @@ class CoconutTRM(nn.Module):
                 recursion_loss = F.mse_loss(zLs, zLs_prev.detach())
                 recursion_losses.append(recursion_loss.item())
                 if len(recursion_losses) % 5 == 0:  # Log every 5 steps to avoid spam
-                    wandb.log({"recursion_loss": recursion_loss.item()})
+                    if wandb.run is not None:
+                        wandb.log({"recursion_loss": recursion_loss.item()})
             zLs_prev = zLs.clone()  # Track previous for next iteration
         zHs = self.l_net(zHs, zLs)
 
         # What to look for: recursion_loss should decrease over iterations (model refining states)
         # If it increases/explodes: unstable recursion; if flat: no refinement happening
         if self.training and recursion_losses:
-            wandb.log({"avg_recursion_loss": sum(recursion_losses) / len(recursion_losses)})
+            if wandb.run is not None:
+                wandb.log({"avg_recursion_loss": sum(recursion_losses) / len(recursion_losses)})
 
         return zHs.squeeze(1), zLs.squeeze(1)
 
@@ -311,20 +313,22 @@ class CoconutTRM(nn.Module):
         # Add more detailed logging
         if self.training:  # Only log during training
             with torch.no_grad():
-                # Check if states are actually changing
-                if zL_prev is not None:
-                    zL_change = (zL_next - zL_prev).norm(dim=-1).mean()
-                    wandb.log({"zL_change": zL_change.item()})
-                if zH_prev is not None:
-                    zH_change = (zH_next - zH_prev).norm(dim=-1).mean()
-                    wandb.log({"zH_change": zH_change.item(), })
-                
-                # Check transcoder output scale
-                wandb.log({
+                info = {
                     "zH_norm": zH_next.norm(dim=-1).mean().item(),
                     "context_hs_norm": context_hs.norm(dim=-1).mean().item(),
                     "diff_to_hs_norm": diff_to_ie.norm(dim=-1).mean().item(),
                     "diff_context_ratio": (diff_to_ie.norm(dim=-1) / context_hs.norm(dim=-1)).mean().item() # note it should go up as the model gets confidence
-                })
+                }
+                # Check if states are actually changing
+                if zL_prev is not None:
+                    zL_change = (zL_next - zL_prev).norm(dim=-1).mean()
+                    info["zL_change"] = zL_change.item()
+                if zH_prev is not None:
+                    zH_change = (zH_next - zH_prev).norm(dim=-1).mean()
+                    info["zH_change"] = zH_change.item()
+
+                # Check transcoder output scale
+                if wandb.run is not None:
+                    wandb.log(info)
 
         return diff_to_ie.squeeze(1), zL_next, zH_next

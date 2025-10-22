@@ -188,7 +188,9 @@ class TRM(BaseConfig):
     # load_model_path: str = "outputs/qwen3-0.6b_20250514-194730/checkpoint_2"
 
     # resume one that already know CoT reasoning
-    model_id: str = "outputs/qwen3-0.6b_20250514-194730/checkpoint_2"
+    # model_id: str = "outputs/qwen3-0.6b_20250514-194730/checkpoint_2"
+    model_id = "suayptalha/Qwen3-0.6B-Math-Expert"
+    # model_id: str = "Qwen/Qwen3-0.6B"
 
     # num_epochs: int = 6  # Just a few epochs to test training
     resume_epochs: int = 8
@@ -202,7 +204,7 @@ class TRM(BaseConfig):
     # NOTE: see TRM paper settings https://github.com/SamsungSAILMontreal/TinyRecursiveModels/blob/e7b68717f0a6c4cbb4ce6fbef787b14f42083bd9/config/arch/trm.yaml#L17
     use_trm: bool = True
 
-    trm_n_sup: int = 16  # Deep supervision steps (N_sup in HRM paper)
+    # trm_n_sup: int = 16  # Deep supervision steps (N_sup in HRM paper)
     # trm_h_layers: int = 0  # Layers for H_net (0 for single net mode)
     trm_h_cycles: int = 3  # Outer cycles (T in paper)
     trm_l_cycles: int = 6  # Inner cycles (n in paper)
@@ -224,8 +226,8 @@ class TRM(BaseConfig):
     # n_gradient_recursions: int = 2  # Number of final recursions with gradients (paper uses 2)
 
     max_size: int = 20_000  # Start very small for testing
-    batch_size_training: int = 16  # Reduced from 16 due to OOM
-    gradient_accumulation_steps: int = 128//16  # Keep effective batch ~128
+    batch_size_training: int = 12  # Reduced from 16 due to OOM
+    gradient_accumulation_steps: int = 768//12  # Keep effective batch ~128. TRM uses 768!!
 
     eval_first_epoch: bool = False  # Skip eval for speed
     

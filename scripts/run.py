@@ -338,6 +338,9 @@ def main():
             collate_fn=collator,
         )
 
+        log_dict = None
+        eval_log_dict = None
+
         if not conf.only_eval:
             dataset_train = get_cot_latent_dataset(
                 stage,
@@ -429,7 +432,7 @@ def main():
                     f"T Epoch: {epoch}/{conf.num_epochs}, batch {step}/{len(train_dataloader)} "
                     f"(loss: {round(float(loss.detach().float() * conf.gradient_accumulation_steps), 4):2.2f}"
                 )
-                if step % 10 == 0:
+                if step % 5 == 0:
                     clear_memory()
             pbar.close()
 
@@ -507,8 +510,10 @@ def main():
         if wandb_run:
             wandb_run.log(r)
 
-        r["train/loss"] =log_dict["train/loss"]
-        r['eval/loss'] = eval_log_dict["eval/loss"]
+        if log_dict is not None:
+            r["train/loss"] = log_dict.get("train/loss", None)
+        if eval_log_dict is not None:
+            r['eval/loss'] = eval_log_dict.get("eval/loss", None)
         res.append(r)
 
         save_model(model, tokenizer, config_dict, save_dir / f"checkpoint_{epoch}")

@@ -39,6 +39,28 @@ Outputs = namedtuple(
 # max during gen
 MAX_N_LATENT = 8
 
+def get_nll(logits, labels=None, attention_mask=None):
+    if labels is None:
+        return torch.tensor(0.0), torch.tensor(0.0)
+    
+    shift_logits = logits[..., :-1, :].contiguous()
+    shift_labels = labels[..., 1:].contiguous()
+    
+    if attention_mask is None:
+        shift_mask = torch.ones_like(shift_labels)
+    else:
+        shift_mask = attention_mask[..., 1:].contiguous().clone()
+
+    # also mask the -100 loss positions
+    shift_mask[shift_labels == -100] = 0
+
+    loss_fct = CrossEntropyLoss(reduction='none')
+    loss_per_token = loss_fct(
+        shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1)
+    ).view(-1, shift_logits.size(1)) # [b, s]
+    loss_per_token = loss_per_token * shift_mask.float()
+    nll = (loss_per_token * shift_mask).sum() / (shift_mask.sum() + 1e-8)
+    return nll, loss_per_token
 
 class Coconut(nn.Module):
     def __init__(
@@ -106,22 +128,8 @@ class Coconut(nn.Module):
         ]  # bs, num_latent_tokens_in_the_instance (difference across the batch)
 
         max_n_latents = max([len(l) for l in latent_lists])
-            
-        def get_nll(logits, labels, attention_mask):
-            shift_logits = logits[..., :-1, :].contiguous()
-            shift_labels = labels[..., 1:].contiguous()
-            shift_mask = attention_mask[..., 1:].contiguous().clone()
 
-            # also mask the -100 loss positions
-            shift_mask[shift_labels == -100] = 0
 
-            loss_fct = CrossEntropyLoss(reduction='none')
-            loss_per_token = loss_fct(
-                shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1)
-            ).view(-1, shift_logits.size(1)) # [b, s]
-            loss_per_token = loss_per_token * shift_mask.float()
-            nll = (loss_per_token * shift_mask).sum() / (shift_mask.sum() + 1e-8)
-            return nll
 
         all_labels = input_ids.clone()#[..., 1:].contiguous()
         # remove latents from loss computation
@@ -130,7 +138,7 @@ class Coconut(nn.Module):
         all_labels[input_ids == self.config.eot_token_id] = -100
 
 
-        if self.config.loss_nll_ratio_margin:
+        if self.config.loss_nll_ratio_margin and all_labels is not None:
             # do a forward without trm
             with torch.no_grad():
                 base_outputs = self.model.forward(
@@ -139,7 +147,7 @@ class Coconut(nn.Module):
                     position_ids=position_ids,
                     output_hidden_states=False,
                 )
-                nll_base = get_nll(base_outputs.logits, all_labels, attention_mask)
+                nll_base = get_nll(base_outputs.logits, all_labels, attention_mask)[1]
                 nll_base = nll_base.detach()
                 del base_outputs
 
@@ -345,17 +353,18 @@ class Coconut(nn.Module):
 
         logits = torch.cat(logits, dim=-2)
 
-        question_nll = get_nll(logits, all_labels, attention_mask)
+        question_nll = get_nll(logits, all_labels, attention_mask)[1]
 
         # consider loss to regularise `mse_loss(input_embed_diff, 0)`
         loss_diff = 0.0
-        if self.config.loss_reg_ie_diff:
+        if self.config.loss_reg_ie_diff and input_embed_diff is not None:
             loss_diff = torch.mean(input_embed_diff**2) / 100.0
             
         # Answer loss (primary objective)
-        answer_loss = get_nll(logits, labels, attention_mask)
+        answer_loss = get_nll(logits, labels, attention_mask)[0].mean()
 
-        # Question margin loss (regularization: penalize if NLL > threshold)
+        # Question margin loss (regularization: penalize if question_nll > nll_base + 0.1)
+        # this might have to be per token, or it will game the loss
         question_margin_loss = torch.mean(F.relu(question_nll - nll_base - .1) ** 4)
 
         # Combined loss
@@ -369,7 +378,7 @@ class Coconut(nn.Module):
             'nll/question': question_nll,
             'nll/base': nll_base,
         }
-        extra = {k: v.mean().detach().cpu().item() for k, v in extra.items()}
+        extra = {k: v.mean().detach().cpu().item() if isinstance(v, torch.Tensor) else v for k, v in extra.items()}
 
         # # Seq-VCR loss
         # # in the paper they apply it to the last hidden state, we apply it to all
@@ -382,10 +391,10 @@ class Coconut(nn.Module):
         #     loss += loss_vcr
 
 
-        # Log components for monitoring
-        if self.training:
-            import wandb
-            wandb.log(extra)
+        # # Log components for monitoring
+        # if self.training:
+        #     import wandb
+        #     wandb.log(extra)
 
         assert torch.isfinite(total_loss).all(), f"Loss is {total_loss}"
 
@@ -428,7 +437,7 @@ class Coconut(nn.Module):
         tokens = torch.cat((tokens, next_token), dim=1)
         new_inputs_embeds = lyr_embed(next_token)
 
-        if self.config.trm_persistent_steering:
+        if self.config.trm_persistent_steering and coconut_outputs.input_embed_diff is not None:
             new_inputs_embeds = new_inputs_embeds + coconut_outputs.input_embed_diff
         # new_inputs_embeds = torch.cat((inputs_embeds, new_token_embed), dim=1)
         B = tokens.shape[0]
@@ -457,7 +466,7 @@ class Coconut(nn.Module):
                     break
 
             new_inputs_embeds = lyr_embed(next_token)
-            if self.config.trm_persistent_steering:
+            if self.config.trm_persistent_steering and coconut_outputs.input_embed_diff is not None:
                 new_inputs_embeds = new_inputs_embeds + coconut_outputs.input_embed_diff
             new_att_mask = torch.cat(
                 (new_att_mask, torch.ones((B, 1), device=new_att_mask.device)), dim=1

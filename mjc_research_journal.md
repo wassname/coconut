@@ -1462,31 +1462,31 @@ Created 1 todo
 
 ## Experiment summary (markdown table)
 
-| Eval                     | Accuracy (val)   | CoT match     | Eval perplexity | Eval loss (approx) | Ratio nll_ans/nll_corrupted_ans | Stage |
-| ----                     | -------------:   | --------:     | --------------: | -----------------: | ------------------------------: | ----: |
-| eval_8                   | 20.40% (102/500) | 2.00% (10/500)|          1.9209 |             0.6528 |                          0.9402 |     1 |
-| eval_9                   | 23.80% (119/500) | 1.20% (6/500) |          1.8317 |             0.6053 |                          0.9431 |     1 |
-| eval_10                  | 22.20% (111/500) | 1.40% (7/500) |          1.7980 |             0.5867 |                          0.9409 |     1 |
-| eval_11                  | 22.80% (114/500) | 1.20% (6/500) |          1.7798 |             0.5765 |                          0.9376 |     1 |
-| eval_12                  | 23.80% (119/500) | 1.40% (7/500) |          1.7686 |             0.5702 |                          0.9380 |     1 |
-| eval_13                  | 21.80% (109/500) | 1.40% (7/500) |          1.7595 |             0.5650 |                          0.9364 |     1 |
-| eval_14                  | 23.00% (115/500) | 1.40% (7/500) |          1.7537 |             0.5617 |                          0.9369 |     1 |
-| eval_15                  | 23.00% (115/500) | 1.40% (7/500) |          1.7484 |             0.5587 |                          0.9359 |     1 |
-| eval_16                  |  16.80% (84/500) | 1.00% (5/500) |          2.0950 |             0.7396 |                          0.7027 |     2 |
-| eval_17                  |  13.00% (65/500) | 1.20% (6/500) |          2.0813 |             0.7330 |                          0.7017 |     2 |
-| eval_18                  |  12.00% (60/500) | 1.40% (7/500) |          2.0664 |             0.7258 |                          0.7014 |     2 |
-| eval_19                  |  10.80% (54/500) | 1.60% (8/500) |          2.0542 |             0.7199 |                          0.7023 |     2 |
-| eval_20                  |   9.00% (45/500) | 1.40% (7/500) |          2.0367 |             0.7113 |                          0.6999 |     2 |
-| eval_21                  |   7.40% (37/500) | 1.40% (7/500) |          2.0196 |             0.7029 |                          0.7039 |     2 |
-| eval_22                  |   7.00% (35/500) | 1.20% (6/500) |          2.0072 |             0.6967 |                          0.7032 |     2 |
-| eval_23                  |   7.60% (38/500) | 1.20% (6/500) |          1.9953 |             0.6908 |                          0.7035 |   2→3 |
-| eval_24                  |   2.80% (14/500) | 1.20% (6/500) |          2.1882 |             0.7831 |                          0.5702 |     3 |
-| eval_25                  |   2.60% (13/500) | 1.20% (6/500) |          2.1730 |             0.7761 |                          0.5798 |     3 |
-| eval_26                  |   2.20% (11/500) | 1.20% (6/500) |          2.1651 |             0.7725 |                          0.5876 |     3 |
-| eval_27                  |   2.60% (13/500) | 1.20% (6/500) |          2.1503 |             0.7656 |                          0.5885 |     3 |
-| eval_28                  |   2.40% (12/500) | 1.20% (6/500) |          2.1442 |             0.7628 |                          0.5906 |     3 |
-| eval_29                  |   2.80% (14/500) | 1.20% (6/500) |          2.1353 |             0.7586 |                          0.5936 |     3 |
-| eval_30                  |   3.00% (15/500) | 1.40% (7/500) |          2.1342 |             0.7581 |                          0.5970 |     3 |
+| Eval    |   Accuracy (val) |      CoT match | Eval perplexity | Eval loss (approx) | Ratio nll_ans/nll_corrupted_ans | Stage |
+| ------- | ---------------: | -------------: | --------------: | -----------------: | ------------------------------: | ----: |
+| eval_8  | 20.40% (102/500) | 2.00% (10/500) |          1.9209 |             0.6528 |                          0.9402 |     1 |
+| eval_9  | 23.80% (119/500) |  1.20% (6/500) |          1.8317 |             0.6053 |                          0.9431 |     1 |
+| eval_10 | 22.20% (111/500) |  1.40% (7/500) |          1.7980 |             0.5867 |                          0.9409 |     1 |
+| eval_11 | 22.80% (114/500) |  1.20% (6/500) |          1.7798 |             0.5765 |                          0.9376 |     1 |
+| eval_12 | 23.80% (119/500) |  1.40% (7/500) |          1.7686 |             0.5702 |                          0.9380 |     1 |
+| eval_13 | 21.80% (109/500) |  1.40% (7/500) |          1.7595 |             0.5650 |                          0.9364 |     1 |
+| eval_14 | 23.00% (115/500) |  1.40% (7/500) |          1.7537 |             0.5617 |                          0.9369 |     1 |
+| eval_15 | 23.00% (115/500) |  1.40% (7/500) |          1.7484 |             0.5587 |                          0.9359 |     1 |
+| eval_16 |  16.80% (84/500) |  1.00% (5/500) |          2.0950 |             0.7396 |                          0.7027 |     2 |
+| eval_17 |  13.00% (65/500) |  1.20% (6/500) |          2.0813 |             0.7330 |                          0.7017 |     2 |
+| eval_18 |  12.00% (60/500) |  1.40% (7/500) |          2.0664 |             0.7258 |                          0.7014 |     2 |
+| eval_19 |  10.80% (54/500) |  1.60% (8/500) |          2.0542 |             0.7199 |                          0.7023 |     2 |
+| eval_20 |   9.00% (45/500) |  1.40% (7/500) |          2.0367 |             0.7113 |                          0.6999 |     2 |
+| eval_21 |   7.40% (37/500) |  1.40% (7/500) |          2.0196 |             0.7029 |                          0.7039 |     2 |
+| eval_22 |   7.00% (35/500) |  1.20% (6/500) |          2.0072 |             0.6967 |                          0.7032 |     2 |
+| eval_23 |   7.60% (38/500) |  1.20% (6/500) |          1.9953 |             0.6908 |                          0.7035 |   2→3 |
+| eval_24 |   2.80% (14/500) |  1.20% (6/500) |          2.1882 |             0.7831 |                          0.5702 |     3 |
+| eval_25 |   2.60% (13/500) |  1.20% (6/500) |          2.1730 |             0.7761 |                          0.5798 |     3 |
+| eval_26 |   2.20% (11/500) |  1.20% (6/500) |          2.1651 |             0.7725 |                          0.5876 |     3 |
+| eval_27 |   2.60% (13/500) |  1.20% (6/500) |          2.1503 |             0.7656 |                          0.5885 |     3 |
+| eval_28 |   2.40% (12/500) |  1.20% (6/500) |          2.1442 |             0.7628 |                          0.5906 |     3 |
+| eval_29 |   2.80% (14/500) |  1.20% (6/500) |          2.1353 |             0.7586 |                          0.5936 |     3 |
+| eval_30 |   3.00% (15/500) |  1.40% (7/500) |          2.1342 |             0.7581 |                          0.5970 |     3 |
 
 
 
@@ -1554,5 +1554,113 @@ next experiment:
 - [x] stronger transcoder
 - [x] margin loss, on whole input nll
 
+```py
+export BASE_CMD=uv run scripts/run.py TRM
+export BASE_ARGS="--num-epochs=16 --max_size=8000"
+$BASE_CMD $BASE_ARGS --model-id=Qwen/Qwen3-0.6B
+$BASE_CMD $BASE_ARGS --trm-svd-init --trm-persistent-steering
+$BASE_CMD $BASE_ARGS --weight-decay=0.001 --reset-optimizer --scheduler=linear
+$BASE_CMD $BASE_ARGS --load-in-8bit --no-load-in-4bit --grad-clip=1 --trm-transcoder-layers=4 --no-loss-reg-ie-diff
+$BASE_CMD $BASE_ARGS --no-loss-nll-ratio-margin --no-trm-persistent-steering
 ```
-uv run scripts/run.py TRM 
+
+
+- [x] make margin per token
+
+
+ts/trm-qwen3-0.6b_20251021-131708/checkpoint_15/pytorch_model.safetensors
+100%|██████████████████████████████████████████████████| 8/8 [1:04:56<00:00, 487.11s/epoch]
+
+# Results: trm-qwen3-0.6b_20251021-131708
+
+    {'project': 'coconut', 'save_path': 'outputs/', 'name': 'trm-qwen3-0.6b', 'model_id': 'outputs/qwen3-0.6b_20250514-194730/checkpoint_2', 'only_eval': False, 'load_model_path': '', 'resume_epochs': 8, 'replacement_method': 'supressed[0.75:]', 'use_position_ids': True, 'bf16': True, 'bf16_weight': False, 'opt_8b': False, 'cot_epochs': 0, 'epochs_per_stage': 8, 'max_latent_stage': 3, 'num_epochs': 16, 'batch_size_training': 16, 'gradient_accumulation_steps': 8, 'lr': 0.0001, 'weight_decay': 0.1, 'grad_clip': 1.0, 'scheduler': 'cosine', 'debug': False, 'seed': 42, 'reset_optimizer': False, 'loss_seq_vcr': False, 'n_detached_recursions': 2, 'use_trm': True, 'load_in_4bit': True, 'load_in_8bit': False, 'max_size': 8000, 'c_thought': 1, 'pad_latent_to_max': True, 'uniform_prob': 0.0, 'train_path': 'data/gsm_train.json', 'val_path': 'data/gsm_valid.json', 'system_prompt': '', 'latent_token_id': None, 'bot_token_id': None, 'eot_token_id': None, 'eval_first_epoch': False, 'trm_h_cycles': 3, 'trm_l_cycles': 6, 'trm_l_layers': 2, 'trm_hidden_size': None, 'trm_num_heads': 8, 'trm_expansion': 2.67, 'trm_transcoder_layers': 1, 'trm_svd_init': False, 'trm_persistent_steering': True, 'loss_reg_ie_diff': True, 'loss_nll_ratio_margin': True}
+
+|      | eval/acc | eval/cot_em | eval/ratios | epoch | stage | train/minutes | train/loss | eval/loss |
+| ---: | -------: | ----------: | ----------: | ----: | ----: | ------------: | ---------: | --------: |
+|    0 |   0.4312 |      0.0149 |      0.9009 |     8 |     1 |        7.9852 |   0.704211 |    0.5749 |
+|    1 |   0.2825 |      0.0112 |      0.9015 |     9 |     1 |        8.0548 |   0.504801 |    0.5419 |
+|    2 |   0.2974 |      0.0149 |      0.8982 |    10 |     1 |        8.2118 |    0.43976 |    0.5398 |
+|    3 |   0.2937 |      0.0112 |      0.8976 |    11 |     1 |        8.0129 |   0.340427 |    0.5342 |
+|    4 |   0.3086 |      0.0112 |      0.8961 |    12 |     1 |        8.1649 |   0.373657 |    0.5278 |
+|    5 |   0.2528 |      0.0112 |      0.8973 |    13 |     1 |        8.2535 |   0.361617 |    0.5271 |
+|    6 |   0.2528 |      0.0112 |      0.8964 |    14 |     1 |        8.0476 |   0.439974 |    0.5313 |
+|    7 |   0.2528 |      0.0112 |      0.8965 |    15 |     1 |        8.0564 |   0.413168 |    0.5271 |
+
+# 2025-10-22 06:01:23
+
+OK it looks like my CoT model is kind of dumb, it can only say number in any circumstance and I'm not sure it understand. What if I start with a generate model, ans skip the CoT phrase
+
+# Results: trm-qwen3-0.6b_20251021-163009
+a quick run with 'model_id': 'Qwen/Qwen3-0.6B', yes it learns but slowly
+{'project': 'coconut', 'save_path': 'outputs/', 'name': 'trm-qwen3-0.6b', 'model_id': 'Qwen/Qwen3-0.6B', 'only_eval': False, 'load_model_path': '', 'resume_epochs': 8, 'replacement_method': 'supressed[0.75:]', 'use_position_ids': True, 'bf16': True, 'bf16_weight': False, 'opt_8b': False, 'cot_epochs': 0, 'epochs_per_stage': 8, 'max_latent_stage': 3, 'num_epochs': 16, 'batch_size_training': 16, 'gradient_accumulation_steps': 8, 'lr': 0.0001, 'weight_decay': 0.1, 'grad_clip': 1.0, 'scheduler': 'cosine', 'debug': False, 'seed': 42, 'reset_optimizer': False, 'loss_seq_vcr': False, 'n_detached_recursions': 2, 'use_trm': True, 'load_in_4bit': True, 'load_in_8bit': False, 'max_size': 8000, 'c_thought': 1, 'pad_latent_to_max': True, 'uniform_prob': 0.0, 'train_path': 'data/gsm_train.json', 'val_path': 'data/gsm_valid.json', 'system_prompt': '', 'latent_token_id': None, 'bot_token_id': None, 'eot_token_id': None, 'eval_first_epoch': False, 'trm_h_cycles': 3, 'trm_l_cycles': 6, 'trm_l_layers': 2, 'trm_hidden_size': None, 'trm_num_heads': 8, 'trm_expansion': 2.67, 'trm_transcoder_layers': 1, 'trm_svd_init': False, 'trm_persistent_steering': True, 'loss_reg_ie_diff': True, 'loss_nll_ratio_margin': True}
+|    |   eval/acc |   eval/cot_em |   eval/ratios |   epoch |   stage |   train/minutes |   train/loss |   eval/loss |
+|---:|-----------:|--------------:|--------------:|--------:|--------:|----------------:|-------------:|------------:|
+|  0 |     0      |        0.0037 |        1.0259 |       8 |       1 |          7.7263 |     1.39182  |      1.3682 |
+|  1 |     0      |        0.0074 |        0.9961 |       9 |       1 |          7.57   |     1.25364  |      1.2822 |
+|  2 |     0.0037 |        0.0037 |        0.9509 |      10 |       1 |          7.6084 |     0.923961 |      1.0719 |
+|  3 |     0.0074 |        0.0037 |        0.9411 |      11 |       1 |          7.6153 |     0.718184 |      1.0312 |
+|  4 |     0.026  |        0.0037 |        0.934  |      12 |       1 |          7.6228 |     0.660434 |      1.0301 |
+|  5 |     0.026  |        0.0037 |        0.9283 |      13 |       1 |          7.6169 |     0.796399 |      0.9819 |
+|  6 |     0.0223 |        0.0037 |        0.9245 |      14 |       1 |          7.6245 |     0.734089 |      0.9404 |
+|  7 |     0.026  |        0.0074 |        0.9238 |      15 |       1 |          7.6248 |     0.678436 |      0.9401 |
+
+outputs/trm-qwen3-0.6b_20251021-163009/checkpoint_14/pytorch_model.safetensors  
+
+now try qwen math expect
+
+# Results: trm-qwen3-0.6b_20251022-065910
+{'project': 'coconut', 'save_path': 'outputs/', 'name': 'trm-qwen3-0.6b', 'model_id': 'suayptalha/Qwen3-0.6B-Math-Expert', 'only_eval': False, 'load_model_path': '', 'resume_epochs': 8, 'replacement_method': 'supressed[0.75:]', 'use_position_ids': True, 'bf16': True, 'bf16_weight': False, 'opt_8b': False, 'cot_epochs': 0, 'epochs_per_stage': 8, 'max_latent_stage': 3, 'num_epochs': 25, 'batch_size_training': 12, 'gradient_accumulation_steps': 64, 'lr': 0.0001, 'weight_decay': 0.1, 'grad_clip': 1.0, 'scheduler': 'cosine', 'debug': False, 'seed': 42, 'reset_optimizer': False, 'loss_seq_vcr': False, 'n_detached_recursions': 2, 'use_trm': True, 'load_in_4bit': True, 'load_in_8bit': False, 'max_size': 20000, 'c_thought': 1, 'pad_latent_to_max': True, 'uniform_prob': 0.0, 'train_path': 'data/gsm_train.json', 'val_path': 'data/gsm_valid.json', 'system_prompt': '', 'latent_token_id': None, 'bot_token_id': None, 'eot_token_id': None, 'eval_first_epoch': False, 'trm_h_cycles': 3, 'trm_l_cycles': 6, 'trm_l_layers': 2, 'trm_hidden_size': None, 'trm_num_heads': 8, 'trm_expansion': 2.67, 'trm_transcoder_layers': 1, 'trm_svd_init': False, 'trm_persistent_steering': True, 'loss_reg_ie_diff': True, 'loss_nll_ratio_margin': True}
+|    |   eval/acc |   eval/cot_em |   eval/ratios |   epoch |   stage |   train/minutes |   train/loss |   eval/loss |
+|---:|-----------:|--------------:|--------------:|--------:|--------:|----------------:|-------------:|------------:|
+|  0 |      0     |         0.01  |        1.1093 |       8 |       1 |         21.735  |     2.27437  |      1.8033 |
+|  1 |      0     |         0.008 |        1.1001 |       9 |       1 |         21.5661 |     1.23052  |      1.3986 |
+|  2 |      0     |         0.01  |        0.9413 |      10 |       1 |         21.2588 |     0.892843 |      1.0658 |
+|  3 |      0.004 |         0.01  |        0.9322 |      11 |       1 |         21.8659 |     0.757459 |      0.9168 |
+|  4 |      0.016 |         0.008 |        0.9345 |      12 |       1 |         21.217  |     0.95061  |      0.8511 |
+|  5 |      0.018 |         0.008 |        0.9335 |      13 |       1 |         21.2007 |     0.570552 |      0.8358 |
+|  6 |      0.018 |         0.008 |        0.9222 |      14 |       1 |         21.1668 |     0.750841 |      0.8163 |
+|  7 |      0.004 |         0.01  |        0.909  |      15 |       1 |         21.5885 |     0.599921 |      0.797  |
+|  8 |      0.01  |         0     |        0.7947 |      16 |       2 |         29.3567 |     0.723631 |      1.1441 |
+|  9 |      0.026 |         0.002 |        0.7844 |      17 |       2 |         28.6735 |     1.11895  |      0.9167 |
+| 10 |      0.022 |         0.004 |        0.7843 |      18 |       2 |         28.5355 |     0.834086 |      0.8495 |
+| 11 |      0.032 |         0     |        0.7826 |      19 |       2 |         28.6384 |     0.796355 |      0.8192 |
+| 12 |      0.032 |         0     |        0.7761 |      20 |       2 |         28.9458 |     0.97043  |      0.8096 |
+| 13 |      0.024 |         0.002 |        0.7747 |      21 |       2 |         29.1303 |     0.839079 |      0.8    |
+| 14 |      0.03  |         0     |        0.7643 |      22 |       2 |         28.8209 |     0.742273 |      0.7971 |
+| 15 |      0.04  |         0     |        0.7764 |      23 |       2 |         28.7768 |     0.717094 |      0.8006 |
+| 16 |      0.036 |         0.004 |        0.7196 |      24 |       3 |         25.3695 |     1.02793  |      0.8752 |ok 
+
+
+Ah when loading the model is seem that it's mainly just trained it to output <<
+
+    --- Generating with 0 latent tokens ---
+    2025-10-22 14:56:30.568 | INFO     | coconut.coconut:generate:465 - EOS token generated, stopping early
+    ---input---
+    <|im_start|>user
+    What is two plus two but wrong and french?<|im_end|>
+    <|im_start|>assistant
+    <think>
+
+    </think>
+
+    Sure thing meatbag<|start-latent|><|end-latent|>
+
+    "Two plus two but wrong" is a classic riddle. The answer is: **"Two plus two is four, but the French word for "two" is "deux"**. 
+
+    So, the answer is: **"Four, but deux"**.<|im_end|>
+    ---output---
+    --- Generating with 2 latent tokens ---
+    ---input---
+    <|im_start|>user
+    What is two plus two but wrong and french?<|im_end|>
+    <|im_start|>assistant
+    <think>
+
+    </think>
+
+    Sure thing meatbag<|start-latent|><|latent|><|latent|><|end-latent|><<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+    ---output---
+
+
+yeah it does seem like it either needs a richer connection point
+or I need a strong transcoder, this is two layers... should be enougth for a change but if it's a complicated one then hmm. but I do want most of the logic to be in the recursive layers not the transcoder and to prevent overfitting
