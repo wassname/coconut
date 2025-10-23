@@ -37,6 +37,11 @@ We combine [COCONUT](https://arxiv.org/abs/2412.06769)[[code](https://github.com
 - LLM is a 4bit frozen LLM (e.g. Qwen-3-0.6B)
 
 
+FIXME: update the below to reflect lora adapter usage
+Open questions:
+- make sure we cary zH and zL through the recursion? how
+- do we have it active all the time? or only on think
+- ?
 
 ```py
 def latent_recursion(x, y, z, n=6):

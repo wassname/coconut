@@ -1671,30 +1671,49 @@ Adding to the input_embeddings seems to fragile, I'm going to try a peft style a
 
 # 2025-10-23 06:39:27
 
-ok I need to make sure that this is a proper peft model, right now it is not
-I'm 
+Ongoing task: Extend PEFT to support Recursive LoRA adapters
+Main file: recursive_lora.py
+
+Make sure you read my ./README.md to understand the goal of this code (TRM as an adapter on a COCONUT style setup) and see the psudocode.
+
+Hard part:
+- look at these reference files to understand how PEFT works. It's not easy, and you might be tempted to add methods that these reference files did not need 
 
 if you need a reference of how peft works look at these files I've downloaded for you
 
-./docs/peft/model.py
-./docs/peft/config.py
-./docs/peft/layer.py
-./docs/peft/README.md
+- ./docs/peft/model.py
+- ./docs/peft/config.py
+- ./docs/peft/layer.py
+- ./docs/peft/README.md
+- ./docs/peft/base.py
 
+Or look in my virtual environment at these files, where hra can be replaced with delora, lora, oft, road, vera, loha, loft, etc
+- /media/wassname/SGIronWolf/projects5/2025/fbai_coconut/.venv/lib/python3.10/site-packages/peft/tuners/hra/model.py
+- /media/wassname/SGIronWolf/projects5/2025/fbai_coconut/.venv/lib/python3.10/site-packages/peft/tuners/lora/layer.py
+- /media/wassname/SGIronWolf/projects5/2025/fbai_coconut/.venv/lib/python3.10/site-packages/peft/tuners/tuners_utils.py
+also check the base layer docstr for BaseTuner, BaseTunerLayer
 
 Our code is in coconut/recursive_lora.py, load_model.py, train.py, coconut.py
 
-to be precise our TRMConfig is not a proper peft config, our TRMLoraLayer is not a proper layer, and our TRMModel is not a proper model!
 
-I've prepared a test to check they are proper peft models
+I've prepared a test to check they are proper peft models. So here's what I wnat you to do:
 
-
-personally I think that we should load like this
-`model = get_peft_model(model, peft_config)`
-not like the current
-`base_model = TRMModel(base_model, peft_config, adapter_name="default")` in load_model.py
-
- first iterate untill
+First run, fix, and run, untill you pass this adapter test without beartyping tests
 `uv run pytest --beartype-packages='' -k adapter -v 2>&1 | head -60`
 passed, then
+`uv run pytest` for all tests
+
+Then run my actual training script to make sure it works:
 `uv run scripts/run.py TRMLoRA`
+
+If need be you can enter debugging mode with "claude debugs for you mcp server" 
+
+
+# 2025-10-23 10:53:44
+
+
+FIXME: update the below to reflect lora adapter usage
+Open questions:
+- make sure we cary zH and zL through the recursion? how
+- do we have it active all the time? or only on think
+- ?

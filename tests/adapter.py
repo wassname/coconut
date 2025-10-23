@@ -1,5 +1,5 @@
 from coconut.adapters import set_adapter, is_hf_peft_model, is_plain_peft_model
-from coconut.recursive_lora import TRMConfig, TRMLoraLayer, TRMModel
+from coconut.recursive_lora import TRMConfig, TRMLoraLayer, TRMLoraModel
 
 
 

@@ -12,7 +12,7 @@ import safetensors.torch
 import toml
 from transformers import BitsAndBytesConfig
 
-from coconut.recursive_lora import TRMConfig
+from coconut.recursive_lora import TRMConfig, TRMLoraModel
 from peft import PeftModel, get_peft_model
 
 def load_new_model(conf: BaseConfig, device, dtype):
@@ -94,9 +94,13 @@ def load_new_model(conf: BaseConfig, device, dtype):
         bias="none",
         modules_to_save=None,
     )
-    base_model = get_peft_model(base_model, peft_config)
+    peft_model = get_peft_model(base_model, peft_config)
+    # OR 
+    # peft_model = TRMLoraModel(base_model, peft_config, "default")
 
-    model = Coconut(base_model, conf)
+    peft_model.print_trainable_parameters()
+
+    model = Coconut(peft_model, conf)
     return model, tokenizer
 
 def resume_model(conf: BaseConfig, device="auto", dtype=torch.bfloat16):
