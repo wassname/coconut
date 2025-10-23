@@ -26,7 +26,7 @@ from transformers import (
     LlamaForCausalLM, PreTrainedModel
 )
 
-from coconut.hs2ie import hs2ie, get_supressed_activations
+# from coconut.hs2ie import hs2ie, get_supressed_activations
 from coconut.configs import BaseConfig
 from coconut.adapters import set_adapter
 
@@ -74,13 +74,6 @@ class Coconut(nn.Module):
 
         self.gen_forward_cnt = 0
 
-        # # TRM LoRA mode: freeze base LLM parameters (PEFT handles adapters)
-        # if getattr(self.config, 'use_trm_lora', False):
-        #     logger.info("Freezing base LLM parameters for TRM LoRA")
-        #     for param in self.model.base_model.parameters():
-        #         param.requires_grad = False
-        #     self.model.enable_input_require_grads()
-
 
     def forward(self, input_ids, attention_mask=None, labels=None, position_ids=None, collect_hs=False, **kwargs):
 
@@ -114,6 +107,7 @@ class Coconut(nn.Module):
                     del base_outputs
 
         # Single forward pass with inline adapter
+        # FIXME COCONUT would only turn on adapter during <latent> tokens
         outputs = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,

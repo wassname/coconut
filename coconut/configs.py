@@ -245,7 +245,7 @@ class TRMLoRA(TRM):
     """
     TRM LoRA mode: inline recursive LoRA adapter on frozen LLM.
     """
-    name: str = "trm-lora-qwen3-0.6b"
+    name: str = "trmlora-qwen3-0.6b"
     use_trm_lora: bool = True
     use_trm: bool = False  # Disable original external TRM
 
@@ -253,13 +253,13 @@ class TRMLoRA(TRM):
     load_in_4bit: bool = False
     # only_eval: bool = False  # Enable train/eval for short run
     # num_epochs: int = 1
-    max_size: int = 1000  # Small subset
+    # max_size: int = 1000  # Small subset
     batch_size_training: int = 8
-    gradient_accumulation_steps: int = 16  # Effective batch ~32
+    gradient_accumulation_steps: int = 748//8  # Effective batch ~748
     resume_epochs: int = 8  # Start from epoch 0
     cot_epochs: int = 0
     epochs_per_stage: int = 3
-    total_epochs: int = 20
+    # num_epochs: int = 20
 
     eval_first_epoch: bool = False
     debug: bool = False

@@ -12,7 +12,7 @@ import safetensors.torch
 import toml
 from transformers import BitsAndBytesConfig
 
-from coconut.recursive_lora import TRMConfig, TRMLoraModel
+from coconut.trmlora.recursive_lora import TRMConfig, TRMLoraModel
 from peft import PeftModel, get_peft_model
 
 def load_new_model(conf: BaseConfig, device, dtype):

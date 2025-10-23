@@ -11,9 +11,9 @@ from peft.tuners.tuners_utils import BaseTunerLayer, BaseTuner, check_target_mod
 from peft.tuners._buffer_dict import BufferDict
 from peft.utils.other import get_pattern_key
 
-from .trm_adapter import L_net, TRMTranscoder, rms_norm  # Assuming rms_norm is available; adjust if needed
+from .trm_adapter import L_net
 
-from peft.utils import register_peft_method
+
 
 
 
@@ -276,10 +276,6 @@ class TRMLoraLayer(BaseTunerLayer):
                 zH = getattr(self, f"zH_init_{adapter}").unsqueeze(0).expand(b, -1).to(base_hidden.device)
                 zL = getattr(self, f"zL_init_{adapter}").unsqueeze(0).expand(b, -1).to(base_hidden.device)
 
-                # Optional: Add projected context to initials
-                # zH = zH + context_proj
-                # zL = zL + context_proj
-
                 # Run HRM recursion in low-rank space
                 zL_next, zH_next = self.hrm(adapter, zL, zH, context_proj)  # Pass projected context
 
@@ -454,13 +450,3 @@ class TRMLoraModel(BaseTuner):
         return new_module
 
 
-
-# replace ENUM with extended version, we need to replace
-import peft.utils.peft_types
-import enum
-
-class PeftType2(str, enum.Enum):
-    TRMLORA = 'TRMLORA'
-peft.utils.peft_types.PeftType = PeftType2
-
-register_peft_method(name="trmlora", model_cls=TRMLoraModel, config_cls=TRMConfig)
