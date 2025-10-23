@@ -95,11 +95,17 @@ class TRMLoraLayer(BaseTunerLayer):
         self.trmlora_dropout = nn.ModuleDict({})
         # self.trmlora_A = nn.ParameterDict({}) # FIXME is it used?
         self.trmlora_B = nn.ParameterDict({})
+        self.zL_init = BufferDict({})
+        self.zH_init = BufferDict({})
         
         # Mark the weight as unmerged (PEFT pattern uses underscore)
         self._disable_adapters = False
         self.merged_adapters = []
         self.kwargs = kwargs
+        
+        # Marker for Coconut to find TRM layers
+        self._is_trm_layer = True
+        self._recursion_cache = None  # Injected by Coconut.recursion_context()
         
         # Get base layer info
         base_layer_mod = self.get_base_layer()
@@ -175,8 +181,8 @@ class TRMLoraLayer(BaseTunerLayer):
         zL = torch.empty(r_dim, device=device)
         torch.nn.init.trunc_normal_(zH, std=1.0)
         torch.nn.init.trunc_normal_(zL, std=1.0)
-        self.register_buffer(f"zH_init_{adapter_name}", zH, persistent=True)
-        self.register_buffer(f"zL_init_{adapter_name}", zL, persistent=True)
+        self.zL_init[adapter_name] = zL
+        self.zH_init[adapter_name] = zH
 
         # Initialize LoRA weights (only B now) with small std for stability
         if init_weights:
@@ -234,6 +240,9 @@ class TRMLoraLayer(BaseTunerLayer):
         *args: Any,
         **kwargs: Any
     ) -> Float[Tensor, 'b s h']:
+        # Use injected cache from Coconut.recursion_context() if available
+        recursion_cache = self._recursion_cache
+        
         previous_dtype = hidden_states.dtype
 
         if self.disable_adapters:
@@ -279,11 +288,20 @@ class TRMLoraLayer(BaseTunerLayer):
                 context_proj = down_proj(context_hs_for_proj)  # [b, r]
 
                 # Initialize zH and zL in r_dim
-                zH = getattr(self, f"zH_init_{adapter}").unsqueeze(0).expand(b, -1).to(base_hidden.device)
-                zL = getattr(self, f"zL_init_{adapter}").unsqueeze(0).expand(b, -1).to(base_hidden.device)
+                if self.layer_key not in recursion_cache:
+                    recursion_cache[self.layer_key] = {}
+                zL = recursion_cache[self.layer_key].get('zL', None)
+                if zL is None:
+                    zL = self.zL_init[adapter].unsqueeze(0).expand(b, -1).to(base_hidden.device)
+                zH = recursion_cache[self.layer_key].get('zH', None)
+                if zH is None:
+                    zH = self.zH_init[adapter].unsqueeze(0).expand(b, -1).to(base_hidden.device)
 
                 # Run HRM recursion in low-rank space
                 zL_next, zH_next = self.hrm(adapter, zL, zH, context_proj)  # Pass projected context
+
+                recursion_cache[self.layer_key]['zL'] = zL_next
+                recursion_cache[self.layer_key]['zH'] = zH_next
 
                 # LoRA-style up-projection with DeLoRA-inspired normalization
                 scaling = trm_config.lora_alpha / max(1, self.r[adapter])
