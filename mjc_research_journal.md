@@ -1728,3 +1728,32 @@ upproject?
 
 I could use delora instead of lora? or dora
 that way we have llm_hidden_size, and rank (which I guess will be the size we recurse at, then we construct the full addition lora stlye?)
+
+# 2025-10-23 15:44:01 Low rank recursion idea
+
+#### Context and Problem
+In a COCONUT-style setup (latent reasoning with special tokens like `<|latent|>` for internal computation), we're adapting TRM (Tiny Recursive Models) as a PEFT LoRA adapter to a frozen base LLM. TRM uses hierarchical recursion (HRM with L_net cycles) on hidden states for refinement, but full-dim recursion (e.g., h=2048) causes OOM errors during training/generation, especially with multiple cycles (l_cycles=6, h_cycles=2). Vanilla LoRA is efficient (low-rank delta via A/B matrices), but lacks recursion. Goal: Fuse TRM's recursion with LoRA's low-rank efficiency, while ensuring stability and gradient flow.
+
+Key issues:
+- High mem from recursion in full hidden dim.
+- Unused code in original (e.g., transcoder MLP, trmlora_A) adding complexity without benefit.
+- Stability: Explosive norms in recursion/up-proj; gradients not flowing well in multi-pass.
+- Integration: PEFT doesn't support per-token adapter disable easily, so global active but recursion only meaningful on latents via context_hs.
+
+#### Logic and Choices
+- **Low-Rank Recursion**: Project context_hs (last token's hidden state [b, h]) down to r-dim ([b, r], r<<h, e.g., 16) via a linear down_proj. Run HRM entirely in r-space (adapt L_net to r). Logic: Recursion is the core of TRM but expensive—low-rank reduces O(cycles * r^2) vs O(cycles * h^2), saving mem without losing expressivity (r tunable).
+
+- **Up-Projection Simplification**: After recursion yields zH_next [b, r], up-project directly with B [out, r] as features = (B @ zH_next.T).T * scaling. Removed trmlora_A (originally [r, in]) as redundant—zH_next already acts as a refined low-rank "input," no need for separate A @ x. Logic: Mirrors LoRA's B @ (A @ x) but simplifies params/compute; saves mem, aligns with TRM's output being a vector, not a full matmul.
+
+- **Stability Enhancements (from DoRA/DeLoRA)**:
+  - Normalize direction per output channel (column-wise norm + divide), then bound with learnable scalar lambda (init 5.0, clamped 0.1-10).
+  - Scale by per-channel DoRA magnitudes (init to base weight norms for stability).
+  - Init B with small std (0.02) like transformers.
+  - Logic: Prevents norm explosions in recursion/up-proj (DeLoRA-inspired bounding); focuses learning on direction while magnitudes adapt (DoRA); early param creation avoids AttributeErrors.
+
+- **Coconut.py Simplifications**: Assume TRM LoRA always (freeze base params, drop non-TRM code like multi-pass, VCR loss). Use just answer_loss (dropped margin/base NLL/diff for now—can re-add if needed). Keep custom forward for losses, generate for control. Adapter always active (PEFT limitation), but recursion no-op on non-latents. Logic: Reduces complexity; focuses on TRM LoRA; easy to extend.
+
+#### Trade-offs and Next Steps
+- Pros: Mem-efficient, stable, simplified (fewer params, no unused code).
+- Cons: Global adapter might add minor overhead on non-latents; dropped losses simplify but may need tuning for performance.
+- Test: Run `uv run pytest` and small training (e.g., TRMLoraDebug) to check mem/grads/norms. If OOM persists, reduce cycles or add gradient checkpointing in HRM. If stability issues, tune lambda bounds or add more DeLoRA elements (e.g., per-rank lambda).

@@ -14,3 +14,6 @@ try:
 except KeyError:
     # already registered
     pass
+
+
+# also PEFT_TYPE_TO_PREFIX_MAPPING

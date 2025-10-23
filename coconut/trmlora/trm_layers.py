@@ -182,5 +182,6 @@ class Attention(nn.Module):
         query, key, value = map(lambda t: rearrange(t, 'B S H D -> B H S D'), (query, key, value)) # needed for scaled_dot_product_attention but not flash_attn_func
         attn_output = F.scaled_dot_product_attention(query=query, key=key, value=value, is_causal=self.causal)
         attn_output = rearrange(attn_output, 'B H S D -> B S H D')
-        attn_output = attn_output.view(batch_size, seq_len, self.output_size)  # type: ignore
+        # Use reshape instead of view to handle non-contiguous tensors
+        attn_output = attn_output.reshape(batch_size, seq_len, self.output_size)  # type: ignore
         return self.o_proj(attn_output)

@@ -77,9 +77,7 @@ def load_new_model(conf: BaseConfig, device, dtype):
     # trm_hidden_size = base_model.config.hidden_size
 
     
-    
-
-    target_layers = [num_layers-1, 10, 20, 30, 40, 50, 60, 70, 80]
+    target_layers = [int(x/num_layers) for x in range(0, 100, 10)]
     target_modules = [k for k,v in base_model.named_modules() if (".mlp." in k) and isinstance(v, torch.nn.Linear) and any(f".{i}." in k for i in target_layers)]
     logger.info(f"Targeting {len(target_modules)} modules for TRM LoRA adapters")
     peft_config = TRMConfig(
@@ -140,5 +138,6 @@ def save_model(model, tokenizer, configs, save_dir: Path):
     state_dict = model.state_dict()
     state_dict = {k: v for k, v in state_dict.items() if not k.startswith('model.model.')}
     save_folder = str(save_dir / "trmlora/")
-    model.model.save_pretrained(save_folder)
+    logger.error("FIXME save with custom peft type: Unknown PEFT type passed: TRMLORA")
+    # model.model.save_pretrained(save_folder)
     logger.info(f"saving model {save_folder}")

@@ -79,7 +79,7 @@ class TRMLoraLayer(BaseTunerLayer):
     """
     # All names of layers that may contain (trainable) adapter weights
     adapter_layer_names = (
-        "trmlora_A",
+        # "trmlora_A", # 
         "trmlora_B",
     )
     # All names of other parameters that may contain adapter-related parameters
@@ -93,7 +93,7 @@ class TRMLoraLayer(BaseTunerLayer):
         self.base_layer = base_layer
         self.r = {}
         self.trmlora_dropout = nn.ModuleDict({})
-        self.trmlora_A = nn.ParameterDict({})
+        # self.trmlora_A = nn.ParameterDict({}) # FIXME is it used?
         self.trmlora_B = nn.ParameterDict({})
         
         # Mark the weight as unmerged (PEFT pattern uses underscore)
@@ -121,11 +121,14 @@ class TRMLoraLayer(BaseTunerLayer):
         """Internal function to create TRM LoRA adapter"""
         if r <= 0:
             raise ValueError(f"`r` should be a positive integer value but the value passed is {r}")
+        
+        base_weight = self.get_base_layer().weight
+        device = base_weight.device
 
         self.r[adapter_name] = r
         # Removed unused trmlora_A
-        self.trmlora_B[adapter_name] = nn.Parameter(torch.empty(self.out_features, r))
-        
+        self.trmlora_B[adapter_name] = nn.Parameter(torch.empty(self.out_features, r, device=device))
+
         if lora_dropout > 0.0:
             module_dropout_layer = nn.Dropout(p=lora_dropout)
         else:
@@ -162,14 +165,14 @@ class TRMLoraLayer(BaseTunerLayer):
             trm_config.l_layers,
             trm_config.num_heads,
             trm_config.expansion,
-        )
+        ).to(device)
 
         # Remove transcoder MLP, use LoRA-style up-proj with B
         # self.transcoders[adapter_name] = ... (removed)
 
         # Initialize initial states in r_dim
-        zH = torch.empty(r_dim)
-        zL = torch.empty(r_dim)
+        zH = torch.empty(r_dim, device=device)
+        zL = torch.empty(r_dim, device=device)
         torch.nn.init.trunc_normal_(zH, std=1.0)
         torch.nn.init.trunc_normal_(zL, std=1.0)
         self.register_buffer(f"zH_init_{adapter_name}", zH, persistent=True)
@@ -180,7 +183,6 @@ class TRMLoraLayer(BaseTunerLayer):
             nn.init.normal_(self.trmlora_B[adapter_name], mean=0.0, std=0.02)  # Small init like in transformers
 
         # Init DoRA magnitude to base weight norms for stability (DeLoRA inspiration)
-        base_weight = self.get_base_layer().weight
         base_norm = torch.norm(base_weight, dim=1)  # Per output channel
         with torch.no_grad():
             self.dora_magnitudes[adapter_name].copy_(base_norm)
@@ -189,7 +191,7 @@ class TRMLoraLayer(BaseTunerLayer):
         with torch.no_grad():
             self.delora_lambda[adapter_name].fill_(5.0)  # Example starting bound
 
-        # Move new weights to device
+        # Move new weights to device (only does ModuleDicts, ParameterDict, BufferDict)
         self._move_adapter_to_device_of_base_layer(adapter_name)
         self.set_adapter(self.active_adapters)
 
@@ -250,7 +252,7 @@ class TRMLoraLayer(BaseTunerLayer):
 
             # Apply TRM LoRA adapters
             for adapter in self.active_adapters:
-                if adapter not in self.trmlora_A:
+                if adapter not in self.trmlora_B:
                     continue
 
                 trm_config = self.trm_configs[adapter]
@@ -270,7 +272,11 @@ class TRMLoraLayer(BaseTunerLayer):
                     context_hs = base_hidden.mean(dim=0 if base_hidden.dim() == 1 else 1, keepdim=True)  # Fallback
 
                 # Project context to low-rank dim
-                context_proj = self.down_projs[adapter](context_hs)  # [b, r]
+                # Ensure context has same dtype/device as the down projection weights to avoid matmul dtype errors
+                down_proj = self.down_projs[adapter]
+                # Move/cast context to the down_proj's device and dtype
+                context_hs_for_proj = context_hs.to(dtype=next(down_proj.parameters()).dtype, device=next(down_proj.parameters()).device)
+                context_proj = down_proj(context_hs_for_proj)  # [b, r]
 
                 # Initialize zH and zL in r_dim
                 zH = getattr(self, f"zH_init_{adapter}").unsqueeze(0).expand(b, -1).to(base_hidden.device)
@@ -327,51 +333,11 @@ class TRMLinear(nn.Module, TRMLoraLayer):
         return TRMLoraLayer.forward(self, hidden_states, *args, **kwargs)
 
     def merge(self, safe_merge: bool = False, adapter_names: Optional[list[str]] = None) -> None:
-        """Merge adapter weights into base layer"""
-        from peft.tuners.tuners_utils import check_adapters_to_merge
-        
-        adapter_names = check_adapters_to_merge(self, adapter_names)
-        if not adapter_names:
-            return
-
-        for active_adapter in adapter_names:
-            if active_adapter in self.trmlora_A.keys():
-                base_layer = self.get_base_layer()
-                # Compute delta weight
-                A = self.trmlora_A[active_adapter]
-                B = self.trmlora_B[active_adapter]
-                trm_config = self.trm_configs[active_adapter]
-                delta_weight = (B @ A) * (trm_config.lora_alpha / max(1, self.r[active_adapter]))
-                
-                with torch.no_grad():
-                    if safe_merge:
-                        orig_weights = base_layer.weight.data.clone()
-                        orig_weights = orig_weights + delta_weight
-                        if not torch.isfinite(orig_weights).all():
-                            raise ValueError(f"NaNs detected in merged weights for adapter {active_adapter}")
-                        base_layer.weight.data = orig_weights
-                    else:
-                        base_layer.weight.data.add_(delta_weight)
-                self.merged_adapters.append(active_adapter)
-                # Note: merged property is computed from merged_adapters list
+        raise NotImplementedError("Merge not implemented for TRM LoRA yet")
 
     def unmerge(self) -> None:
         """Unmerge all merged adapter layers"""
-        import warnings
-        if not self.merged:
-            warnings.warn("Already unmerged. Nothing to do.")
-            return
-        
-        while len(self.merged_adapters) > 0:
-            active_adapter = self.merged_adapters.pop()
-            if active_adapter in self.trmlora_A.keys():
-                base_layer = self.get_base_layer()
-                A = self.trmlora_A[active_adapter]
-                B = self.trmlora_B[active_adapter]
-                trm_config = self.trm_configs[active_adapter]
-                delta_weight = (B @ A) * (trm_config.lora_alpha / max(1, self.r[active_adapter]))
-                base_layer.weight.data -= delta_weight
-        # Note: merged property is computed from merged_adapters list
+        raise NotImplementedError("Unmerge not implemented for TRM LoRA yet")
 
     def __repr__(self) -> str:
         rep = super().__repr__()
