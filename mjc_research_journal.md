@@ -1939,3 +1939,19 @@ def generate(self, input_ids, max_new_tokens=100, **kwargs):
 **Key insight**: Your COCONUT code already handles the sequential, position-by-position processing that TRM needs. Just thread the recursion cache through those existing loops. The one-token-at-a-time processing during latent phases is exactly what allows the states to flow properly.
 
 where the coconut code is here https://github.com/wassname/coconut/blob/adapter_recurse/coconut/coconut.py
+
+# 2025-10-23 19:18:46
+UPTO making it work with the old coconut forward, 
+
+`self.model.forward` is now 
+`with set_adapteR(model, None)`
+
+while
+```
+out = self.model()
+diff = self.trm
+```
+is now
+`outputs = self(..., zH, zL)`
+
+but it's complex because 

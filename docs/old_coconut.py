@@ -39,6 +39,29 @@ Outputs = namedtuple(
 MAX_N_LATENT = 8
 
 
+def get_nll(logits, labels=None, attention_mask=None):
+    if labels is None:
+        return torch.tensor(0.0), torch.tensor(0.0)
+    
+    shift_logits = logits[..., :-1, :].contiguous()
+    shift_labels = labels[..., 1:].contiguous()
+    
+    if attention_mask is None:
+        shift_mask = torch.ones_like(shift_labels)
+    else:
+        shift_mask = attention_mask[..., 1:].contiguous().clone()
+
+    # also mask the -100 loss positions
+    shift_mask[shift_labels == -100] = 0
+
+    loss_fct = CrossEntropyLoss(reduction='none')
+    loss_per_token = loss_fct(
+        shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1)
+    ).view(-1, shift_logits.size(1)) # [b, s]
+    loss_per_token = loss_per_token * shift_mask.float()
+    nll = (loss_per_token * shift_mask).sum() / (shift_mask.sum() + 1e-8)
+    return nll, loss_per_token
+
 class Coconut(nn.Module):
     def __init__(
         self,
@@ -95,7 +118,28 @@ class Coconut(nn.Module):
                 0, input_ids.shape[1], dtype=torch.long, device=input_ids.device
             ).unsqueeze(0).expand(input_ids.shape[0], -1)
 
-
+        all_labels = input_ids.clone()
+        # remove latents from loss computation
+        all_labels[input_ids == self.config.latent_token_id] = -100
+        all_labels[input_ids == self.config.bot_token_id] = -100
+        all_labels[input_ids == self.config.eot_token_id] = -100
+        
+        # Compute base NLL without adapter if margin loss enabled
+        nll_base = None
+        assert self.model.active_adapter is not None, "Adapter must be active during forward"
+        if self.config.loss_nll_ratio_margin and all_labels is not None:
+            with set_adapter(self.model, None):
+                with torch.no_grad():
+                    base_outputs = self.model.model(
+                        input_ids=input_ids,
+                        attention_mask=attention_mask,
+                        position_ids=position_ids,
+                        output_hidden_states=False,
+                    )
+                    nll_base = get_nll(base_outputs.logits, all_labels, attention_mask)[1]
+                    nll_base = nll_base.detach()
+                    del base_outputs
+        
         logits = []
 
         latent_indices = (

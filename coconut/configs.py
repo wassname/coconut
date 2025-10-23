@@ -226,8 +226,6 @@ class TRM(BaseConfig):
 
     trm_svd_init: bool = False  # Whether to use SVD-based initialization for TRM transcoder
 
-    # trm_persistent_steering: bool = True  # Whether to persistently steer all future latent embeddings
-
     loss_reg_ie_diff: bool = True  # Whether to regularize input-embedding difference to be small
     loss_nll_ratio_margin: bool = True  # Whether to use NLL ratio margin loss, this aims to keep the question at least as likely and TRM making unlikely embeddings, that make the answer very likely but the quesiton incoherent. Think of it like a hard boundary for keeping the questio coherent.
 
@@ -275,7 +273,7 @@ class TRMLoRA(TRM):
 
 
 @dataclass
-class TRMLoraDebug(TRMLoRA):
+class TRMLoRADebug(TRMLoRA):
     model_id: str = "yujiepan/qwen3-tiny-random"
 
     max_size: int = 1000 # full ~400k in coconut
