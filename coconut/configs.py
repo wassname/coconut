@@ -168,6 +168,10 @@ class Debug(BaseConfig):
     epochs_per_stage: int = 1
     resume_epochs: int = 3
 
+    use_trm: bool = True
+    use_trm_lora: bool = True
+    num_epochs: int = 4
+
 
 @dataclass
 class TRMTest(BaseConfig):

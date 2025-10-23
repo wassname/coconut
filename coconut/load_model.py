@@ -74,6 +74,8 @@ def load_new_model(conf: BaseConfig, device, dtype):
     base_model.resize_token_embeddings(len(tokenizer))
 
     logger.info("Loading TRM LoRA adapter")
+    # Use model's hidden size if trm_hidden_size is None
+    trm_hidden_size = conf.trm_hidden_size if conf.trm_hidden_size is not None else base_model.config.hidden_size
     peft_config = TRMConfig(
         task_type="CAUSAL_LM",
         inference_mode=False,
@@ -83,7 +85,7 @@ def load_new_model(conf: BaseConfig, device, dtype):
         target_modules="all-linear",  # Target all linear layers
         l_cycles=conf.trm_l_cycles,
         h_cycles=conf.trm_h_cycles,
-        hidden_size=conf.trm_hidden_size,
+        hidden_size=trm_hidden_size,
         llm_hidden_size=base_model.config.hidden_size,
         expansion=conf.trm_expansion,
         l_layers=conf.trm_l_layers,
@@ -92,7 +94,7 @@ def load_new_model(conf: BaseConfig, device, dtype):
         bias="none",
         modules_to_save=None,
     )
-    base_model = get_peft_model(base_model, peft_config)
+    base_model = get_peft_model(base_model.model, peft_config)
 
     model = Coconut(base_model, conf)
     return model, tokenizer

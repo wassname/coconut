@@ -7,13 +7,15 @@ from jaxtyping import Float
 
 from peft.config import PeftConfig
 from peft.utils import PeftType
-from peft.tuners.tuners_utils import BaseTunerLayer, BaseTuner
+from peft.tuners.tuners_utils import BaseTunerLayer, BaseTuner, check_target_module_exists
 from peft.tuners._buffer_dict import BufferDict
 from peft.utils.other import get_pattern_key
 
 from .trm_adapter import L_net, TRMTranscoder, rms_norm  # Assuming rms_norm is available; adjust if needed
 
 from peft.utils import register_peft_method
+
+
 
 
 @dataclass
@@ -61,7 +63,12 @@ class TRMConfig(PeftConfig):
 
     def __post_init__(self):
         super().__post_init__()
-        self.peft_type = "TRM"  # Custom TRM type
+        # Use PeftType enum - register custom type if needed
+        try:
+            self.peft_type = PeftType.TRMLORA
+        except AttributeError:
+            # Fallback if TRMLORA not in enum yet
+            self.peft_type = "TRMLORA"
         if isinstance(self.target_modules, list):
             self.target_modules = set(self.target_modules)
 
@@ -72,26 +79,24 @@ class TRMLoraLayer(BaseTunerLayer):
     """
     # All names of layers that may contain (trainable) adapter weights
     adapter_layer_names = (
-        "trm_lora_A",
-        "trm_lora_B", 
-        "zH_init",
-        "zL_init",
+        "trmlora_A",
+        "trmlora_B",
     )
     # All names of other parameters that may contain adapter-related parameters
     other_param_names = (
         "r",
-        "trm_lora_dropout",
+        "trmlora_dropout",
     )
 
     def __init__(self, base_layer: nn.Module, **kwargs):
         super().__init__()
         self.base_layer = base_layer
         self.r = {}
-        self.trm_lora_dropout = nn.ModuleDict({})
-        self.trm_lora_A = nn.ParameterDict({})
-        self.trm_lora_B = nn.ParameterDict({})
+        self.trmlora_dropout = nn.ModuleDict({})
+        self.trmlora_A = nn.ParameterDict({})
+        self.trmlora_B = nn.ParameterDict({})
         
-        # Mark the weight as unmerged
+        # Mark the weight as unmerged (PEFT pattern uses underscore)
         self._disable_adapters = False
         self.merged_adapters = []
         self.kwargs = kwargs
@@ -102,6 +107,21 @@ class TRMLoraLayer(BaseTunerLayer):
             self.in_features, self.out_features = base_layer_mod.in_features, base_layer_mod.out_features
         else:
             raise ValueError(f"Unsupported layer type {type(base_layer_mod)}")
+    
+    @property
+    def merged(self) -> bool:
+        """Check if any adapters are merged"""
+        return bool(self.merged_adapters)
+    
+    @property
+    def disable_adapters(self) -> bool:
+        """Property to access disable_adapters state"""
+        return self._disable_adapters
+    
+    @disable_adapters.setter
+    def disable_adapters(self, value: bool) -> None:
+        """Property setter for disable_adapters"""
+        self._disable_adapters = value
 
 
     def update_layer(
@@ -119,14 +139,14 @@ class TRMLoraLayer(BaseTunerLayer):
             raise ValueError(f"`r` should be a positive integer value but the value passed is {r}")
 
         self.r[adapter_name] = r
-        self.trm_lora_A[adapter_name] = nn.Parameter(torch.empty(r, self.in_features))
-        self.trm_lora_B[adapter_name] = nn.Parameter(torch.empty(self.out_features, r))
+        self.trmlora_A[adapter_name] = nn.Parameter(torch.empty(r, self.in_features))
+        self.trmlora_B[adapter_name] = nn.Parameter(torch.empty(self.out_features, r))
         
         if lora_dropout > 0.0:
             module_dropout_layer = nn.Dropout(p=lora_dropout)
         else:
             module_dropout_layer = nn.Identity()
-        self.trm_lora_dropout.update(nn.ModuleDict({adapter_name: module_dropout_layer}))
+        self.trmlora_dropout.update(nn.ModuleDict({adapter_name: module_dropout_layer}))
 
         # Initialize TRM components for this adapter
         if not hasattr(self, 'trm_configs'):
@@ -165,8 +185,8 @@ class TRMLoraLayer(BaseTunerLayer):
 
         # Initialize LoRA weights
         if init_weights:
-            nn.init.kaiming_uniform_(self.trm_lora_A[adapter_name], a=5**0.5)
-            nn.init.zeros_(self.trm_lora_B[adapter_name])
+            nn.init.kaiming_uniform_(self.trmlora_A[adapter_name], a=5**0.5)
+            nn.init.zeros_(self.trmlora_B[adapter_name])
 
         # Move new weights to device
         self._move_adapter_to_device_of_base_layer(adapter_name)
@@ -229,7 +249,7 @@ class TRMLoraLayer(BaseTunerLayer):
 
             # Apply TRM LoRA adapters
             for adapter in self.active_adapters:
-                if adapter not in self.trm_lora_A:
+                if adapter not in self.trmlora_A:
                     continue
 
                 trm_config = self.trm_configs[adapter]
@@ -249,9 +269,9 @@ class TRMLoraLayer(BaseTunerLayer):
                 features = self.transcoders[adapter](zH_next)
 
                 # Standard LoRA forward: x @ A.T @ B.T
-                dropout_x = self.trm_lora_dropout[adapter](features)
-                delta = nn.functional.linear(dropout_x, self.trm_lora_A[adapter])
-                delta = nn.functional.linear(delta, self.trm_lora_B[adapter])
+                dropout_x = self.trmlora_dropout[adapter](features)
+                delta = nn.functional.linear(dropout_x, self.trmlora_A[adapter])
+                delta = nn.functional.linear(delta, self.trmlora_B[adapter])
                 delta = delta * (trm_config.lora_alpha / max(1, self.r[adapter]))
 
                 # Apply delta to last token hidden (latent position assumption)
@@ -288,11 +308,11 @@ class TRMLinear(nn.Module, TRMLoraLayer):
             return
 
         for active_adapter in adapter_names:
-            if active_adapter in self.trm_lora_A.keys():
+            if active_adapter in self.trmlora_A.keys():
                 base_layer = self.get_base_layer()
                 # Compute delta weight
-                A = self.trm_lora_A[active_adapter]
-                B = self.trm_lora_B[active_adapter]
+                A = self.trmlora_A[active_adapter]
+                B = self.trmlora_B[active_adapter]
                 trm_config = self.trm_configs[active_adapter]
                 delta_weight = (B @ A) * (trm_config.lora_alpha / max(1, self.r[active_adapter]))
                 
@@ -306,6 +326,7 @@ class TRMLinear(nn.Module, TRMLoraLayer):
                     else:
                         base_layer.weight.data.add_(delta_weight)
                 self.merged_adapters.append(active_adapter)
+                # Note: merged property is computed from merged_adapters list
 
     def unmerge(self) -> None:
         """Unmerge all merged adapter layers"""
@@ -316,30 +337,46 @@ class TRMLinear(nn.Module, TRMLoraLayer):
         
         while len(self.merged_adapters) > 0:
             active_adapter = self.merged_adapters.pop()
-            if active_adapter in self.trm_lora_A.keys():
+            if active_adapter in self.trmlora_A.keys():
                 base_layer = self.get_base_layer()
-                A = self.trm_lora_A[active_adapter]
-                B = self.trm_lora_B[active_adapter]
+                A = self.trmlora_A[active_adapter]
+                B = self.trmlora_B[active_adapter]
                 trm_config = self.trm_configs[active_adapter]
                 delta_weight = (B @ A) * (trm_config.lora_alpha / max(1, self.r[active_adapter]))
                 base_layer.weight.data -= delta_weight
+        # Note: merged property is computed from merged_adapters list
 
     def __repr__(self) -> str:
         rep = super().__repr__()
-        return "trm_lora." + rep
+        return "trmlora." + rep
 
+from peft.utils.constants import TRANSFORMERS_MODELS_TO_LORA_TARGET_MODULES_MAPPING
+TRANSFORMERS_MODELS_TO_TRMLORA_TARGET_MODULES_MAPPING = TRANSFORMERS_MODELS_TO_LORA_TARGET_MODULES_MAPPING.copy()
 
 class TRMModel(BaseTuner):
     """
     TRM LoRA Model that uses TRMLoraLayer as the tuner layer class.
     Proper PEFT model inheriting from BaseTuner.
     """
-    prefix: str = "trm_lora_"
+    prefix: str = "trmlora_"
     tuner_layer_cls = TRMLoraLayer
+    target_module_mapping = TRANSFORMERS_MODELS_TO_TRMLORA_TARGET_MODULES_MAPPING
 
     def _check_new_adapter_config(self, config: TRMConfig) -> None:
         """Check config when adding new adapter"""
         super()._check_new_adapter_config(config)
+
+    def _replace_module(self, parent, child_name, new_module, child):
+        """Replace child module with new_module in parent"""
+        setattr(parent, child_name, new_module)
+        # child layer wraps the original module, unpack it
+        if hasattr(child, "base_layer"):
+            child = child.base_layer
+        
+        if not hasattr(new_module, "base_layer"):
+            new_module.weight = child.weight
+            if hasattr(child, "bias"):
+                new_module.bias = child.bias
 
     def _create_and_replace(
         self,
@@ -356,11 +393,6 @@ class TRMModel(BaseTuner):
 
         # config is our TRMConfig
         trm_config = config
-
-        # Debug: print what we're getting
-        print(f"DEBUG _create_and_replace: current_key = {current_key}")
-        print(f"DEBUG _create_and_replace: target type = {type(target)}")
-        print(f"DEBUG _create_and_replace: target_name = {target_name}")
 
         # Regexp matching for patterns
         r_key = get_pattern_key(trm_config.rank_pattern.keys(), current_key) if trm_config.rank_pattern else None
@@ -389,86 +421,40 @@ class TRMModel(BaseTuner):
                 new_module.requires_grad_(False)
             self._replace_module(parent, target_name, new_module, target)
 
-    def _create_new_module(self, trm_config, adapter_name, target, **kwargs):
-        # Debug: print what we're getting
-        print(f"DEBUG: target type = {type(target)}")
-        print(f"DEBUG: target = {target}")
-        if hasattr(target, '__dict__'):
-            print(f"DEBUG: target attrs = {list(target.__dict__.keys())}")
-        
-        if isinstance(target, BaseTunerLayer):
-            target_base_layer = target.get_base_layer()
-            print(f"DEBUG: base_layer type = {type(target_base_layer)}")
-        else:
-            target_base_layer = target
-            print(f"DEBUG: using target as base_layer")
-
-        # Support both nn.Linear and other layer types that contain linear layers
-        if isinstance(target_base_layer, torch.nn.Linear):
-            new_module = TRMLinear(target, adapter_name, trm_config=trm_config, **kwargs)
-        elif hasattr(target_base_layer, 'weight') and len(target_base_layer.weight.shape) == 2:
-            # Treat any 2D weight layer as linear-like
-            new_module = TRMLinear(target, adapter_name, trm_config=trm_config, **kwargs)
-        else:
-            raise ValueError(f"Unsupported layer type: {type(target_base_layer)}")
-        return new_module
-
-    def _create_new_module(self, trm_config, adapter_name, target, **kwargs):
+    @staticmethod
+    def _create_new_module(trm_config, adapter_name, target, **kwargs):
+        """Create new TRM LoRA module - follows PEFT pattern"""
         if isinstance(target, BaseTunerLayer):
             target_base_layer = target.get_base_layer()
         else:
             target_base_layer = target
 
         if isinstance(target_base_layer, torch.nn.Linear):
-            new_module = TRMLinear(target, adapter_name, **kwargs)
+            new_module = TRMLinear(target, adapter_name, trm_config=trm_config, **kwargs)
         else:
-            raise ValueError(f"Unsupported layer type: {type(target_base_layer)}")
+            raise ValueError(
+                f"Target module {target} is not supported. "
+                f"Currently, only `torch.nn.Linear` is supported."
+            )
         return new_module
 
-    # Required abstract methods from BaseTuner
-    def _check_target_module_exists(self, trm_config: TRMConfig, key: str) -> bool:
-        """Check if target modules exist"""
-        # Simple implementation - assume they exist if target_modules is set
-        return trm_config.target_modules is not None
-
-    def _mark_only_adapters_as_trainable(self) -> None:
-        """Mark only adapter weights as trainable"""
-        for n, p in self.model.named_parameters():
-            if 'trm_lora_' not in n:
-                p.requires_grad = False
-
-    def _prepare_adapter_config(self, peft_config, adapter_name: str):
-        """Prepare adapter config"""
-        return peft_config
-
-    def disable_adapter_layers(self) -> None:
-        """Disable adapter layers"""
-        for module in self.model.modules():
-            if isinstance(module, TRMLoraLayer):
-                module.disable_adapters = True
-
-    def enable_adapter_layers(self) -> None:
-        """Enable adapter layers"""
-        for module in self.model.modules():
-            if isinstance(module, TRMLoraLayer):
-                module.disable_adapters = False
-
-    def print_trainable_parameters(self) -> None:
-        """Print trainable parameters info"""
-        super().print_trainable_parameters()
-        if hasattr(self, 'peft_config') and self.peft_config:
-            config = list(self.peft_config.values())[0]
-            if hasattr(config, 'cycles'):
-                print(f"TRM-specific params: cycles={config.cycles}, expansion={config.expansion}")
-
-PeftType.TRM = PeftType('TRM', 'TRM')
-register_peft_method(name="trm", model_cls=TRMModel, config_cls=TRMConfig)
 
 
-# Helper function to load the model with TRMConfig
-def get_trm_model(base_model, config: TRMConfig, adapter_name: str = "default"):
-    """
-    Convenience function to load a PEFT model with TRM adapter.
-    """
-    from peft import get_peft_model
-    return get_peft_model(base_model, config, adapter_name=adapter_name)
+# replace ENUM with extended version, we need to replace
+import peft.utils.peft_types
+import enum
+
+class PeftType2(str, enum.Enum):
+    TRMLORA = 'TRMLORA'
+peft.utils.peft_types.PeftType = PeftType2
+
+register_peft_method(name="trmlora", model_cls=TRMModel, config_cls=TRMConfig)
+
+
+# # Helper function to load the model with TRMConfig
+# def get_trm_model(base_model, config: TRMConfig, adapter_name: str = "default"):
+#     """
+#     Convenience function to load a PEFT model with TRM adapter.
+#     """
+#     from peft import get_peft_model
+#     return get_peft_model(base_model, config, adapter_name=adapter_name)

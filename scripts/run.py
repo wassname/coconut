@@ -52,7 +52,7 @@ from coconut.load_model import (
     tie_embeddings,
     save_model,
 )
-from cooconut.train import train
+from coconut.train import train
 
 logger.remove()
 
