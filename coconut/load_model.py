@@ -83,9 +83,9 @@ def load_new_model(conf: BaseConfig, device, dtype):
     peft_config = TRMConfig(
         task_type="CAUSAL_LM",
         inference_mode=False,
-        r=16,
-        lora_alpha=32,
-        lora_dropout=0.0,
+        r=conf.lora_r,
+        lora_alpha=conf.lora_alpha,
+        lora_dropout=conf.lora_dropout,
         # target_modules="all-linear",  # Target all linear layers
         target_modules=target_modules,
 

@@ -107,7 +107,9 @@ class Coconut(nn.Module):
                     del base_outputs
 
         # Single forward pass with inline adapter
-        # FIXME COCONUT would only turn on adapter during <latent> tokens
+        # FIXME COCONUT would only turn on adapter during <latent> tokens.
+        # ideally we can pass a [batch] of bool to indicate when to turn on/off adapter. And it can just be input_ids[-1] == latent_id
+        # could we use a "with" to modulate a adapter value
         outputs = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,

@@ -1757,3 +1757,185 @@ Key issues:
 - Pros: Mem-efficient, stable, simplified (fewer params, no unused code).
 - Cons: Global adapter might add minor overhead on non-latents; dropped losses simplify but may need tuning for performance.
 - Test: Run `uv run pytest` and small training (e.g., TRMLoraDebug) to check mem/grads/norms. If OOM persists, reduce cycles or add gradient checkpointing in HRM. If stability issues, tune lambda bounds or add more DeLoRA elements (e.g., per-rank lambda).
+
+# 2025-10-23 18:18:21
+
+It runs but
+
+- not passing zH and zL through the recursion yet
+- have not reviewed and checked
+- it's always on, and the margin loss domainates, so it's just a recursive adapter with autoregressive training for now
+  - FIXME: This is a problem because it detaches! so we only ever train the last step. But also the last layer!!
+  - But maybe it's alright as it's additive, so each LORA layer with recursion trains for the last step. And then this is leaf node, and the gradient still flows back through the original hidden states?
+- 30min per epoch, a bit slow and this is on 12 layers only. I think I might need lower rank
+
+
+Mask Propagation - YES it works!If you add latent_mask to your model's forward signature and use **kwargs, PEFT will pass it through all adapter layers:
+
+# 2025-10-23 19:00:34
+
+Looking at your COCONUT code, it already has the perfect structure for TRM integration - it processes latent tokens one-by-one! You can leverage this existing flow rather than rewriting everything.
+
+## Cleanest Integration: Use COCONUT's existing structure with TRM adapter control
+
+```python
+def forward(self, input_ids, attention_mask=None, labels=None, **kwargs):
+    # ... existing setup code ...
+    
+    # Initialize recursion cache for this forward pass
+    recursion_cache = {}  # or RecursionCache()
+    
+    # Process up to first latent token (no recursion needed)
+    with self.model.disable_adapter():  # Disable TRM adapter
+        outputs_before = self.model(
+            input_ids=input_ids[:, :start_latent_idx],
+            attention_mask=attention_mask[:, :start_latent_idx],
+            use_cache=True,
+            **kwargs,
+        )
+    
+    # Process latent tokens with TRM recursion
+    for i in range(start_latent_idx, end_latent_idx):
+        # Create mask indicating this is a latent position
+        latent_mask = torch.ones(batch_size, 1, device=device)
+        
+        # Multiple passes per token (curriculum)
+        for n_pass in range(n_passes):
+            outputs = self.model(
+                input_ids=input_ids[:, i:i+1],
+                attention_mask=attention_mask[:, i:i+1],
+                past_key_values=past_key_values,
+                recursion_cache=recursion_cache,  # Pass the cache!
+                latent_mask=latent_mask,  # Signal this is latent
+                use_cache=True,
+                **kwargs,
+            )
+            # Cache flows between passes naturally
+    
+    # Process rest of sequence (no recursion)
+    with self.model.disable_adapter():  # Disable TRM adapter again
+        outputs_after = self.model(
+            input_ids=input_ids[:, end_latent_idx:],
+            attention_mask=attention_mask[:, end_latent_idx:],
+            past_key_values=past_key_values,
+            **kwargs,
+        )
+```
+
+## Simpler: Always-on adapter with masking
+
+Instead of enable/disable, just pass a mask:
+
+```python
+def forward(self, input_ids, attention_mask=None, labels=None, **kwargs):
+    # Create latent mask for entire sequence
+    latent_mask = torch.zeros_like(input_ids, dtype=torch.float)
+    latent_mask[:, start_latent_idx:end_latent_idx] = 1.0
+    
+    recursion_cache = {}
+    
+    # Process up to first latent
+    outputs_before = self.model(
+        input_ids=input_ids[:, :start_latent_idx],
+        latent_mask=latent_mask[:, :start_latent_idx],  # All zeros
+        recursion_cache=recursion_cache,
+        use_cache=True,
+        **kwargs,
+    )
+    
+    # Process latent tokens (your existing loop)
+    for i in range(start_latent_idx, end_latent_idx):
+        for n_pass in range(n_passes):
+            outputs = self.model(
+                input_ids=input_ids[:, i:i+1],
+                latent_mask=latent_mask[:, i:i+1],  # Ones here!
+                recursion_cache=recursion_cache,  # States flow
+                past_key_values=past_key_values,
+                use_cache=True,
+                **kwargs,
+            )
+            # Recursion cache automatically updates
+    
+    # Process rest
+    outputs_after = self.model(
+        input_ids=input_ids[:, end_latent_idx:],
+        latent_mask=latent_mask[:, end_latent_idx:],  # All zeros
+        recursion_cache=recursion_cache,
+        past_key_values=past_key_values,
+        **kwargs,
+    )
+```
+
+## In your TRM LoRA layer:
+
+```python
+class TRMLoraLayer(nn.Module):
+    def forward(self, hidden_states, layer_idx=None, latent_mask=None, recursion_cache=None, **kwargs):
+        base_output = self.base_layer(hidden_states, **kwargs)
+        
+        # No recursion if no cache or no latent mask
+        if recursion_cache is None or latent_mask is None or not latent_mask.any():
+            return base_output
+        
+        # hidden_states is [batch, 1, hidden] during latent processing
+        batch_size = hidden_states.shape[0]
+        
+        # Get/init states for this layer
+        if layer_idx not in recursion_cache:
+            recursion_cache[layer_idx] = {
+                'zL': torch.zeros(batch_size, self.r, device=hidden_states.device),
+                'zH': torch.zeros(batch_size, self.r, device=hidden_states.device)
+            }
+        
+        zL = recursion_cache[layer_idx]['zL']
+        zH = recursion_cache[layer_idx]['zH']
+        
+        # Recurse
+        context = hidden_states.squeeze(1) if hidden_states.dim() == 3 else hidden_states
+        zL_new, zH_new = self.deep_recursion(context, zL, zH)
+        
+        # Update cache for next token
+        recursion_cache[layer_idx]['zL'] = zL_new.detach()
+        recursion_cache[layer_idx]['zH'] = zH_new.detach()
+        
+        # Project up and add
+        adapter_output = self.up_project(zH_new)
+        if hidden_states.dim() == 3:
+            adapter_output = adapter_output.unsqueeze(1)
+        
+        return base_output + adapter_output * self.scaling
+```
+
+## For generation:
+
+```python
+def generate(self, input_ids, max_new_tokens=100, **kwargs):
+    recursion_cache = {}
+    
+    # Process input (no latents yet)
+    outputs = self.model(
+        input_ids=input_ids,
+        latent_mask=torch.zeros_like(input_ids),
+        recursion_cache=recursion_cache,
+        **kwargs
+    )
+    
+    # Generate latent tokens
+    for _ in range(n_latent_tokens):
+        for n_pass in range(n_passes):
+            latent_mask = torch.ones(batch_size, 1)  # This is latent!
+            outputs = self.model(
+                input_ids=current_token,
+                latent_mask=latent_mask,
+                recursion_cache=recursion_cache,  # States flow
+                past_key_values=past_key_values,
+                **kwargs
+            )
+    
+    # Generate rest normally
+    # ... continue generation with latent_mask=0
+```
+
+**Key insight**: Your COCONUT code already handles the sequential, position-by-position processing that TRM needs. Just thread the recursion cache through those existing loops. The one-token-at-a-time processing during latent phases is exactly what allows the states to flow properly.
+
+where the coconut code is here https://github.com/wassname/coconut/blob/adapter_recurse/coconut/coconut.py

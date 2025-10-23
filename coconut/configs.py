@@ -197,6 +197,11 @@ class TRM(BaseConfig):
     model_id = "suayptalha/Qwen3-0.6B-Math-Expert"
     # model_id: str = "Qwen/Qwen3-0.6B"
 
+    # TODO add lora details here
+    lora_r: int = 4
+    lora_alpha: int = 16
+    lora_dropout: float = 0.0
+
     # num_epochs: int = 6  # Just a few epochs to test training
     resume_epochs: int = 8
     # epochs_per_stage: int = 8
