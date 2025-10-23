@@ -21,32 +21,43 @@ from loguru import logger
 from transformers import (
     DynamicCache,
     PreTrainedTokenizer,
-    Qwen2Config, Qwen3Config,
+    Qwen2Config,
+    Qwen3Config,
     LlamaConfig,
-    LlamaForCausalLM, PreTrainedModel
+    LlamaForCausalLM,
+    PreTrainedModel,
 )
 
 # from coconut.hs2ie import hs2ie, get_supressed_activations
 from coconut.configs import BaseConfig
 from coconut.adapters import set_adapter
+from contextlib import contextmanager
 
 
 Outputs = namedtuple(
-    "Outputs", ["loss", "inputs_embeds", "logits", "past_key_values", "hidden_states", "log", 
-    # "input_embed_diff" 
-                ] # loss_ar loss_vcr
+    "Outputs",
+    [
+        "loss",
+        "inputs_embeds",
+        "logits",
+        "past_key_values",
+        "hidden_states",
+        "log",
+        # "input_embed_diff"
+    ],  # loss_ar loss_vcr
 )
 
 # max during gen
 MAX_N_LATENT = 8
 
+
 def get_nll(logits, labels=None, attention_mask=None):
     if labels is None:
         return torch.tensor(0.0), torch.tensor(0.0)
-    
+
     shift_logits = logits[..., :-1, :].contiguous()
     shift_labels = labels[..., 1:].contiguous()
-    
+
     if attention_mask is None:
         shift_mask = torch.ones_like(shift_labels)
     else:
@@ -55,62 +66,112 @@ def get_nll(logits, labels=None, attention_mask=None):
     # also mask the -100 loss positions
     shift_mask[shift_labels == -100] = 0
 
-    loss_fct = CrossEntropyLoss(reduction='none')
+    loss_fct = CrossEntropyLoss(reduction="none")
     loss_per_token = loss_fct(
         shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1)
-    ).view(-1, shift_logits.size(1)) # [b, s]
+    ).view(-1, shift_logits.size(1))  # [b, s]
     loss_per_token = loss_per_token * shift_mask.float()
     nll = (loss_per_token * shift_mask).sum() / (shift_mask.sum() + 1e-8)
     return nll, loss_per_token
 
+
+def slice_cache(past_key_values: DynamicCache, a: int, b: int):
+    """Subset the past_key_values to only keep those at the specified indices."""
+    if past_key_values is None:
+        return None
+    cache = [
+        (
+            k[:, :, a:b, :],
+            v[:, :, a:b, :],
+        )
+        for k, v in past_key_values
+    ]
+
+    # Qwen needs this
+    return DynamicCache.from_legacy_cache(cache)
+
+
+class slice_kvcache:
+    def __init__(self, cache: Optional[DynamicCache]=None):
+        self.cache = cache
+
+    def __getitem__(self, slice):
+        if self.cache is None:
+            return None
+        return slice_cache(self.cache, slice.start, slice.stop)
+
+
 class Coconut(nn.Module):
-    def __init__(
-        self,
-        base_model: PreTrainedModel,
-        config: BaseConfig
-    ):
+    def __init__(self, base_model: PreTrainedModel, config: BaseConfig):
         super().__init__()
         self.model = base_model
 
         self.config = config
 
         self.gen_forward_cnt = 0
+        self._recursion_cache = None  # Will be set via context manager
 
-
-    def forward(self, input_ids, attention_mask=None, labels=None, position_ids=None, **kwargs):
-
+    @contextmanager
+    def recursion_context(self, cache: dict):
+        """Context manager to inject recursion_cache into all TRM layers."""
+        # Walk down model tree and inject cache into TRM layers
+        trm_layers = []
+        for name, module in self.model.named_modules():
+            if hasattr(module, '_is_trm_layer'):
+                trm_layers.append(module)
+                module._recursion_cache = cache
         
+        try:
+            yield cache
+        finally:
+            # Clean up: remove cache from all TRM layers
+            for module in trm_layers:
+                module._recursion_cache = None
+
+    def forward(
+        self, input_ids, attention_mask=None, labels=None, position_ids=None, **kwargs
+    ):
         if attention_mask is None:
-            attention_mask=torch.ones_like(input_ids, device=input_ids.device)
+            attention_mask = torch.ones_like(input_ids, device=input_ids.device)
         if labels is None:
-            labels=input_ids.clone()
+            labels = input_ids.clone()
         if position_ids is None:
-            position_ids=torch.arange(
-                0, input_ids.shape[1], dtype=torch.long, device=input_ids.device
-            ).unsqueeze(0).expand(input_ids.shape[0], -1)
+            position_ids = (
+                torch.arange(
+                    0, input_ids.shape[1], dtype=torch.long, device=input_ids.device
+                )
+                .unsqueeze(0)
+                .expand(input_ids.shape[0], -1)
+            )
 
         all_labels = input_ids.clone()
         # remove latents from loss computation
         all_labels[input_ids == self.config.latent_token_id] = -100
         all_labels[input_ids == self.config.bot_token_id] = -100
         all_labels[input_ids == self.config.eot_token_id] = -100
-        
+
         # Compute base NLL without adapter if margin loss enabled
         nll_base = None
-        assert self.model.active_adapter is not None, "Adapter must be active during forward"
+        assert self.model.active_adapter is not None, (
+            "Adapter must be active during forward"
+        )
         if self.config.loss_nll_ratio_margin and all_labels is not None:
             with set_adapter(self.model, None):
                 with torch.no_grad():
-                    base_outputs = self.model.model(
+                    base_outputs = self.model.forward(
                         input_ids=input_ids,
                         attention_mask=attention_mask,
                         position_ids=position_ids,
                         output_hidden_states=False,
+                        # recursion_cache={},
                     )
-                    nll_base = get_nll(base_outputs.logits, all_labels, attention_mask)[1]
+                    
+                    nll_base = get_nll(base_outputs.logits, all_labels, attention_mask)[
+                        1
+                    ]
                     nll_base = nll_base.detach()
                     del base_outputs
-        
+
         logits = []
 
         latent_indices = (
@@ -124,211 +185,111 @@ class Coconut(nn.Module):
 
         max_n_latents = max([len(l) for l in latent_lists])
 
-        next_compute_range = (0, input_ids.shape[1])
+        a, b = 0, input_ids.shape[1]
         inputs_embeds = self.model.get_input_embeddings()(input_ids)
 
         if max_n_latents > 0:
-            next_compute_range = (0, latent_indices[:, 1].min().item())
+            a,b = 0, latent_indices[:, 1].min().item()
             # before the earliest latent token position
 
         kv_cache = None
 
         # all_hs = []
-        
+
         # TRM state carryover across passes (for recursive refinement)
-        zL_prev, zH_prev = None, None
-        input_embed_diff = None
+        # zL_prev, zH_prev = None, None
+        recursion_cache = {}
 
-        for pass_idx in range(max_n_latents):
-            # TRM-style detached recursions: detach gradients for early passes,
-            # keep gradients for last N passes to learn error cleanup
-            should_detach = (
-                self.training 
-                and self.config.n_detached_recursions > 0 
-                and pass_idx < (max_n_latents - self.config.n_detached_recursions)
-            )
-            
-            if should_detach:
-                ctx1 =  set_adapter(self.model, None)
-                ctx2 = torch.no_grad()
+        with self.recursion_context(recursion_cache):
+            for pass_idx in range(max_n_latents):
+                # TRM-style detached recursions: detach gradients for early passes,
+                # keep gradients for last N passes to learn error cleanup
+                should_detach = (
+                    self.training
+                    and (self.config.n_detached_recursions > 0)
+                    and (pass_idx < (max_n_latents - self.config.n_detached_recursions))
+                )
 
-                # combine two contexts
-                from contextlib import ExitStack
-                ctx = ExitStack()
-                ctx.enter_context(ctx1)
-                ctx.enter_context(ctx2)
-            else:
-                ctx = torch.enable_grad()
-            
-            with ctx:
-                if kv_cache is None:
-                    # first forward pass
-                    outputs = self.model.forward(
-                        inputs_embeds=inputs_embeds[
-                            :, next_compute_range[0] : next_compute_range[1], :
-                        ],
-                        attention_mask=attention_mask[
-                            :, next_compute_range[0] : next_compute_range[1]
-                        ],
-                        position_ids=position_ids[
-                            :, next_compute_range[0] : next_compute_range[1]
-                        ],
-                        output_hidden_states=True,
-                        use_cache=True,
-                    )
-                    hidden_states_offset = 0
+                has_latents = (
+                    (input_ids[:, a:b] == self.config.latent_token_id).any().item()
+                )
 
+                if should_detach:
+                    ctd_grad = torch.no_grad()
                 else:
-                    # extract kv cache to reuse
-                    past_key_values = [
-                        (
-                            k[:, :, : next_compute_range[0], :],
-                            v[:, :, : next_compute_range[0], :],
+                    ctd_grad = torch.enable_grad()
+
+                with set_adapter(
+                    self.model, self.model.active_adapter if has_latents else None
+                ):
+                    with ctd_grad:
+
+                        outputs = self.model.forward(
+                            inputs_embeds=inputs_embeds[:, a:b],
+                            attention_mask=attention_mask[:, :b],
+                            position_ids=position_ids[:, a:b],
+                            recursion_cache=recursion_cache,
+                            past_key_values=slice_kvcache(kv_cache)[0:a],
+                            output_hidden_states=True,
+                            use_cache=True,
                         )
-                        for k, v in kv_cache
-                    ]
+                        # zL_prev = outputs.zL
+                        # zH_prev = outputs.zH
 
-                    # Qwen needs this
-                    past_key_values= DynamicCache.from_legacy_cache(past_key_values)
+                        logits.append(outputs.logits)
 
-                    outputs = self.model.forward(
-                        inputs_embeds=inputs_embeds[
-                            :, next_compute_range[0] : next_compute_range[1], :
-                        ],
-                        attention_mask=attention_mask[:, : next_compute_range[1]],
-                        position_ids=position_ids[
-                            :, next_compute_range[0] : next_compute_range[1]
-                        ],
-                        past_key_values=past_key_values,
-                        output_hidden_states=True,
-                        use_cache=True,
-                    )
-
-                    hidden_states_offset = next_compute_range[0]
-                    # when we use kv_cache for the first k tokens
-                    # in `outputs.hidden_states`, [0, k) will be skipped
-                    # so we need to keep this offset to correctly use the last hidden states
-
-                logits.append(outputs.logits)
-
-                next_compute_range = (
-                    next_compute_range[1],
-                    (
-                        input_ids.shape[1]
-                        if pass_idx + 1 >= max_n_latents
-                        else next_compute_range[1] + 1
-                    ),
-                )
-
-                hidden_states = outputs.hidden_states
-                assert hidden_states is not None
-                kv_cache = outputs.past_key_values
-                if isinstance(kv_cache, DynamicCache):
-                    kv_cache = kv_cache.to_legacy_cache()
-                assert kv_cache is not None
-
-                # feedback the continuous thoughts to the input_embeds
-                # first decide the positions to feedback
-                filling_indices = [
-                    (instance_idx, mask_list[pass_idx])
-                    for instance_idx, mask_list in enumerate(latent_lists)
-                    if len(mask_list) > pass_idx
-                ]
-
-                # to avoid in-place operations
-                # break down inputs_embeds (bs, len, hidden_size) into a list of list of 1-d tensors
-                tensor_list = [
-                    [
-                        inputs_embeds[batch_idx, pos, :]
-                        for pos in range(inputs_embeds.shape[1])
-                    ]
-                    for batch_idx in range(inputs_embeds.shape[0])
-                ]
-
-                # replace some of them with continuous thoughts
-                # Note: zL_prev, zH_prev initialized outside loop and carried across passes
-
-                if filling_indices:
-                    batch_indices, token_indices = zip(*filling_indices)
-                    # Get hidden states only for batches with latents at this pass
-                    n = len(hidden_states)
-                    n = max(0, n - 4)
-                    last_hidden_states = hidden_states[n][list(batch_indices), -1:, :]  # [b, 1, h]
-                    
-                    # Get previous states for these batches (if they exist)
-                    zL_batch = zL_prev[list(batch_indices)] if zL_prev is not None else None
-                    zH_batch = zH_prev[list(batch_indices)] if zH_prev is not None else None
-                    
-                    # TRM only on relevant batches
-                    input_embed_diff, zL_next, zH_next = self.trm(last_hidden_states, zL_batch, zH_batch)  # [b, h]
-                    # FIXME normal pass, passing in zL_batch, zH_batch
-                    
-                    # Initialize full state if needed
-                    if zL_prev is None:
-                        hidden_size = last_hidden_states.shape[-1]
-                        zL_prev = torch.zeros(input_ids.shape[0], hidden_size, 
-                                            device=last_hidden_states.device, dtype=last_hidden_states.dtype)
-                        zH_prev = torch.zeros(input_ids.shape[0], hidden_size, 
-                                            device=last_hidden_states.device, dtype=last_hidden_states.dtype)
-                    
-                    # Update only the batches that were processed (match dtype)
-                    zL_prev[list(batch_indices)] = zL_next.to(zL_prev.dtype)
-                    zH_prev[list(batch_indices)] = zH_next.to(zH_prev.dtype)
-                    
-                    # Apply embeddings
-                    for batch_idx, token_idx in filling_indices:
-                        tensor_list[batch_idx][token_idx] = tensor_list[batch_idx][token_idx] + input_embed_diff[batch_idx]
-                # Note: keep input_embed_diff from last pass for persistent steering
-
-
-                # assemble the new inputs_embeds
-                inputs_embeds = torch.stack(
-                    [
-                        torch.stack(tensor_list[batch_idx])
-                        for batch_idx in range(inputs_embeds.shape[0])
-                    ]
-                )
-            
-            # Detach inputs_embeds after detached passes to prevent gradients flowing back
-            if should_detach:
-                inputs_embeds = inputs_embeds.detach()
-
-        past_key_values=(
-                        [
+                        # update compute range
+                        a, b = (
+                            b,
                             (
-                                k[:, :, : next_compute_range[0], :],
-                                v[:, :, : next_compute_range[0], :],
-                            )
-                            for k, v in kv_cache
+                                input_ids.shape[1]
+                                if pass_idx + 1 >= max_n_latents
+                                else b + 1
+                            ),
+                        )
+
+                        hidden_states = outputs.hidden_states
+                        assert hidden_states is not None
+                        kv_cache = outputs.past_key_values
+                        if isinstance(kv_cache, DynamicCache):
+                            kv_cache = kv_cache.to_legacy_cache()
+                        assert kv_cache is not None
+
+                        # to avoid in-place operations
+                        # break down inputs_embeds (bs, len, hidden_size) into a list of list of 1-d tensors
+                        tensor_list = [
+                            [
+                                inputs_embeds[batch_idx, pos, :]
+                                for pos in range(inputs_embeds.shape[1])
+                            ]
+                            for batch_idx in range(inputs_embeds.shape[0])
                         ]
-                        if kv_cache
-                        else None
-                    )
-        past_key_values= DynamicCache.from_legacy_cache(past_key_values)
 
-        # if steer_all=
+                        # assemble the new inputs_embeds
+                        inputs_embeds = torch.stack(
+                            [
+                                torch.stack(tensor_list[batch_idx])
+                                for batch_idx in range(inputs_embeds.shape[0])
+                            ]
+                        )
 
+            # Now do the rest of the generation after the last latent
 
-        # final pass
-        inputs_embeds=inputs_embeds[
-                :, next_compute_range[0] : next_compute_range[1], :
-        ]
-        # if self.config.trm_persistent_steering and input_embed_diff is not None and filling_indices:
-        #     # Apply steering only to batches that had latents in the last pass
-        #     batch_indices_last = [idx for idx, _ in filling_indices]
-        #     for filling_idx, batch_idx in enumerate(batch_indices_last):
-        #         inputs_embeds[batch_idx] = inputs_embeds[batch_idx] + input_embed_diff[batch_idx]
+            # 3, FINAL PASS
+            with set_adapter(self.model, None):
+                outputs = self.model.forward(
+                    inputs_embeds=inputs_embeds[:, a:b],
+                    attention_mask=attention_mask[:, :b],
+                    position_ids=position_ids[:, a:b],
+                    past_key_values=slice_kvcache(kv_cache)[0:a],
+                    output_hidden_states=True,
+                    # zL=zL_prev,
+                    # zH=zH_prev,
+                    recursion_cache=recursion_cache,
+                    use_cache=True,
+                )
 
-        with set_adapter(self.model, None):
-            outputs = self.model.forward(
-                inputs_embeds=inputs_embeds,
-                attention_mask=attention_mask[:, : next_compute_range[1]],
-                position_ids=position_ids[:, next_compute_range[0] : next_compute_range[1]],
-                past_key_values=past_key_values,
-                output_hidden_states=True,
-            )
-
-        logits.append(outputs.logits)
+            logits.append(outputs.logits)
 
         # # collect hs
         # hs = rearrange(list(outputs.hidden_states), "l b t h -> l b t h").detach().cpu()
@@ -357,10 +318,14 @@ class Coconut(nn.Module):
 
         assert torch.isfinite(loss).all(), f"Loss is {loss}"
 
-        return Outputs(loss=loss, inputs_embeds=inputs_embeds, logits=logits, past_key_values=outputs.past_key_values,
-                        hidden_states=[],#list(all_hs), 
-                        log=extra)
-
+        return Outputs(
+            loss=loss,
+            inputs_embeds=inputs_embeds,
+            logits=logits,
+            past_key_values=outputs.past_key_values,
+            hidden_states=[],  # list(all_hs),
+            log=extra,
+        )
 
     def generate(
         self,
@@ -372,7 +337,7 @@ class Coconut(nn.Module):
         **kwargs,
     ):
         """Generate answer tokens after processing latent reasoning.
-        
+
         Note: Requires input_ids to contain pre-filled <latent> tokens.
         The method processes these latents with TRM (if enabled), then generates
         the answer continuation. For dynamic latent generation, use a different approach.
@@ -389,10 +354,14 @@ class Coconut(nn.Module):
         # Use self.forward (Coconut) not self.model.forward (base LLM) to enable TRM
         with torch.no_grad():
             coconut_outputs = self.forward(input_ids, attention_mask)
-        outputs = type('obj', (object,), {
-            'logits': coconut_outputs.logits,
-            'past_key_values': coconut_outputs.past_key_values
-        })()
+        outputs = type(
+            "obj",
+            (object,),
+            {
+                "logits": coconut_outputs.logits,
+                "past_key_values": coconut_outputs.past_key_values,
+            },
+        )()
 
         # get the first token using the current hidden state
         next_token = outputs.logits[:, -1].argmax(-1).detach().unsqueeze(1)
@@ -409,7 +378,11 @@ class Coconut(nn.Module):
         for _ in range(max_new_tokens - 1):
             # Use base model forward for answer generation (latents already processed above)
             check_input_lens(new_inputs_embeds, new_att_mask, kv_cache)
-            outputs = self.model.forward(inputs_embeds=new_inputs_embeds, past_key_values=kv_cache, attention_mask=new_att_mask)
+            outputs = self.model.forward(
+                inputs_embeds=new_inputs_embeds,
+                past_key_values=kv_cache,
+                attention_mask=new_att_mask,
+            )
             kv_cache = outputs.past_key_values
             self.gen_forward_cnt += 1
             next_token = outputs.logits[:, -1].argmax(-1).detach().unsqueeze(1)
@@ -420,7 +393,7 @@ class Coconut(nn.Module):
 
             # Allow it to stop early if all batch have generated EOS
             if (tokens[:, T:] == self.model.config.eos_token_id).any(1).all(0):
-                if _>min_new_tokens:
+                if _ > min_new_tokens:
                     logger.info("EOS token generated, stopping early")
                     break
 
@@ -435,17 +408,21 @@ class Coconut(nn.Module):
 
         else:
             return tokens
+
+
 def check_input_lens(input_ids, attention_mask, kv_cache):
     # Handle None cache
     if kv_cache is None:
         len_c = 0
     # Handle DynamicCache - use get_seq_length() method
-    elif hasattr(kv_cache, 'get_seq_length'):
+    elif hasattr(kv_cache, "get_seq_length"):
         len_c = kv_cache.get_seq_length()
     else:
         # legacy cache format
         len_c = kv_cache.key_cache[0].shape[2] if len(kv_cache.key_cache) else 0
-    
+
     len_ids = input_ids.shape[1]
     len_att = attention_mask.shape[1]
-    assert len_c + len_ids == len_att, f"The length of the attention mask  {len_att} should cover the cache length {len_c} and the len of the input_ids {len_ids}"
+    assert len_c + len_ids == len_att, (
+        f"The length of the attention mask  {len_att} should cover the cache length {len_c} and the len of the input_ids {len_ids}"
+    )
