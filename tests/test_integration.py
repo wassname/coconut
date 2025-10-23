@@ -1,10 +1,10 @@
-from coconut.configs import BaseConfig, Debug
+from coconut.configs import BaseConfig, TRMLoraDebug
 from coconut.train import train
-
+import coconut.silence
 
 def test_tiny_train():
     # should train a small amount, eval, save
-    conf = Debug()
+    conf = TRMLoraDebug()
     train(conf)
 
 # TODO test forward

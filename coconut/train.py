@@ -45,7 +45,6 @@ from coconut.utils import Config, convert_to_bfloat16, set_seed, clear_memory, p
 from coconut.load_model import (
     load_new_model,
     resume_model,
-    tie_embeddings,
     save_model,
 )
 
@@ -146,7 +145,7 @@ def train(conf: Config):
         model, tokenizer = resume_model(conf, device, dtype)
     else:
         model, tokenizer = load_new_model(conf, device, dtype)
-        tie_embeddings(model, tokenizer)
+        # tie_embeddings(model, tokenizer)
     model = model.to(device)
 
     # if conf.bf16_weight is True:

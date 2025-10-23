@@ -1,24 +1,16 @@
-import argparse
-# Early warning filter: suppress noisy Pydantic UnsupportedFieldAttributeWarning
-# which can be emitted when generating schemas for dataclasses used by tyro.
 import warnings
-from torchinfo import summary
-try:
-    from pydantic._internal._generate_schema import UnsupportedFieldAttributeWarning
-    warnings.filterwarnings("ignore", category=UnsupportedFieldAttributeWarning)
-except Exception:
-    # Fallback: filter by message substrings if pydantic internals path changes
-    warnings.filterwarnings(
-        "ignore",
-        message="The 'repr' attribute with value False was provided to the `Field()` function",
-    )
-    warnings.filterwarnings(
-        "ignore",
-        message="The 'frozen' attribute with value True was provided to the `Field()` function",
-    )
 
-import gc
-import json
+# can be emitted when generating schemas for dataclasses used by tyro.
+warnings.filterwarnings(
+    "ignore",
+    message="The 'repr' attribute with value False was provided to the `Field()` function",
+)
+warnings.filterwarnings(
+    "ignore",
+    message="The 'frozen' attribute with value True was provided to the `Field()` function",
+)
+
+from torchinfo import summary
 import os
 import time
 from copy import copy
@@ -49,7 +41,6 @@ from coconut.utils import Config, convert_to_bfloat16, set_seed, clear_memory, p
 from coconut.load_model import (
     load_new_model,
     resume_model,
-    tie_embeddings,
     save_model,
 )
 from coconut.train import train

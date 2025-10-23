@@ -140,7 +140,18 @@ class TRMLoraLayer(BaseTunerLayer):
         # Initialize TRM networks
         if not hasattr(self, 'l_nets'):
             self.l_nets = {}
-        
+
+        # Early creation of DoRA and DeLoRA params to avoid AttributeError
+        if not hasattr(self, 'dora_magnitudes'):
+            self.dora_magnitudes = nn.ParameterDict({})
+        if adapter_name not in self.dora_magnitudes:
+            self.dora_magnitudes[adapter_name] = nn.Parameter(torch.ones(self.out_features))
+
+        if not hasattr(self, 'delora_lambda'):
+            self.delora_lambda = nn.ParameterDict({})
+        if adapter_name not in self.delora_lambda:
+            self.delora_lambda[adapter_name] = nn.Parameter(torch.tensor(1.0))
+
         r_dim = self.r[adapter_name]
         r_dim = self.r[adapter_name]
         self.down_projs = nn.ModuleDict({})
@@ -171,20 +182,12 @@ class TRMLoraLayer(BaseTunerLayer):
         # Init DoRA magnitude to base weight norms for stability (DeLoRA inspiration)
         base_weight = self.get_base_layer().weight
         base_norm = torch.norm(base_weight, dim=1)  # Per output channel
-        self.dora_magnitudes[adapter_name].data = base_norm.detach()
+        with torch.no_grad():
+            self.dora_magnitudes[adapter_name].copy_(base_norm)
 
         # Init lambda to reasonable bound
-        self.delora_lambda[adapter_name].data.fill_(5.0)  # Example starting bound
-
-        # Add DoRA magnitude param per output feature
-        if not hasattr(self, 'dora_magnitudes'):
-            self.dora_magnitudes = nn.ParameterDict({})
-        self.dora_magnitudes[adapter_name] = nn.Parameter(torch.ones(self.out_features))
-
-        # Add DeLoRA lambda (scalar for simplicity, or per-rank if r>1)
-        if not hasattr(self, 'delora_lambda'):
-            self.delora_lambda = nn.ParameterDict({})
-        self.delora_lambda[adapter_name] = nn.Parameter(torch.tensor(1.0))  # Init to 1.0
+        with torch.no_grad():
+            self.delora_lambda[adapter_name].fill_(5.0)  # Example starting bound
 
         # Move new weights to device
         self._move_adapter_to_device_of_base_layer(adapter_name)

@@ -68,17 +68,20 @@ def load_new_model(conf: BaseConfig, device, dtype):
     base_model = AutoModelForCausalLM.from_pretrained(
         conf.model_id, config=model_config, device_map=device, torch_dtype=dtype, quantization_config=quantization_config
     )
-    
-    # apply_config(model, tokenizer, conf)
 
     base_model.resize_token_embeddings(len(tokenizer))
 
     logger.info("Loading TRM LoRA adapter")
-    # Use model's hidden size if trm_hidden_size is None
-    trm_hidden_size = conf.trm_hidden_size if conf.trm_hidden_size is not None else base_model.config.hidden_size
 
-    target_layers = [10, 20, 30, 40, 50, 60, 70, 80]
+    num_layers = base_model.config.num_hidden_layers
+    # trm_hidden_size = base_model.config.hidden_size
+
+    
+    
+
+    target_layers = [num_layers-1, 10, 20, 30, 40, 50, 60, 70, 80]
     target_modules = [k for k,v in base_model.named_modules() if (".mlp." in k) and isinstance(v, torch.nn.Linear) and any(f".{i}." in k for i in target_layers)]
+    logger.info(f"Targeting {len(target_modules)} modules for TRM LoRA adapters")
     peft_config = TRMConfig(
         task_type="CAUSAL_LM",
         inference_mode=False,
@@ -126,23 +129,23 @@ def resume_model(conf: BaseConfig, device="auto", dtype=torch.bfloat16):
     # set the configuration
     return model, tokenizer
 
-def tie_embeddings(base, tokenizer):
-    latent_id = tokenizer.convert_tokens_to_ids("<|latent|>")
-    bot_id = tokenizer.convert_tokens_to_ids("<|start-latent|>")
-    eot_id = tokenizer.convert_tokens_to_ids("<|end-latent|>")
-    # tie the embeddings for the special tokens
-    embeddings = base.model.get_input_embeddings()
-    target_id = tokenizer.convert_tokens_to_ids("<<")
-    # TODO check this is in vocab
-    for token_id in [latent_id, bot_id, eot_id]:
-        # tie embeddings for special tokens
-        target_embedding = embeddings.weight.data[target_id]
-        embeddings.weight.data[token_id] = target_embedding.clone()
+# def tie_embeddings(base, tokenizer):
+#     latent_id = tokenizer.convert_tokens_to_ids("<|latent|>")
+#     bot_id = tokenizer.convert_tokens_to_ids("<|start-latent|>")
+#     eot_id = tokenizer.convert_tokens_to_ids("<|end-latent|>")
+#     # tie the embeddings for the special tokens
+#     embeddings = base.model.get_input_embeddings()
+#     target_id = tokenizer.convert_tokens_to_ids("<<")
+#     # TODO check this is in vocab
+#     for token_id in [latent_id, bot_id, eot_id]:
+#         # tie embeddings for special tokens
+#         target_embedding = embeddings.weight.data[target_id]
+#         embeddings.weight.data[token_id] = target_embedding.clone()
 
-        # The input embeddings and lm heads are tied in GPT2. So the code below is not necessary
-        lm_head = base.model.lm_head
-        lm_head.weight.data[token_id] = lm_head.weight.data[target_id].clone()
-    return base
+#         # The input embeddings and lm heads are tied in GPT2. So the code below is not necessary
+#         lm_head = base.model.lm_head
+#         lm_head.weight.data[token_id] = lm_head.weight.data[target_id].clone()
+#     return base
 
 def save_model(model, tokenizer, configs, save_dir: Path):
     # tokenizer.save_pretrained(save_dir)

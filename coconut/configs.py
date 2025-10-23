@@ -237,22 +237,7 @@ class TRM(BaseConfig):
     eval_first_epoch: bool = False  # Skip eval for speed
     
 
-@dataclass
-class TRMDebug(TRM):
-    model_id: str = "yujiepan/qwen3-tiny-random"
 
-    max_size: int = 1000 # full ~400k in coconut
-    debug: bool = True
-
-    batch_size_training: int = 8
-    gradient_accumulation_steps: int = 2
-
-    cot_epochs: int = 1
-    epochs_per_stage: int = 1
-    resume_epochs: int = 3
-    num_epochs: int = 5
-
-    eval_first_epoch: bool = False  # Skip eval for speed
 
 
 @dataclass
@@ -282,6 +267,24 @@ class TRMLoRA(TRM):
     # LoRA-specific: lower LR, target layer 20
     lr: float = 1e-4
     weight_decay: float = 0.01
+
+
+@dataclass
+class TRMLoraDebug(TRMLoRA):
+    model_id: str = "yujiepan/qwen3-tiny-random"
+
+    max_size: int = 1000 # full ~400k in coconut
+    debug: bool = True
+
+    batch_size_training: int = 8
+    gradient_accumulation_steps: int = 2
+
+    cot_epochs: int = 1
+    epochs_per_stage: int = 1
+    resume_epochs: int = 3
+    num_epochs: int = 5
+
+    eval_first_epoch: bool = False  # Skip eval for speed
 
 # @dataclass
 # class TRM_H100(GsmQwen_H100):
