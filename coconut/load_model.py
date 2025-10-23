@@ -158,5 +158,7 @@ def save_model(model, tokenizer, configs, save_dir: Path):
     # save state dict (only TRM adapter, not frozen base model)
     state_dict = model.state_dict()
     state_dict = {k: v for k, v in state_dict.items() if not k.startswith('model.model.')}
-    safetensors.torch.save_file(state_dict, str(save_dir / "pytorch_model.safetensors"))
-    logger.info(f"saving model {save_dir / 'pytorch_model.safetensors'}")
+    # safetensors.torch.save_file(state_dict, str(save_dir / "pytorch_model.safetensors"))
+    save_folder = str(save_dir / "trmlora/")
+    model.model.save_pretrained(save_folder)
+    logger.info(f"saving model {save_folder}")
