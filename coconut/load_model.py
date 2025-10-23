@@ -129,27 +129,8 @@ def resume_model(conf: BaseConfig, device="auto", dtype=torch.bfloat16):
     # set the configuration
     return model, tokenizer
 
-# def tie_embeddings(base, tokenizer):
-#     latent_id = tokenizer.convert_tokens_to_ids("<|latent|>")
-#     bot_id = tokenizer.convert_tokens_to_ids("<|start-latent|>")
-#     eot_id = tokenizer.convert_tokens_to_ids("<|end-latent|>")
-#     # tie the embeddings for the special tokens
-#     embeddings = base.model.get_input_embeddings()
-#     target_id = tokenizer.convert_tokens_to_ids("<<")
-#     # TODO check this is in vocab
-#     for token_id in [latent_id, bot_id, eot_id]:
-#         # tie embeddings for special tokens
-#         target_embedding = embeddings.weight.data[target_id]
-#         embeddings.weight.data[token_id] = target_embedding.clone()
-
-#         # The input embeddings and lm heads are tied in GPT2. So the code below is not necessary
-#         lm_head = base.model.lm_head
-#         lm_head.weight.data[token_id] = lm_head.weight.data[target_id].clone()
-#     return base
 
 def save_model(model, tokenizer, configs, save_dir: Path):
-    # tokenizer.save_pretrained(save_dir)
-    # model.model.save_pretrained(save_dir)
     save_dir.mkdir(parents=True, exist_ok=True)
     with open(save_dir / "coconut_config.toml", "w") as f:
         toml.dump(configs, f)
@@ -158,7 +139,6 @@ def save_model(model, tokenizer, configs, save_dir: Path):
     # save state dict (only TRM adapter, not frozen base model)
     state_dict = model.state_dict()
     state_dict = {k: v for k, v in state_dict.items() if not k.startswith('model.model.')}
-    # safetensors.torch.save_file(state_dict, str(save_dir / "pytorch_model.safetensors"))
     save_folder = str(save_dir / "trmlora/")
     model.model.save_pretrained(save_folder)
     logger.info(f"saving model {save_folder}")
