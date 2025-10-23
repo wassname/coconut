@@ -41,8 +41,8 @@ class TRMConfig(PeftConfig):
     # TRM-specific parameters
     l_cycles: int = field(default=6, metadata={"help": "Number of L_net cycles per H cycle"})
     h_cycles: int = field(default=2, metadata={"help": "Number of H cycles"})
-    hidden_size: int = field(default=2048, metadata={"help": "TRM hidden size"})
-    llm_hidden_size: int = field(default=2048, metadata={"help": "LLM hidden size"})
+    # hidden_size: int = field(default=2048, metadata={"help": "TRM hidden size"})
+    # llm_hidden_size: int = field(default=2048, metadata={"help": "LLM hidden size"})
     expansion: float = field(default=2.67, metadata={"help": "TRM expansion factor"})
     l_layers: int = field(default=2, metadata={"help": "Number of L_net layers"})
     num_heads: int = field(default=8, metadata={"help": "Number of attention heads"})
@@ -108,22 +108,6 @@ class TRMLoraLayer(BaseTunerLayer):
         else:
             raise ValueError(f"Unsupported layer type {type(base_layer_mod)}")
     
-    # @property
-    # def merged(self) -> bool:
-    #     """Check if any adapters are merged"""
-    #     return bool(self.merged_adapters)
-    
-    # @property
-    # def disable_adapters(self) -> bool:
-    #     """Property to access disable_adapters state"""
-    #     return self._disable_adapters
-    
-    # @disable_adapters.setter
-    # def disable_adapters(self, value: bool) -> None:
-    #     """Property setter for disable_adapters"""
-    #     self._disable_adapters = value
-
-
     def update_layer(
         self,
         adapter_name: str,
@@ -139,7 +123,7 @@ class TRMLoraLayer(BaseTunerLayer):
             raise ValueError(f"`r` should be a positive integer value but the value passed is {r}")
 
         self.r[adapter_name] = r
-        self.trmlora_A[adapter_name] = nn.Parameter(torch.empty(r, self.in_features))
+        # Removed unused trmlora_A
         self.trmlora_B[adapter_name] = nn.Parameter(torch.empty(self.out_features, r))
         
         if lora_dropout > 0.0:
@@ -156,38 +140,51 @@ class TRMLoraLayer(BaseTunerLayer):
         # Initialize TRM networks
         if not hasattr(self, 'l_nets'):
             self.l_nets = {}
-        if not hasattr(self, 'transcoders'):
-            self.transcoders = {}
-            
-        # FIXME, get actual layer output size
-        hidden_size = self.out_features
+        
+        r_dim = self.r[adapter_name]
+        r_dim = self.r[adapter_name]
+        self.down_projs = nn.ModuleDict({})
+        self.down_projs[adapter_name] = nn.Linear(self.out_features, r_dim)
+
         self.l_nets[adapter_name] = L_net(
-            hidden_size,
+            r_dim,
             trm_config.l_layers,
             trm_config.num_heads,
             trm_config.expansion,
         )
 
-        self.transcoders[adapter_name] = TRMTranscoder(
-            hidden_size,
-            hidden_size,
-            expansion=trm_config.expansion,
-            trm_transcoder_layers=trm_config.transcoder_layers,
-        )
-        self.transcoders[adapter_name].final_proj = nn.Identity()
+        # Remove transcoder MLP, use LoRA-style up-proj with B
+        # self.transcoders[adapter_name] = ... (removed)
 
-        # Initialize initial states
-        zH = torch.empty(hidden_size)
-        zL = torch.empty(hidden_size)
+        # Initialize initial states in r_dim
+        zH = torch.empty(r_dim)
+        zL = torch.empty(r_dim)
         torch.nn.init.trunc_normal_(zH, std=1.0)
         torch.nn.init.trunc_normal_(zL, std=1.0)
         self.register_buffer(f"zH_init_{adapter_name}", zH, persistent=True)
         self.register_buffer(f"zL_init_{adapter_name}", zL, persistent=True)
 
-        # Initialize LoRA weights
+        # Initialize LoRA weights (only B now) with small std for stability
         if init_weights:
-            nn.init.kaiming_uniform_(self.trmlora_A[adapter_name], a=5**0.5)
-            nn.init.zeros_(self.trmlora_B[adapter_name])
+            nn.init.normal_(self.trmlora_B[adapter_name], mean=0.0, std=0.02)  # Small init like in transformers
+
+        # Init DoRA magnitude to base weight norms for stability (DeLoRA inspiration)
+        base_weight = self.get_base_layer().weight
+        base_norm = torch.norm(base_weight, dim=1)  # Per output channel
+        self.dora_magnitudes[adapter_name].data = base_norm.detach()
+
+        # Init lambda to reasonable bound
+        self.delora_lambda[adapter_name].data.fill_(5.0)  # Example starting bound
+
+        # Add DoRA magnitude param per output feature
+        if not hasattr(self, 'dora_magnitudes'):
+            self.dora_magnitudes = nn.ParameterDict({})
+        self.dora_magnitudes[adapter_name] = nn.Parameter(torch.ones(self.out_features))
+
+        # Add DeLoRA lambda (scalar for simplicity, or per-rank if r>1)
+        if not hasattr(self, 'delora_lambda'):
+            self.delora_lambda = nn.ParameterDict({})
+        self.delora_lambda[adapter_name] = nn.Parameter(torch.tensor(1.0))  # Init to 1.0
 
         # Move new weights to device
         self._move_adapter_to_device_of_base_layer(adapter_name)
@@ -209,7 +206,7 @@ class TRMLoraLayer(BaseTunerLayer):
         with torch.no_grad():
             for _ in range(max(0, trm_config.h_cycles - 1)):
                 for _ in range(trm_config.l_cycles):
-                    zLs = l_net(zLs, zHs + context_hs.unsqueeze(1))
+                    zLs = l_net(zLs, zHs + context_hs.unsqueeze(1))  # context_hs is now [b, r]
                 zHs = l_net(zHs, zLs)
 
         # Last H cycle with grad for the final pass
@@ -217,7 +214,7 @@ class TRMLoraLayer(BaseTunerLayer):
             zLs = l_net(zLs, zHs + context_hs.unsqueeze(1))
         zHs = l_net(zHs, zLs)
 
-        # Additional refinement cycles
+        # Additional refinement cycles (with grad)
         for _ in range(trm_config.cycles):
             for _ in range(trm_config.l_cycles):
                 zLs = l_net(zLs, zHs + context_hs.unsqueeze(1))
@@ -261,29 +258,49 @@ class TRMLoraLayer(BaseTunerLayer):
                     context_hs = base_hidden.mean(dim=0, keepdim=True)  # [1, h]
                 else:
                     b = base_hidden.shape[0]
-                    # Pool context hidden states (use mean pooling)
-                    context_hs = base_hidden.mean(dim=1) if base_hidden.dim() == 3 else base_hidden.mean(dim=0, keepdim=True)
+                    # Use last hidden state instead of mean pooling
+                if base_hidden.dim() == 3:
+                    context_hs = base_hidden[:, -1, :]
+                elif base_hidden.dim() == 2:
+                    context_hs = base_hidden[-1].unsqueeze(0)
+                else:
+                    context_hs = base_hidden.mean(dim=0 if base_hidden.dim() == 1 else 1, keepdim=True)  # Fallback
 
-                # Initialize zH and zL
+                # Project context to low-rank dim
+                context_proj = self.down_projs[adapter](context_hs)  # [b, r]
+
+                # Initialize zH and zL in r_dim
                 zH = getattr(self, f"zH_init_{adapter}").unsqueeze(0).expand(b, -1).to(base_hidden.device)
                 zL = getattr(self, f"zL_init_{adapter}").unsqueeze(0).expand(b, -1).to(base_hidden.device)
 
-                # FIXME: I need to see if there is a way to pass zH, and zL through passes
+                # Optional: Add projected context to initials
+                # zH = zH + context_proj
+                # zL = zL + context_proj
 
-                # Run HRM recursion: returns (zL_next, zH_next)
-                zL_next, zH_next = self.hrm(adapter, zL, zH, context_hs)
+                # Run HRM recursion in low-rank space
+                zL_next, zH_next = self.hrm(adapter, zL, zH, context_proj)  # Pass projected context
 
-                # Transcoder MLP to produce features
-                features = self.transcoders[adapter](zH_next)
+                # LoRA-style up-projection with DeLoRA-inspired normalization
+                scaling = trm_config.lora_alpha / max(1, self.r[adapter])
+                direction = (self.trmlora_B[adapter] @ zH_next.T).T  # [b, out]
 
-                # Standard LoRA forward: x @ A.T @ B.T
-                dropout_x = self.trmlora_dropout[adapter](features)
-                delta_weight = self.trmlora_B[adapter] @ self.trmlora_A[adapter]  # [out, in]
-                delta_weight = delta_weight * (trm_config.lora_alpha / max(1, self.r[adapter]))
-                
-                # Apply LoRA delta as weight modification, cast to match input dtype
-                delta = nn.functional.linear(base_hidden, delta_weight.to(base_hidden.dtype))
-                result = result + delta
+                # Normalize per output channel (column-wise like DeLoRA)
+                direction_norm = torch.norm(direction, dim=0, keepdim=True) + 1e-6  # [1, out]
+                direction = direction / direction_norm
+
+                # Bound norm with learnable lambda (DeLoRA style)
+                lambda_bound = self.delora_lambda[adapter].abs()  # Scalar or per-rank?
+                direction = direction * lambda_bound.clamp(min=0.1, max=10.0)  # Simple bounding
+
+                # DoRA: Scale by learned magnitude
+                magnitude = self.dora_magnitudes[adapter].unsqueeze(0).expand_as(direction)  # [b, out]
+                features = magnitude * direction * scaling
+
+                # Add dropout if needed
+                features = self.trmlora_dropout[adapter](features)
+
+                # Add per-batch features as broadcast delta (like context-dependent bias)
+                result = result + features.unsqueeze(1)  # [b, 1, out] broadcast to [b, s, out]
 
         result = result.to(previous_dtype)
         return result

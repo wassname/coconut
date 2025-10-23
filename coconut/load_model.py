@@ -76,17 +76,22 @@ def load_new_model(conf: BaseConfig, device, dtype):
     logger.info("Loading TRM LoRA adapter")
     # Use model's hidden size if trm_hidden_size is None
     trm_hidden_size = conf.trm_hidden_size if conf.trm_hidden_size is not None else base_model.config.hidden_size
+
+    target_layers = [10, 20, 30, 40, 50, 60, 70, 80]
+    target_modules = [k for k,v in base_model.named_modules() if (".mlp." in k) and isinstance(v, torch.nn.Linear) and any(f".{i}." in k for i in target_layers)]
     peft_config = TRMConfig(
         task_type="CAUSAL_LM",
         inference_mode=False,
         r=16,
         lora_alpha=32,
         lora_dropout=0.0,
-        target_modules="all-linear",  # Target all linear layers
+        # target_modules="all-linear",  # Target all linear layers
+        target_modules=target_modules,
+
         l_cycles=conf.trm_l_cycles,
         h_cycles=conf.trm_h_cycles,
-        hidden_size=trm_hidden_size,
-        llm_hidden_size=base_model.config.hidden_size,
+        # hidden_size=trm_hidden_size,
+        # llm_hidden_size=base_model.config.hidden_size,
         expansion=conf.trm_expansion,
         l_layers=conf.trm_l_layers,
         num_heads=conf.trm_num_heads,
@@ -95,6 +100,8 @@ def load_new_model(conf: BaseConfig, device, dtype):
         modules_to_save=None,
     )
     peft_model = get_peft_model(base_model, peft_config)
+    peft_model = peft_model.to(device)
+    peft_model.enable_input_require_grads()
     # OR 
     # peft_model = TRMLoraModel(base_model, peft_config, "default")
 

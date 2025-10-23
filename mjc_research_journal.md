@@ -1717,3 +1717,14 @@ Open questions:
 - make sure we cary zH and zL through the recursion? how
 - do we have it active all the time? or only on think
 - ?
+
+Out of mem!
+
+What should I do?
+
+Well I'm using the full hidden size, I could down project
+recurse
+upproject?
+
+I could use delora instead of lora? or dora
+that way we have llm_hidden_size, and rank (which I guess will be the size we recurse at, then we construct the full addition lora stlye?)

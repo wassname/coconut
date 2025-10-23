@@ -180,6 +180,7 @@ class Coconut(nn.Module):
 
         # Use model.generate for efficient KV caching and inline adapter
         with torch.no_grad():
+
             generated_tokens = self.model.generate(
                 input_ids=input_ids,
                 attention_mask=attention_mask,

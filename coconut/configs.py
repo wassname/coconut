@@ -215,7 +215,7 @@ class TRM(BaseConfig):
     trm_l_cycles: int = 6  # Inner cycles (n in paper)
     trm_l_layers: int = 2  # Layers for L_net (or single net)
     trm_hidden_size: Optional[int] = None  # Dynamic from base model if None
-    trm_num_heads: int = 8  # Number of attention heads in TRM (12 in paper)
+    trm_num_heads: int = 4  # Number of attention heads in TRM (12 in paper)
     trm_expansion: float = 2.67  # MLP expansion factor in TRM (4 in paper)
     trm_transcoder_layers: int = 1  # Number of SwiGLU layers in transcoder (configurable)
 

@@ -2,7 +2,7 @@ from coconut.configs import BaseConfig, Debug
 from coconut.train import train
 
 
-def tiny_train():
+def test_tiny_train():
     # should train a small amount, eval, save
     conf = Debug()
     train(conf)
