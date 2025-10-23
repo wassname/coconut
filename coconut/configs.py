@@ -254,8 +254,8 @@ class TRMLoRA(TRM):
     # only_eval: bool = False  # Enable train/eval for short run
     # num_epochs: int = 1
     # max_size: int = 1000  # Small subset
-    batch_size_training: int = 8
-    gradient_accumulation_steps: int = 748//8  # Effective batch ~748
+    batch_size_training: int = 12
+    gradient_accumulation_steps: int = 748//12  # Effective batch ~748
     resume_epochs: int = 8  # Start from epoch 0
     cot_epochs: int = 0
     epochs_per_stage: int = 3
