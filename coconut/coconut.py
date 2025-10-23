@@ -28,10 +28,11 @@ from transformers import (
     PreTrainedModel,
 )
 
+from contextlib import contextmanager
 # from coconut.hs2ie import hs2ie, get_supressed_activations
 from coconut.configs import BaseConfig
 from coconut.adapters import set_adapter
-from contextlib import contextmanager
+from coconut.trmlora.recursive_lora import TRMLoraLayer
 
 
 Outputs = namedtuple(
@@ -117,7 +118,7 @@ class Coconut(nn.Module):
         # Walk down model tree and inject cache into TRM layers
         trm_layers = []
         for name, module in self.model.named_modules():
-            if hasattr(module, '_is_trm_layer'):
+            if isinstance(module, (TRMLoraLayer,)):
                 trm_layers.append(module)
                 module._recursion_cache = cache
         

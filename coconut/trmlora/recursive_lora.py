@@ -104,7 +104,6 @@ class TRMLoraLayer(BaseTunerLayer):
         self.kwargs = kwargs
         
         # Marker for Coconut to find TRM layers
-        self._is_trm_layer = True
         self._recursion_cache = None  # Injected by Coconut.recursion_context()
         
         # Get base layer info
@@ -241,8 +240,11 @@ class TRMLoraLayer(BaseTunerLayer):
         **kwargs: Any
     ) -> Float[Tensor, 'b s h']:
         # Use injected cache from Coconut.recursion_context() if available
-        recursion_cache = self._recursion_cache
-        
+        if self._recursion_cache is None:
+            recursion_cache = {}
+        else:
+            recursion_cache = self._recursion_cache
+
         previous_dtype = hidden_states.dtype
 
         if self.disable_adapters:
@@ -288,20 +290,18 @@ class TRMLoraLayer(BaseTunerLayer):
                 context_proj = down_proj(context_hs_for_proj)  # [b, r]
 
                 # Initialize zH and zL in r_dim
-                if self.layer_key not in recursion_cache:
-                    recursion_cache[self.layer_key] = {}
-                zL = recursion_cache[self.layer_key].get('zL', None)
+                zL = recursion_cache.get('zL', None)
                 if zL is None:
                     zL = self.zL_init[adapter].unsqueeze(0).expand(b, -1).to(base_hidden.device)
-                zH = recursion_cache[self.layer_key].get('zH', None)
+                zH = recursion_cache.get('zH', None)
                 if zH is None:
                     zH = self.zH_init[adapter].unsqueeze(0).expand(b, -1).to(base_hidden.device)
 
                 # Run HRM recursion in low-rank space
                 zL_next, zH_next = self.hrm(adapter, zL, zH, context_proj)  # Pass projected context
 
-                recursion_cache[self.layer_key]['zL'] = zL_next
-                recursion_cache[self.layer_key]['zH'] = zH_next
+                recursion_cache['zL'] = zL_next
+                recursion_cache['zH'] = zH_next
 
                 # LoRA-style up-projection with DeLoRA-inspired normalization
                 scaling = trm_config.lora_alpha / max(1, self.r[adapter])
