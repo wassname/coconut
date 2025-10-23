@@ -252,7 +252,7 @@ class TRMLoRA(TRM):
     # Short test settings
     load_in_4bit: bool = False
     # only_eval: bool = False  # Enable train/eval for short run
-    num_epochs: int = 1
+    # num_epochs: int = 1
     max_size: int = 1000  # Small subset
     batch_size_training: int = 8
     gradient_accumulation_steps: int = 16  # Effective batch ~32

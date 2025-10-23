@@ -56,7 +56,7 @@ logger.add(sink, colorize=True)
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 # setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.
-os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
+os.environ["PYTORCH_ALLOC_CONF"] = "expandable_segments:True"
 
 
 

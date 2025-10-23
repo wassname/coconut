@@ -5,7 +5,7 @@ This experiment adapts principles from Tiny Recursive Models ([TRM](https://arxi
 The core idea is to use a frozen, quantized LLM for perception and generation, while a small, trainable TRM performs iterative refinement on the latent representations. This involves two learned components:
 
 
-`uv run scripts/run.py TRM`
+`uv run scripts/run.py TRMLoRA`
 
 `uv run pytest --beartype-packages='coconut'`
 
