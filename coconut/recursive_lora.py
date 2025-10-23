@@ -267,11 +267,15 @@ class TRMLoraLayer(BaseTunerLayer):
                 zH = getattr(self, f"zH_init_{adapter}").unsqueeze(0).expand(b, -1).to(base_hidden.device)
                 zL = getattr(self, f"zL_init_{adapter}").unsqueeze(0).expand(b, -1).to(base_hidden.device)
 
+                # Project context from LLM space to TRM space using transcoder
+                # Transcoder goes: LLM hidden -> TRM hidden
+                context_trm = self.transcoders[adapter](context_hs)  # [b, trm_hidden]
+                
                 # Run HRM recursion: returns (zL_next, zH_next)
-                zL_next, zH_next = self.hrm(adapter, zL, zH, context_hs)
+                zL_next, zH_next = self.hrm(adapter, zL, zH, context_trm)
 
-                # Transcoder MLP to produce features
-                features = self.transcoders[adapter](zH_next)
+                # zH_next is already in TRM space, use it directly as features
+                features = zH_next
 
                 # Standard LoRA forward: x @ A.T @ B.T
                 dropout_x = self.trmlora_dropout[adapter](features)
