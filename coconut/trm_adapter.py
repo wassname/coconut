@@ -69,7 +69,7 @@ class L_net(nn.Module):
     """
     
 
-    def __init__(self, hidden_size: int, llm_hidden_size: int, num_layers: int, num_heads: int, expansion: float):
+    def __init__(self, hidden_size: int, num_layers: int, num_heads: int, expansion: float):
         super().__init__()
         self.layers = nn.ModuleList([
             TRMBlock(hidden_size, num_heads, expansion) for _ in range(num_layers)
@@ -106,8 +106,8 @@ class TRMTranscoder(nn.Module):
         self.hidden_size = hidden_size
         self.llm_hidden_size = llm_hidden_size
 
-        hs_exp = int(hidden_size * expansion)
-        in_size = hidden_size
+        # hs_exp = int(hidden_size * expansion)
+        # in_size = hidden_size
 
         layers = []
         for i in range(trm_transcoder_layers):

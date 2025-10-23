@@ -108,20 +108,20 @@ class TRMLoraLayer(BaseTunerLayer):
         else:
             raise ValueError(f"Unsupported layer type {type(base_layer_mod)}")
     
-    @property
-    def merged(self) -> bool:
-        """Check if any adapters are merged"""
-        return bool(self.merged_adapters)
+    # @property
+    # def merged(self) -> bool:
+    #     """Check if any adapters are merged"""
+    #     return bool(self.merged_adapters)
     
-    @property
-    def disable_adapters(self) -> bool:
-        """Property to access disable_adapters state"""
-        return self._disable_adapters
+    # @property
+    # def disable_adapters(self) -> bool:
+    #     """Property to access disable_adapters state"""
+    #     return self._disable_adapters
     
-    @disable_adapters.setter
-    def disable_adapters(self, value: bool) -> None:
-        """Property setter for disable_adapters"""
-        self._disable_adapters = value
+    # @disable_adapters.setter
+    # def disable_adapters(self, value: bool) -> None:
+    #     """Property setter for disable_adapters"""
+    #     self._disable_adapters = value
 
 
     def update_layer(
@@ -159,25 +159,26 @@ class TRMLoraLayer(BaseTunerLayer):
         if not hasattr(self, 'transcoders'):
             self.transcoders = {}
             
+        # FIXME, get actual layer output size
+        hidden_size = self.out_features
         self.l_nets[adapter_name] = L_net(
-            trm_config.hidden_size,
-            trm_config.llm_hidden_size,
+            hidden_size,
             trm_config.l_layers,
             trm_config.num_heads,
             trm_config.expansion,
         )
 
         self.transcoders[adapter_name] = TRMTranscoder(
-            trm_config.hidden_size,
-            trm_config.llm_hidden_size,
+            hidden_size,
+            hidden_size,
             expansion=trm_config.expansion,
             trm_transcoder_layers=trm_config.transcoder_layers,
         )
         self.transcoders[adapter_name].final_proj = nn.Identity()
 
         # Initialize initial states
-        zH = torch.empty(trm_config.hidden_size)
-        zL = torch.empty(trm_config.hidden_size)
+        zH = torch.empty(hidden_size)
+        zL = torch.empty(hidden_size)
         torch.nn.init.trunc_normal_(zH, std=1.0)
         torch.nn.init.trunc_normal_(zL, std=1.0)
         self.register_buffer(f"zH_init_{adapter_name}", zH, persistent=True)
@@ -266,6 +267,8 @@ class TRMLoraLayer(BaseTunerLayer):
                 # Initialize zH and zL
                 zH = getattr(self, f"zH_init_{adapter}").unsqueeze(0).expand(b, -1).to(base_hidden.device)
                 zL = getattr(self, f"zL_init_{adapter}").unsqueeze(0).expand(b, -1).to(base_hidden.device)
+
+                # FIXME: I need to see if there is a way to pass zH, and zL through passes
 
                 # Run HRM recursion: returns (zL_next, zH_next)
                 zL_next, zH_next = self.hrm(adapter, zL, zH, context_hs)
@@ -370,107 +373,6 @@ class TRMLoraModel(BaseTuner):
     tuner_layer_cls = TRMLoraLayer
     target_module_mapping = TRANSFORMERS_MODELS_TO_TRMLORA_TARGET_MODULES_MAPPING
 
-    # def _check_new_adapter_config(self, config: TRMConfig) -> None:
-    #     """Check config when adding new adapter"""
-    #     if (len(self.peft_config) > 1) and (config.bias != "none"):
-    #         raise ValueError(
-    #             f"{self.__class__.__name__} supports only 1 adapter with bias. When using multiple adapters, "
-    #             "set bias to 'none' for all adapters."
-    #         )
-
-    # @staticmethod
-    # def _check_target_module_exists(trm_config, key):
-    #     """Check if key matches target modules in config"""
-    #     return check_target_module_exists(trm_config, key)
-
-    # @staticmethod
-    # def _prepare_adapter_config(peft_config, model_config):
-    #     """Prepare adapter config, setting target_modules if not specified"""
-    #     if peft_config.target_modules is None:
-    #         if model_config["model_type"] not in TRANSFORMERS_MODELS_TO_TRMLORA_TARGET_MODULES_MAPPING:
-    #             raise ValueError("Please specify `target_modules` in `peft_config`")
-    #         peft_config.target_modules = set(
-    #             TRANSFORMERS_MODELS_TO_TRMLORA_TARGET_MODULES_MAPPING[model_config["model_type"]]
-    #         )
-    #     return peft_config
-
-    # def _mark_only_adapters_as_trainable(self, model: nn.Module) -> None:
-    #     """Mark only adapter parameters as trainable"""
-    #     for n, p in model.named_parameters():
-    #         if self.prefix not in n:
-    #             p.requires_grad = False
-
-    #     for active_adapter in self.active_adapters:
-    #         bias = self.peft_config[active_adapter].bias
-    #         if bias == "none":
-    #             continue
-    #         if bias == "all":
-    #             for n, p in model.named_parameters():
-    #                 if "bias" in n:
-    #                     p.requires_grad = True
-    #         elif bias == "trmlora_only":
-    #             for name, m in model.named_modules():
-    #                 if isinstance(m, TRMLoraLayer) and hasattr(m, "bias") and m.bias is not None:
-    #                     m.bias.requires_grad = True
-    #         else:
-    #             raise NotImplementedError(f"Requested bias: {bias}, is not implemented.")
-
-    # def _set_adapter_layers(self, enabled=True):
-    #     """Enable or disable adapter layers"""
-    #     from peft.utils import ModulesToSaveWrapper
-    #     for module in self.model.modules():
-    #         if isinstance(module, (BaseTunerLayer, ModulesToSaveWrapper)):
-    #             module.enable_adapters(enabled)
-
-    # def enable_adapter_layers(self):
-    #     """Enable all adapters"""
-    #     self._set_adapter_layers(enabled=True)
-
-    # def disable_adapter_layers(self):
-    #     """Disable all adapters"""
-    #     import warnings
-    #     for active_adapter in self.active_adapters:
-    #         val = self.peft_config[active_adapter].bias
-    #         if val != "none":
-    #             msg = (
-    #                 f"Careful, disabling adapter layers with bias configured to be '{val}' does not produce the same "
-    #                 "output as the base model would without adaption."
-    #             )
-    #             warnings.warn(msg)
-    #     self._set_adapter_layers(enabled=False)
-
-    # def set_adapter(self, adapter_name):
-    #     """Set the active adapter"""
-    #     import warnings
-    #     for module in self.model.modules():
-    #         if isinstance(module, TRMLoraLayer):
-    #             if module.merged:
-    #                 warnings.warn("Adapter cannot be set when the model is merged. Unmerging the model first.")
-    #                 module.unmerge()
-    #             module.set_adapter(adapter_name)
-    #     self.active_adapter = adapter_name
-
-    # def __getattr__(self, name: str):
-    #     """Forward missing attributes to the wrapped module."""
-    #     try:
-    #         return super().__getattr__(name)  # defer to nn.Module's logic
-    #     except AttributeError:
-    #         if name == "base_model":
-    #             raise
-    #         return getattr(self.model, name)
-
-    # def _replace_module(self, parent, child_name, new_module, child):
-    #     """Replace child module with new_module in parent"""
-    #     setattr(parent, child_name, new_module)
-    #     # child layer wraps the original module, unpack it
-    #     if hasattr(child, "base_layer"):
-    #         child = child.base_layer
-        
-    #     if not hasattr(new_module, "base_layer"):
-    #         new_module.weight = child.weight
-    #         if hasattr(child, "bias"):
-    #             new_module.bias = child.bias
-
     def _create_and_replace(
         self,
         config,  # PEFT passes this as first arg
@@ -542,12 +444,3 @@ class PeftType2(str, enum.Enum):
 peft.utils.peft_types.PeftType = PeftType2
 
 register_peft_method(name="trmlora", model_cls=TRMLoraModel, config_cls=TRMConfig)
-
-
-# # Helper function to load the model with TRMConfig
-# def get_trm_model(base_model, config: TRMConfig, adapter_name: str = "default"):
-#     """
-#     Convenience function to load a PEFT model with TRM adapter.
-#     """
-#     from peft import get_peft_model
-#     return get_peft_model(base_model, config, adapter_name=adapter_name)
