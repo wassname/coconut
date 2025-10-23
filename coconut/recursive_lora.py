@@ -253,14 +253,19 @@ class TRMLoraLayer(BaseTunerLayer):
                     continue
 
                 trm_config = self.trm_configs[adapter]
-                b, s, h = base_hidden.shape
+                
+                # Get batch size from base_hidden
+                if base_hidden.dim() == 2:
+                    b = 1  # Assume batch size 1 for 2D tensors
+                    context_hs = base_hidden.mean(dim=0, keepdim=True)  # [1, h]
+                else:
+                    b = base_hidden.shape[0]
+                    # Pool context hidden states (use mean pooling)
+                    context_hs = base_hidden.mean(dim=1) if base_hidden.dim() == 3 else base_hidden.mean(dim=0, keepdim=True)
 
                 # Initialize zH and zL
                 zH = getattr(self, f"zH_init_{adapter}").unsqueeze(0).expand(b, -1).to(base_hidden.device)
                 zL = getattr(self, f"zL_init_{adapter}").unsqueeze(0).expand(b, -1).to(base_hidden.device)
-
-                # Pool context hidden states (use last token as context)
-                context_hs = base_hidden[:, -1, :]
 
                 # Run HRM recursion: returns (zL_next, zH_next)
                 zL_next, zH_next = self.hrm(adapter, zL, zH, context_hs)
@@ -270,13 +275,12 @@ class TRMLoraLayer(BaseTunerLayer):
 
                 # Standard LoRA forward: x @ A.T @ B.T
                 dropout_x = self.trmlora_dropout[adapter](features)
-                delta = nn.functional.linear(dropout_x, self.trmlora_A[adapter])
-                delta = nn.functional.linear(delta, self.trmlora_B[adapter])
-                delta = delta * (trm_config.lora_alpha / max(1, self.r[adapter]))
-
-                # Apply delta to last token hidden (latent position assumption)
-                result = result * 1.0
-                result[:, -1, :] += delta
+                delta_weight = self.trmlora_B[adapter] @ self.trmlora_A[adapter]  # [out, in]
+                delta_weight = delta_weight * (trm_config.lora_alpha / max(1, self.r[adapter]))
+                
+                # Apply LoRA delta as weight modification, cast to match input dtype
+                delta = nn.functional.linear(base_hidden, delta_weight.to(base_hidden.dtype))
+                result = result + delta
 
         result = result.to(previous_dtype)
         return result
@@ -298,6 +302,10 @@ class TRMLinear(nn.Module, TRMLoraLayer):
         TRMLoraLayer.__init__(self, base_layer, **kwargs)
         self._active_adapter = adapter_name
         self.update_layer(adapter_name, r, lora_alpha, lora_dropout, trm_config, init_weights)
+
+    def forward(self, hidden_states: Float[Tensor, 'b s h'], *args: Any, **kwargs: Any) -> Float[Tensor, 'b s h']:
+        """Forward pass - delegates to TRMLoraLayer.forward"""
+        return TRMLoraLayer.forward(self, hidden_states, *args, **kwargs)
 
     def merge(self, safe_merge: bool = False, adapter_names: Optional[list[str]] = None) -> None:
         """Merge adapter weights into base layer"""
@@ -364,7 +372,92 @@ class TRMModel(BaseTuner):
 
     def _check_new_adapter_config(self, config: TRMConfig) -> None:
         """Check config when adding new adapter"""
-        super()._check_new_adapter_config(config)
+        if (len(self.peft_config) > 1) and (config.bias != "none"):
+            raise ValueError(
+                f"{self.__class__.__name__} supports only 1 adapter with bias. When using multiple adapters, "
+                "set bias to 'none' for all adapters."
+            )
+
+    @staticmethod
+    def _check_target_module_exists(trm_config, key):
+        """Check if key matches target modules in config"""
+        return check_target_module_exists(trm_config, key)
+
+    @staticmethod
+    def _prepare_adapter_config(peft_config, model_config):
+        """Prepare adapter config, setting target_modules if not specified"""
+        if peft_config.target_modules is None:
+            if model_config["model_type"] not in TRANSFORMERS_MODELS_TO_TRMLORA_TARGET_MODULES_MAPPING:
+                raise ValueError("Please specify `target_modules` in `peft_config`")
+            peft_config.target_modules = set(
+                TRANSFORMERS_MODELS_TO_TRMLORA_TARGET_MODULES_MAPPING[model_config["model_type"]]
+            )
+        return peft_config
+
+    def _mark_only_adapters_as_trainable(self, model: nn.Module) -> None:
+        """Mark only adapter parameters as trainable"""
+        for n, p in model.named_parameters():
+            if self.prefix not in n:
+                p.requires_grad = False
+
+        for active_adapter in self.active_adapters:
+            bias = self.peft_config[active_adapter].bias
+            if bias == "none":
+                continue
+            if bias == "all":
+                for n, p in model.named_parameters():
+                    if "bias" in n:
+                        p.requires_grad = True
+            elif bias == "trmlora_only":
+                for name, m in model.named_modules():
+                    if isinstance(m, TRMLoraLayer) and hasattr(m, "bias") and m.bias is not None:
+                        m.bias.requires_grad = True
+            else:
+                raise NotImplementedError(f"Requested bias: {bias}, is not implemented.")
+
+    def _set_adapter_layers(self, enabled=True):
+        """Enable or disable adapter layers"""
+        from peft.utils import ModulesToSaveWrapper
+        for module in self.model.modules():
+            if isinstance(module, (BaseTunerLayer, ModulesToSaveWrapper)):
+                module.enable_adapters(enabled)
+
+    def enable_adapter_layers(self):
+        """Enable all adapters"""
+        self._set_adapter_layers(enabled=True)
+
+    def disable_adapter_layers(self):
+        """Disable all adapters"""
+        import warnings
+        for active_adapter in self.active_adapters:
+            val = self.peft_config[active_adapter].bias
+            if val != "none":
+                msg = (
+                    f"Careful, disabling adapter layers with bias configured to be '{val}' does not produce the same "
+                    "output as the base model would without adaption."
+                )
+                warnings.warn(msg)
+        self._set_adapter_layers(enabled=False)
+
+    def set_adapter(self, adapter_name):
+        """Set the active adapter"""
+        import warnings
+        for module in self.model.modules():
+            if isinstance(module, TRMLoraLayer):
+                if module.merged:
+                    warnings.warn("Adapter cannot be set when the model is merged. Unmerging the model first.")
+                    module.unmerge()
+                module.set_adapter(adapter_name)
+        self.active_adapter = adapter_name
+
+    def __getattr__(self, name: str):
+        """Forward missing attributes to the wrapped module."""
+        try:
+            return super().__getattr__(name)  # defer to nn.Module's logic
+        except AttributeError:
+            if name == "base_model":
+                raise
+            return getattr(self.model, name)
 
     def _replace_module(self, parent, child_name, new_module, child):
         """Replace child module with new_module in parent"""

@@ -94,7 +94,7 @@ def load_new_model(conf: BaseConfig, device, dtype):
         bias="none",
         modules_to_save=None,
     )
-    base_model = get_peft_model(base_model.model, peft_config)
+    base_model = get_peft_model(base_model, peft_config)
 
     model = Coconut(base_model, conf)
     return model, tokenizer
