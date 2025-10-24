@@ -61,8 +61,7 @@ def load_new_model(conf: BaseConfig, device, dtype):
     elif getattr(conf, 'load_in_8bit', False):
         logger.info("Loading in 8bit")
         quantization_config = BitsAndBytesConfig(load_in_8bit=True)
-    elif getattr(conf, 'use_trm', False):
-        logger.info("TRM mode: loading model with quantization")
+    else:
         quantization_config = None  # Default no quant for TRM if not specified
 
     base_model = AutoModelForCausalLM.from_pretrained(
@@ -109,6 +108,9 @@ def load_new_model(conf: BaseConfig, device, dtype):
 
     peft_model.print_trainable_parameters()
 
+    assert peft_model.base_model.model.lm_head.weight.requires_grad == False, "LM head weights should be frozen"
+    assert peft_model.base_model.model.model.embed_tokens.weight.requires_grad == False, "Embedding weights should be frozen"
+
     model = Coconut(peft_model, conf)
     return model, tokenizer
 
@@ -139,6 +141,8 @@ def save_model(model, tokenizer, configs, save_dir: Path):
     state_dict = model.state_dict()
     state_dict = {k: v for k, v in state_dict.items() if not k.startswith('model.model.')}
     save_folder = str(save_dir / "trmlora/")
-    logger.error("FIXME save with custom peft type: Unknown PEFT type passed: TRMLORA")
-    # model.model.save_pretrained(save_folder)
+    # logger.error("FIXME save with custom peft type: Unknown PEFT type passed: TRMLORA")
+    # need to add to PEFT_TYPE_TO_PREFIX_MAPPING
+    # https://github.com/huggingface/peft/blob/98a88c01a42be4bb2fa13a1c0dd5340c42f82c87/src/peft/utils/save_and_load.py#L228
+    model.model.save_pretrained(save_folder, save_embedding_layers=False)
     logger.info(f"saving model {save_folder}")

@@ -110,7 +110,7 @@ class Coconut(nn.Module):
         self.config = config
 
         if self.config.loss_seq_vcr:
-            self.vcr_loss = VCRLoss(H=self.config.lora_rank)
+            self.vcr_loss = VCRLoss(H=self.config.lora_r)
 
         # self.gen_forward_cnt = 0
         self._recursion_cache = None  # Will be set via context manager
@@ -155,7 +155,7 @@ class Coconut(nn.Module):
         all_labels[input_ids == self.config.eot_token_id] = -100
 
         # Compute base NLL without adapter if margin loss enabled
-        nll_base = None
+        nll_base = torch.tensor(0.0, device=input_ids.device)
         assert self.model.active_adapter is not None, (
             "Adapter must be active during forward"
         )
@@ -305,18 +305,19 @@ class Coconut(nn.Module):
 
         logits = torch.cat(logits, dim=-2)
 
-        question_nll, loss_per_token = get_nll(logits, all_labels, attention_mask)
-            
         # Answer loss (primary objective)
         answer_loss, _ = get_nll(logits, labels, attention_mask)
 
-        # Question margin loss (regularization: penalize if NLL > threshold)
-        question_margin_loss = torch.mean(F.relu(question_nll - nll_base - .1) ** 4)
 
         losses = {
             "answer_loss": answer_loss,
-            "question_margin_loss": question_margin_loss,
         }
+        question_nll = torch.tensor(0.0, device=input_ids.device)
+        if self.config.loss_nll_ratio_margin:
+            question_nll, loss_per_token = get_nll(logits, all_labels, attention_mask)              
+            # Question margin loss (regularization: penalize if NLL > threshold)
+            question_margin_loss = torch.mean(F.relu(question_nll - nll_base - .1) ** 4)
+            losses['question_margin_loss'] = question_margin_loss
 
         extra = {
             'nll/question': question_nll,
@@ -343,8 +344,7 @@ class Coconut(nn.Module):
         extra = {k: v.mean().detach().cpu().item() for k, v in extra.items()}
 
         return Outputs(loss=total_loss, inputs_embeds=inputs_embeds, logits=logits, past_key_values=outputs.past_key_values,
-                        # hidden_states=list(all_hs), 
-                        # input_embed_diff=input_embed_diff,
+                        hidden_states=list(all_hs), 
                         log=extra)
 
     def generate(

@@ -67,12 +67,12 @@ class BaseConfig:
     n_detached_recursions: int = 2  # 0=disabled, 2=keep gradients only for last 2 passes
 
     # TRM mode: use frozen quantized LLM with TRM recursive reasoning
-    use_trm: bool = False  # Enable TRM adapter with frozen LLM
+    # use_trm: bool = False  # Enable TRM adapter with frozen LLM
     load_in_4bit: bool = True  # Load LLM in 4bit for TRM mode
     load_in_8bit: bool = False  # Load LLM in 8bit for TRM mode
 
 
-    loss_seq_vcr: bool = True
+    loss_seq_vcr: bool = False
     collect_hs: bool = False  # whether to collect hidden states during forward pass
 
 
@@ -153,11 +153,31 @@ class TRMLoRA(BaseConfig):
     name: str = "trmlora-qwen3-0.6b"
     load_in_4bit: bool = False
     model_id = "suayptalha/Qwen3-0.6B-Math-Expert"
+
     resume_epochs: int = 8
     cot_epochs: int = 0
     num_epochs: int = 25
+
     lr: float = 4e-3
-    use_trm: bool = False
+
+    max_size: int = 20_000
+
+    batch_size_training: int = 16
+    gradient_accumulation_steps: int = 6
+    epochs_per_stage: int = 6
+
+    eval_first_epoch: bool = False
+    debug: bool = False
+    weight_decay: float = 0.0
+    
+    use_trm_lora: bool = True
+    loss_nll_ratio_margin: bool = False
+
+    # TRMLoRA-specific fields
+    lora_r: int = 12
+    lora_alpha: int = 32
+    lora_dropout: float = 0.0
+    lora_layers : int = 4
     trm_h_cycles: int = 2
     trm_l_cycles: int = 2
     trm_l_layers: int = 2
@@ -165,21 +185,7 @@ class TRMLoRA(BaseConfig):
     trm_num_heads: int = 2
     trm_expansion: float = 2.67
     trm_transcoder_layers: int = 1
-    loss_reg_ie_diff: bool = True
-    loss_nll_ratio_margin: bool = True
-    max_size: int = 20_000
-    batch_size_training: int = 16
-    gradient_accumulation_steps: int = 6
-    # TRMLoRA-specific fields
-    use_trm_lora: bool = True
-    epochs_per_stage: int = 6
-    lora_r: int = 12
-    lora_alpha: int = 32
-    lora_dropout: float = 0.0
-    lora_layers : int = 4
-    eval_first_epoch: bool = False
-    debug: bool = False
-    weight_decay: float = 0.0
+
 
 
 @dataclass

@@ -16,4 +16,5 @@ except KeyError:
     pass
 
 
-# also PEFT_TYPE_TO_PREFIX_MAPPING
+from peft.mapping import PEFT_TYPE_TO_PREFIX_MAPPING
+PEFT_TYPE_TO_PREFIX_MAPPING[PeftType2.TRMLORA] = "lora_"

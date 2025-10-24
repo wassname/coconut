@@ -1955,3 +1955,50 @@ is now
 `outputs = self(..., zH, zL)`
 
 but it's complex because 
+
+
+# 2025-10-24 13:50:48
+
+It's working once I inherited lora properly
+
+I actually had removed the margin loss, and it seems to be learnign with only answer loss?
+
+# 2025-10-24 15:36:39
+
+### Brainstorming PEFT Adapters for TRM LoRA in COCONUT Project
+
+In this brainstorming session, we explored parameter-efficient fine-tuning (PEFT) adapters to enhance the Tiny Recursive Model (TRM) integrated with LoRA in the COCONUT framework. The primary goals were to find adapters that provide a natural, low-rank latent space for recursive thinking (e.g., in `zH` and `zL`), while ensuring stability, interpretability for interventions (like a "truth hat"), and compatibility with the model's detached recursion cycles. We prioritized additive methods like low-rank variants (LoRA, RandLoRA, DeLoRA) and orthogonal ones (HRA, ETHER), evaluating them against benchmarks, community adoption, and potential for expressive recursion without parameter bloat. Initial ideas included adding VCR loss to `zH`/`zL` for sparsity, but this was deprioritized unless baseline performance improves.
+
+A key insight emerged from analyzing gradient flow in the TRM code: Early recursion cycles are detached (`no_grad()`), but final cycles allow partial gradients to reach `lora_A` via fresh injections of `context_hs` (from `A @ hidden_states`). This means `lora_A` learns adaptively (tuned for error cleanup), not fixed-random as initially thought, enabling tunable down-projections for the recursive basis. However, the partial flow biases learning toward late-stage dynamics, potentially limiting adaptations for early recursion. We discussed undetaching one more cycle or adding auxiliary losses to strengthen signals. Comparisons highlighted ETHER/HRA's bounded orthogonal updates (rank-1/2 with fixed strength, limiting expressivity per DeLoRA critiques), but recursion could compose low-rank steps nonlinearly to boost capacity, though still constrained by the basis.
+
+Final rankings favored adapters balancing stability and interp: HRA (7/10) for learned rotations creating a "natural" hyperspherical basis (hookable modes, resilient to partial grads); RandLoRA (7/10) for full-rank expressivity via fixed random matrices (implicit regularization, less noisy benchmarks); DeLoRA (7/10) as a hybrid fixing ETHER's limits with learnable bounds. ROAD was dismissed as too low-rank (rank-1, no ortho perks). Next steps: Ablate HRA in a tiny run, logging `zH` norms, `lora_A` grads, and interp probes (e.g., truth signal in dims) vs baseline LoRA. If expressivity lags, test RandLoRA to sidestep rank caps.
+
+
+# 2025-10-24 15:36:42
+trmlora-qwen3-0.6b_20251024-120842 at: 
+
+# Results: trmlora-qwen3-0.6b_20251024-120842
+{'project': 'coconut', 'save_path': 'outputs/', 'name': 'trmlora-qwen3-0.6b', 'model_id': 'suayptalha/Qwen3-0.6B-Math-Expert', 'only_eval': False, 'load_model_path': '', 'resume_epochs': 8, 'replacement_method': 'supressed[0.75:]', 'use_position_ids': True, 'bf16': True, 'bf16_weight': False, 'opt_8b': False, 'cot_epochs': 0, 'epochs_per_stage': 3, 'max_latent_stage': 3, 'num_epochs': 25, 'batch_size_training': 12, 'gradient_accumulation_steps': 62, 'lr': 0.001, 'weight_decay': 0.0, 'grad_clip': 1.0, 'scheduler': 'linear', 'debug': False, 'seed': 42, 'reset_optimizer': False, 'loss_seq_vcr': False, 'n_detached_recursions': 2, 'use_trm': False, 'load_in_4bit': False, 'load_in_8bit': False, 'max_size': 20000, 'c_thought': 1, 'pad_latent_to_max': True, 'uniform_prob': 0.0, 'train_path': 'data/gsm_train.json', 'val_path': 'data/gsm_valid.json', 'system_prompt': '', 'latent_token_id': None, 'bot_token_id': None, 'eot_token_id': None, 'eos_token_id': None, 'trm_h_cycles': 2, 'trm_l_cycles': 2, 'trm_l_layers': 2, 'trm_hidden_size': None, 'trm_num_heads': 2, 'trm_expansion': 2.67, 'trm_transcoder_layers': 1, 'loss_reg_ie_diff': True, 'loss_nll_ratio_margin': True, 'use_trm_lora': True, 'lora_r': 6, 'lora_alpha': 24, 'lora_dropout': 0.0, 'lora_layers': 4, 'eval_first_epoch': False}
+
+
+|    |   eval/acc |   eval/cot_em |   eval/ratios |   epoch |   stage |   train/minutes |   train/loss |   eval/loss |
+|---:|-----------:|--------------:|--------------:|--------:|--------:|----------------:|-------------:|------------:|
+|  0 |      0     |         0     |        1.6659 |       8 |       2 |         17.4696 |     2.66459  |      2.6949 |
+|  1 |      0.016 |         0.012 |        1.1923 |       9 |       3 |         13.2363 |     1.28317  |      1.6603 |
+|  2 |      0.014 |         0.01  |        0.8066 |      10 |       3 |         13.1872 |     0.722466 |      0.9618 |
+|  3 |      0.02  |         0.004 |        0.7097 |      11 |       3 |         13.1233 |     0.871823 |      0.8276 |
+|  4 |      0.018 |         0.01  |        0.622  |      12 |       3 |         13.1052 |     0.368736 |      0.7651 |
+|  5 |      0.042 |         0.008 |        0.6099 |      13 |       3 |         13.4539 |     0.677675 |      0.6829 |
+|  6 |      0.05  |         0.002 |        0.6114 |      14 |       3 |         13.4293 |     0.73012  |      0.6815 |
+|  7 |      0.048 |         0.01  |        0.6105 |      15 |       3 |         13.3284 |     0.427084 |      0.6729 |
+|  8 |      0.068 |         0.012 |        0.5911 |      16 |       3 |         13.3443 |     0.665704 |      0.6467 |
+|  9 |      0.074 |         0.012 |        0.5857 |      17 |       3 |         13.3683 |     0.498367 |      0.6384 |
+| 10 |      0.07  |         0.004 |        0.5983 |      18 |       3 |         13.2492 |     0.529428 |      0.6453 |
+| 11 |      0.058 |         0.006 |        0.5817 |      19 |       3 |         13.3312 |     0.254119 |      0.6265 |
+| 12 |      0.048 |         0     |        0.5991 |      20 |       3 |         13.4181 |     0.554868 |      0.6345 |
+| 13 |      0.062 |         0.006 |        0.5909 |      21 |       3 |         13.2062 |     0.396092 |      0.613  |
+| 14 |      0.074 |         0.004 |        0.5682 |      22 |       3 |         13.4612 |     0.56913  |      0.6223 |
+| 15 |      0.066 |         0.004 |        0.606  |      23 |       3 |         13.1587 |     0.465228 |      0.6097 |
+| 16 |      0.066 |         0     |        0.5856 |      24 |       3 |         13.1066 |     0.656774 |      0.6041 |
+
+Hey it actually learned! 

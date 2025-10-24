@@ -85,11 +85,11 @@ class TRMLoraLayer(LoraLayer):
 
     def __init__(self, base_layer: nn.Module, **kwargs) -> None:
         super().__init__(base_layer, **kwargs)
-        # TRM-specific state
-        self.zL_init = BufferDict({})
-        self.zH_init = BufferDict({})
-        self.trm_configs: Dict[str, TRMConfig] = {}
-        self.l_nets = nn.ModuleDict({})
+        # TRM-specific state, need to prefix with lora for saving
+        self.lora_zL_init = BufferDict({})
+        self.lora_zH_init = BufferDict({})
+        self.lora_configs: Dict[str, TRMConfig] = {}
+        self.lora_l_nets = nn.ModuleDict({})
         
         # Marker for Coconut to find TRM layers
         self._recursion_cache = None  # Injected by Coconut.recursion_context()
@@ -117,9 +117,9 @@ class TRMLoraLayer(LoraLayer):
         base_weight = self.get_base_layer().weight
         device = base_weight.device
         
-        self.trm_configs[adapter_name] = trm_config
+        self.lora_configs[adapter_name] = trm_config
 
-        self.l_nets[adapter_name] = L_net(
+        self.lora_l_nets[adapter_name] = L_net(
             r,
             trm_config.l_layers,
             trm_config.num_heads,
@@ -131,8 +131,8 @@ class TRMLoraLayer(LoraLayer):
         zL = torch.empty(r, device=device)
         torch.nn.init.trunc_normal_(zH, std=1.0)
         torch.nn.init.trunc_normal_(zL, std=1.0)
-        self.zL_init[adapter_name] = zL
-        self.zH_init[adapter_name] = zH
+        self.lora_zL_init[adapter_name] = zL
+        self.lora_zH_init[adapter_name] = zH
 
     def trm(self, adapter_name: str, zL: Float[Tensor, 'b h'], zH: Float[Tensor, 'b h'], context_hs: Float[Tensor, 'b h']) -> tuple[Float[Tensor, 'b h'], Float[Tensor, 'b h']]:
         """
@@ -142,15 +142,15 @@ class TRMLoraLayer(LoraLayer):
         When added to base_hidden (which has grad), detached recursions act as leaf nodes,
         allowing model to learn error cleanup from its own accumulated mistakes (see TRM paper).
         """
-        trm_config = self.trm_configs[adapter_name]
-        l_net = self.l_nets[adapter_name]
+        trm_config = self.lora_configs[adapter_name]
+        l_net = self.lora_l_nets[adapter_name]
         
         # Expect zL, zH to be [b, h]
         zLs = zL.unsqueeze(1)  # [b, 1, h]
         zHs = zH.unsqueeze(1)  # [b, 1, h]
         context = context_hs.unsqueeze(1)  # [b, 1, h]
 
-        # Early H cycles detached: forms leaf nodes but gradients still flow via base_hidden trunk
+        # Early H cycles detached: forms leaf nodes but gradients still flow via base_hidden trunk and also via `context`
         with torch.no_grad():
             for _ in range(max(0, trm_config.h_cycles - 1)):
                 # L cycles: refine zL with context + zH injection
@@ -205,6 +205,7 @@ class TRMLoraLayer(LoraLayer):
                 # Project INPUT (not output) down to low-rank via lora_A
                 # Standard LoRA uses the layer input, not output
                 x_down = self.lora_A[adapter](self.lora_dropout[adapter](hidden_states))  # [b, s, r]
+                # NOTE lora_a never gets grad, so it 
                 
                 # For TRM, use last token's projection as context
                 context_hs = x_down[:, -1, :]  # [b, r]
@@ -213,10 +214,10 @@ class TRMLoraLayer(LoraLayer):
                 # Initialize or retrieve zH and zL in r_dim
                 zL = recursion_cache.get('zL', None)
                 if zL is None:
-                    zL = self.zL_init[adapter].unsqueeze(0).expand(b, -1).to(base_hidden.device)
+                    zL = self.lora_zL_init[adapter].unsqueeze(0).expand(b, -1).to(base_hidden.device)
                 zH = recursion_cache.get('zH', None)
                 if zH is None:
-                    zH = self.zH_init[adapter].unsqueeze(0).expand(b, -1).to(base_hidden.device)
+                    zH = self.lora_zH_init[adapter].unsqueeze(0).expand(b, -1).to(base_hidden.device)
 
                 # Run TRM recursion: trm(A @ x, zL, zH)
                 zL, zH = self.trm(adapter, zL, zH, context_hs)
