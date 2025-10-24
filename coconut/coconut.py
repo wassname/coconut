@@ -11,7 +11,7 @@ from einops import rearrange, reduce, repeat
 from jaxtyping import Float, Int
 from typing import Tuple, List, Union, Optional, Dict
 from torch import Tensor
-
+from coconut.vcr_loss import VCRLoss
 from transformers import DynamicCache
 # from transformers.models.gpt2 import GPT2LMHeadModel
 
@@ -109,7 +109,10 @@ class Coconut(nn.Module):
 
         self.config = config
 
-        self.gen_forward_cnt = 0
+        if self.config.loss_seq_vcr:
+            self.vcr_loss = VCRLoss(H=self.config.lora_rank)
+
+        # self.gen_forward_cnt = 0
         self._recursion_cache = None  # Will be set via context manager
 
     @contextmanager
@@ -195,11 +198,11 @@ class Coconut(nn.Module):
 
         kv_cache = None
 
-        # all_hs = []
+        all_hs = []
 
         recursion_cache = {}
 
-        with self.recursion_context(recursion_cache):
+        with self.recursion_context(recursion_cache) as cache:
             for pass_idx in range(max_n_latents):
                 # TRM-style detached recursions: detach gradients for early passes,
                 # keep gradients for last N passes to learn error cleanup
@@ -270,6 +273,13 @@ class Coconut(nn.Module):
                             ]
                         )
 
+                        if self.config.collect_hs:
+                            hs = rearrange(
+                                list(outputs.hidden_states),
+                                "l b t h -> l b t h",
+                            ).detach().cpu()
+                            all_hs.append(hs)
+
             # Now do the rest of the generation after the last latent
 
             # 3, FINAL PASS
@@ -280,49 +290,62 @@ class Coconut(nn.Module):
                     position_ids=position_ids[:, a:b],
                     past_key_values=slice_kvcache(kv_cache)[0:a],
                     output_hidden_states=True,
-                    # zL=zL_prev,
-                    # zH=zH_prev,
                     recursion_cache=recursion_cache,
                     use_cache=True,
                 )
 
             logits.append(outputs.logits)
 
-        # # collect hs
-        # hs = rearrange(list(outputs.hidden_states), "l b t h -> l b t h").detach().cpu()
-        # all_hs.append(hs)
-        # all_hs = torch.concat(all_hs, dim=2)
+        # collect hs
+        if self.config.collect_hs:
+            hs = rearrange(list(outputs.hidden_states), "l b t h -> l b t h").detach().cpu()
+            all_hs.append(hs)
+            all_hs = torch.concat(all_hs, dim=2)
 
-        self.gen_forward_cnt += max_n_latents + 1
 
         logits = torch.cat(logits, dim=-2)
-        shift_logits = logits[..., :-1, :].contiguous()
-        shift_labels = labels[..., 1:].contiguous()
-        loss_fct = CrossEntropyLoss()
-        loss = loss_fct(
-            shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1)
-        )
 
-        # # Seq-VCR loss
-        # # in the paper they apply it to the last hidden state, we apply it to all
-        extra = {}
-        # if self.config.loss_seq_vcr:
-        #     with torch.autocast(device_type=input_ids.device.type):
-        #         loss_vcr, extra2 = self.vcr_loss(all_hs)
-        #     extra['loss_ar'] = loss.item()
-        #     extra.update(extra2)
-        #     loss += loss_vcr
+        question_nll, loss_per_token = get_nll(logits, all_labels, attention_mask)
+            
+        # Answer loss (primary objective)
+        answer_loss, _ = get_nll(logits, labels, attention_mask)
 
-        assert torch.isfinite(loss).all(), f"Loss is {loss}"
+        # Question margin loss (regularization: penalize if NLL > threshold)
+        question_margin_loss = torch.mean(F.relu(question_nll - nll_base - .1) ** 4)
 
-        return Outputs(
-            loss=loss,
-            inputs_embeds=inputs_embeds,
-            logits=logits,
-            past_key_values=outputs.past_key_values,
-            hidden_states=[],  # list(all_hs),
-            log=extra,
-        )
+        losses = {
+            "answer_loss": answer_loss,
+            "question_margin_loss": question_margin_loss,
+        }
+
+        extra = {
+            'nll/question': question_nll,
+            'nll/base': nll_base,            
+        }
+
+        # Seq-VCR loss
+        # in the paper they apply it to the last hidden state, we apply it to all. But it should be applied to the most relevent place, e.g. zH, cache. Or replace with topoloss which has more code support
+        if self.config.loss_seq_vcr:
+            with torch.autocast(device_type=input_ids.device.type):
+                loss_vcr, extra2 = self.vcr_loss(all_hs)
+            extra['loss_ar'] = loss_vcr.item()
+            extra.update(extra2)
+            losses['seq_vcr_loss'] = loss_vcr
+
+
+        # Combined loss
+        total_loss = sum(losses.values())
+        assert torch.isfinite(total_loss).all(), f"Loss is {total_loss}"
+        extra['loss/total'] = total_loss
+        for k, v in losses.items():
+            extra[f"loss/{k}"] = v
+
+        extra = {k: v.mean().detach().cpu().item() for k, v in extra.items()}
+
+        return Outputs(loss=total_loss, inputs_embeds=inputs_embeds, logits=logits, past_key_values=outputs.past_key_values,
+                        # hidden_states=list(all_hs), 
+                        # input_embed_diff=input_embed_diff,
+                        log=extra)
 
     def generate(
         self,
@@ -330,7 +353,6 @@ class Coconut(nn.Module):
         attention_mask,
         max_new_tokens=16,
         min_new_tokens=1,
-        output_embedding=False,
         **kwargs,
     ):
         """Generate answer tokens after processing latent reasoning.
@@ -339,7 +361,7 @@ class Coconut(nn.Module):
         The method processes these latents with TRM (if enabled), then generates
         the answer continuation. For dynamic latent generation, use a different approach.
         """
-        self.gen_forward_cnt = 0
+        # self.gen_forward_cnt = 0
 
         # assert input_ids.shape[0] == 1, "only support batch_size == 1 now"
         lyr_embed = self.model.get_input_embeddings()
@@ -381,7 +403,7 @@ class Coconut(nn.Module):
                 attention_mask=new_att_mask,
             )
             kv_cache = outputs.past_key_values
-            self.gen_forward_cnt += 1
+            # self.gen_forward_cnt += 1
             next_token = outputs.logits[:, -1].argmax(-1).detach().unsqueeze(1)
             if (next_token == self.config.latent_token_id).any():
                 logger.error("Latent token generated, not implemented in gen")
@@ -398,13 +420,7 @@ class Coconut(nn.Module):
             new_att_mask = torch.cat(
                 (new_att_mask, torch.ones((B, 1), device=new_att_mask.device)), dim=1
             )
-
-        if output_embedding:
-            # for analysis purpose
-            return tokens, new_inputs_embeds
-
-        else:
-            return tokens
+        return tokens
 
 
 def check_input_lens(input_ids, attention_mask, kv_cache):

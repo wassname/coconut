@@ -53,7 +53,7 @@ class BaseConfig:
     lr: float = 1e-4 # 1e-4 in coconut, but 1e-6 in verl
     weight_decay: float = 0.1 # 0.01 in coconut, 0 in verl # 0.1 anmd 1 in TRM paper
     grad_clip: float = 1.0
-    scheduler: str = "cosine" # "constant" or "cosine" or "linear"
+    scheduler: str = "linear" # "constant" or "cosine" or "linear"
 
     debug: bool = False
 
@@ -70,6 +70,10 @@ class BaseConfig:
     use_trm: bool = False  # Enable TRM adapter with frozen LLM
     load_in_4bit: bool = True  # Load LLM in 4bit for TRM mode
     load_in_8bit: bool = False  # Load LLM in 8bit for TRM mode
+
+
+    loss_seq_vcr: bool = True
+    collect_hs: bool = False  # whether to collect hidden states during forward pass
 
 
 
@@ -101,21 +105,6 @@ class BaseConfig:
     bot_token_id: Optional[int] = None  # beginning of thought token id
     eot_token_id: Optional[int] = None  # end of thought token id
     eos_token_id: Optional[int] = None  # for generate pad/eos
-
-# @dataclass
-# class GSMQwen(BaseConfig):
-#     train_path: str = "data/gsm_train.json"
-#     val_path: str = "data/gsm_valid.json"
-
-# @dataclass
-# class GSMQwenResume(BaseConfig):
-#     load_model_path: str = "outputs/qwen3-0.6b_20250514-194730/checkpoint_2"
-#     cot_epochs: int = 2
-#     epochs_per_stage: int = 8
-#     resume_epochs: int = 1
-#     # loss_seq_vcr: bool = True
-
-
 
 # @dataclass
 # class GsmQwen_H100(GSMQwenResume):
@@ -154,125 +143,42 @@ class BaseConfig:
 #     num_epochs: int = 4
 #     max_size: int = 8_000 # full ~400k in coconut
 
-@dataclass
-class Debug(BaseConfig):
-    model_id: str = "yujiepan/qwen3-tiny-random"
-
-    max_size: int = 1000 # full ~400k in coconut
-    debug: bool = True
-
-    batch_size_training: int = 8
-    gradient_accumulation_steps: int = 2
-
-    cot_epochs: int = 1
-    epochs_per_stage: int = 1
-    resume_epochs: int = 3
-
-    use_trm: bool = True
-    use_trm_lora: bool = True
-    num_epochs: int = 4
 
 
 @dataclass
-class TRMTest(BaseConfig):
-    """
-    TRM-style detached recursions test.
-    
-    Detaches gradients for early recursive passes, only backprops through last N.
-    Forces model to learn to clean up its own accumulated errors.
-    """
-    # TRM experiment: only backprop last 2 passes out of 4 total
-    n_detached_recursions: int = 2
-
-@dataclass
-class TRM(BaseConfig):
-    """Full TRM mode: frozen quantized LLM + TRM adapter."""
-    name: str = "trm-qwen3-0.6b"
-    load_in_4bit: bool = True
-
-    # load_model_path: str = "outputs/qwen3-0.6b_20250514-194730/checkpoint_2"
-
-    # resume one that already know CoT reasoning
-    # model_id: str = "outputs/qwen3-0.6b_20250514-194730/checkpoint_2"
-    model_id = "suayptalha/Qwen3-0.6B-Math-Expert"
-    # model_id: str = "Qwen/Qwen3-0.6B"
-
-
-
-    # num_epochs: int = 6  # Just a few epochs to test training
-    resume_epochs: int = 8
-    # epochs_per_stage: int = 8
-    cot_epochs: int = 0
-    num_epochs: int = 25  # More epochs to let TRM adapter learn
-    lr: float = 1e-4  # Slightly lower LR for adapter training
-
-    # eval_first_epoch: bool = True  # Evaluate before training
-
-    # NOTE: see TRM paper settings https://github.com/SamsungSAILMontreal/TinyRecursiveModels/blob/e7b68717f0a6c4cbb4ce6fbef787b14f42083bd9/config/arch/trm.yaml#L17
-    use_trm: bool = True
-
-    # trm_n_sup: int = 16  # Deep supervision steps (N_sup in HRM paper)
-    # trm_h_layers: int = 0  # Layers for H_net (0 for single net mode)
-    trm_h_cycles: int = 2  # Outer cycles (T in paper)
-    trm_l_cycles: int = 2  # Inner cycles (n in paper) [has grad]
-    trm_l_layers: int = 2  # Layers for L_net (or single net)
-    trm_hidden_size: Optional[int] = None  # Dynamic from base model if None
-    trm_num_heads: int = 2  # Number of attention heads in TRM (12 in paper)
-    trm_expansion: float = 2.67  # MLP expansion factor in TRM (4 in paper)
-    trm_transcoder_layers: int = 1  # Number of SwiGLU layers in transcoder (configurable)
-
-    # trm_svd_init: bool = False  # Whether to use SVD-based initialization for TRM transcoder
-
-    loss_reg_ie_diff: bool = True  # Whether to regularize input-embedding difference to be small
-    loss_nll_ratio_margin: bool = True  # Whether to use NLL ratio margin loss, this aims to keep the question at least as likely and TRM making unlikely embeddings, that make the answer very likely but the quesiton incoherent. Think of it like a hard boundary for keeping the questio coherent.
-
-
-    # n_detached_recursions: int = 2  # Number of detached recursions (paper used >6)
-    # n_gradient_recursions: int = 2  # Number of final recursions with gradients (paper uses 2)
-
-    max_size: int = 20_000  # Start very small for testing
-    batch_size_training: int = 12  # Reduced from 16 due to OOM
-    gradient_accumulation_steps: int = 768//12  # Keep effective batch ~128. TRM uses 768!!
-
-    # eval_first_epoch: bool = False  # Skip eval for speed
-    
-
-
-
-
-@dataclass
-class TRMLoRA(TRM):
+class TRMLoRA(BaseConfig):
     """
     TRM LoRA mode: inline recursive LoRA adapter on frozen LLM.
     """
     name: str = "trmlora-qwen3-0.6b"
-    use_trm: bool = False  # Disable original external TRM
-    use_trm_lora: bool = True
-
-    # Short test settings
     load_in_4bit: bool = False
-    # only_eval: bool = False  # Enable train/eval for short run
-    # num_epochs: int = 1
-    # max_size: int = 1000  # Small subset
-    batch_size_training: int = 12
-    gradient_accumulation_steps: int = 748//12  # Effective batch ~748
-    resume_epochs: int = 8  # Start from epoch 0
+    model_id = "suayptalha/Qwen3-0.6B-Math-Expert"
+    resume_epochs: int = 8
     cot_epochs: int = 0
-    epochs_per_stage: int = 3
-    # num_epochs: int = 20
-
-    # TODO add lora details here
-    lora_r: int = 2
-    lora_alpha: int = 8
+    num_epochs: int = 25
+    lr: float = 4e-3
+    use_trm: bool = False
+    trm_h_cycles: int = 2
+    trm_l_cycles: int = 2
+    trm_l_layers: int = 2
+    trm_hidden_size: Optional[int] = None
+    trm_num_heads: int = 2
+    trm_expansion: float = 2.67
+    trm_transcoder_layers: int = 1
+    loss_reg_ie_diff: bool = True
+    loss_nll_ratio_margin: bool = True
+    max_size: int = 20_000
+    batch_size_training: int = 16
+    gradient_accumulation_steps: int = 6
+    # TRMLoRA-specific fields
+    use_trm_lora: bool = True
+    epochs_per_stage: int = 6
+    lora_r: int = 12
+    lora_alpha: int = 32
     lora_dropout: float = 0.0
-
-    lora_layers : int = 4  # Number of layers to apply LoRA adapters to
-
+    lora_layers : int = 4
     eval_first_epoch: bool = False
     debug: bool = False
-
-    # LoRA-specific: lower LR, target layer 20
-    lr: float = 1e-4
     weight_decay: float = 0.0
 
 
