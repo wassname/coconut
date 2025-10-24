@@ -153,8 +153,8 @@ def train(conf: BaseConfig):
     #     convert_to_bfloat16(model)
 
     # setup eval
-    logger.debug(model)
-    summary(model, input_size=(4, 12), dtypes=[torch.long], depth=4)
+    # logger.debug(model)
+    summary(model, input_size=(4, 12), dtypes=[torch.long], depth=5)
 
 
     max_size = 32 if conf.debug is True else (conf.max_size or 100000000)

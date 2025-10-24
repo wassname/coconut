@@ -197,10 +197,7 @@ class TRM(BaseConfig):
     model_id = "suayptalha/Qwen3-0.6B-Math-Expert"
     # model_id: str = "Qwen/Qwen3-0.6B"
 
-    # TODO add lora details here
-    lora_r: int = 4
-    lora_alpha: int = 16
-    lora_dropout: float = 0.0
+
 
     # num_epochs: int = 6  # Just a few epochs to test training
     resume_epochs: int = 8
@@ -209,7 +206,7 @@ class TRM(BaseConfig):
     num_epochs: int = 25  # More epochs to let TRM adapter learn
     lr: float = 1e-4  # Slightly lower LR for adapter training
 
-    eval_first_epoch: bool = True  # Evaluate before training
+    # eval_first_epoch: bool = True  # Evaluate before training
 
     # NOTE: see TRM paper settings https://github.com/SamsungSAILMontreal/TinyRecursiveModels/blob/e7b68717f0a6c4cbb4ce6fbef787b14f42083bd9/config/arch/trm.yaml#L17
     use_trm: bool = True
@@ -217,14 +214,14 @@ class TRM(BaseConfig):
     # trm_n_sup: int = 16  # Deep supervision steps (N_sup in HRM paper)
     # trm_h_layers: int = 0  # Layers for H_net (0 for single net mode)
     trm_h_cycles: int = 2  # Outer cycles (T in paper)
-    trm_l_cycles: int = 3  # Inner cycles (n in paper) [has grad]
+    trm_l_cycles: int = 2  # Inner cycles (n in paper) [has grad]
     trm_l_layers: int = 2  # Layers for L_net (or single net)
     trm_hidden_size: Optional[int] = None  # Dynamic from base model if None
-    trm_num_heads: int = 4  # Number of attention heads in TRM (12 in paper)
+    trm_num_heads: int = 2  # Number of attention heads in TRM (12 in paper)
     trm_expansion: float = 2.67  # MLP expansion factor in TRM (4 in paper)
     trm_transcoder_layers: int = 1  # Number of SwiGLU layers in transcoder (configurable)
 
-    trm_svd_init: bool = False  # Whether to use SVD-based initialization for TRM transcoder
+    # trm_svd_init: bool = False  # Whether to use SVD-based initialization for TRM transcoder
 
     loss_reg_ie_diff: bool = True  # Whether to regularize input-embedding difference to be small
     loss_nll_ratio_margin: bool = True  # Whether to use NLL ratio margin loss, this aims to keep the question at least as likely and TRM making unlikely embeddings, that make the answer very likely but the quesiton incoherent. Think of it like a hard boundary for keeping the questio coherent.
@@ -237,7 +234,7 @@ class TRM(BaseConfig):
     batch_size_training: int = 12  # Reduced from 16 due to OOM
     gradient_accumulation_steps: int = 768//12  # Keep effective batch ~128. TRM uses 768!!
 
-    eval_first_epoch: bool = False  # Skip eval for speed
+    # eval_first_epoch: bool = False  # Skip eval for speed
     
 
 
@@ -249,8 +246,8 @@ class TRMLoRA(TRM):
     TRM LoRA mode: inline recursive LoRA adapter on frozen LLM.
     """
     name: str = "trmlora-qwen3-0.6b"
-    use_trm_lora: bool = True
     use_trm: bool = False  # Disable original external TRM
+    use_trm_lora: bool = True
 
     # Short test settings
     load_in_4bit: bool = False
@@ -264,12 +261,19 @@ class TRMLoRA(TRM):
     epochs_per_stage: int = 3
     # num_epochs: int = 20
 
+    # TODO add lora details here
+    lora_r: int = 2
+    lora_alpha: int = 8
+    lora_dropout: float = 0.0
+
+    lora_layers : int = 4  # Number of layers to apply LoRA adapters to
+
     eval_first_epoch: bool = False
     debug: bool = False
 
     # LoRA-specific: lower LR, target layer 20
     lr: float = 1e-4
-    weight_decay: float = 0.01
+    weight_decay: float = 0.0
 
 
 @dataclass

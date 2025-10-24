@@ -10,7 +10,7 @@ class PeftType2(str, enum.Enum):
 peft.utils.peft_types.PeftType = PeftType2
 
 try:
-    register_peft_method(name="trmlora", model_cls=TRMLoraModel, config_cls=TRMConfig)
+    register_peft_method(name="trmlora", model_cls=TRMLoraModel, config_cls=TRMConfig, prefix="lora_")
 except KeyError:
     # already registered
     pass

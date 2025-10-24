@@ -56,7 +56,25 @@ FIXME: update the below to reflect lora adapter usage
 
 ```py
 
-# FIXME y -> zH, zL -> zL, x -> hs
+
+"""
+**Standard LoRA:**
+```python
+h = W @ x + B @ (A @ x)
+```
+
+**Our TRM LoRA:**
+```python
+h = W @ x + B @ trm(A @ x)
+```
+
+Where:
+- `x` is the **input** to the layer
+- `W` is the frozen base weight
+- `A` projects input down to low rank `r`
+- `B` projects back up to output dimension
+
+"""
 
 def latent_recursion(hs, zH, zL, n=6):
     for i in range(n): # latent reasoning
