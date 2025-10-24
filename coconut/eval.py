@@ -18,6 +18,7 @@ def crop(s, maxl=30):
         return s[:maxl] + "..."
     return s
 
+
 @torch.no_grad()
 def evaluate(dataloader, model, tokenizer, ds, max_new_tokens=64, device='cuda', name="", dtype=torch.float32, quick=False, verbose=1):
 

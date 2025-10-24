@@ -108,8 +108,8 @@ def load_new_model(conf: BaseConfig, device, dtype):
 
     peft_model.print_trainable_parameters()
 
-    assert peft_model.base_model.model.lm_head.weight.requires_grad == False, "LM head weights should be frozen"
-    assert peft_model.base_model.model.model.embed_tokens.weight.requires_grad == False, "Embedding weights should be frozen"
+    assert peft_model.base_model.model.lm_head.weight.requires_grad is False, "LM head weights should be frozen"
+    assert peft_model.base_model.model.model.embed_tokens.weight.requires_grad is False, "Embedding weights should be frozen"
 
     model = Coconut(peft_model, conf)
     return model, tokenizer
