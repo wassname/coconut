@@ -199,6 +199,7 @@ class TRMLoraLayer(LoraLayer):
             result = base_hidden
 
             # Apply TRM LoRA adapters
+            # lora $ h = W @ x + B @ (A @ x) $
             for adapter in self.active_adapters:
                 if adapter not in self.lora_B:
                     continue
