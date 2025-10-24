@@ -1,13 +1,18 @@
+"""
+This subclasses lora, you can see AdaLora for an example subclassing lora in peft
+"""
+
 import torch
 import torch.nn as nn
 from torch import Tensor
-from typing import Optional, Dict, Any, List, Union
+from typing import Optional, Dict, Any
 from dataclasses import dataclass, field
 from jaxtyping import Float
 
-from peft.config import PeftConfig
 from peft.utils import PeftType
-from peft.tuners.tuners_utils import BaseTunerLayer, BaseTuner, check_target_module_exists
+from peft.tuners.tuners_utils import BaseTuner, BaseTunerLayer
+from peft.tuners.lora import LoraLayer
+from peft.tuners.lora.config import LoraConfig
 from peft.tuners._buffer_dict import BufferDict
 from peft.utils.other import get_pattern_key
 
@@ -19,191 +24,122 @@ from .trm_adapter import L_net
 
 
 @dataclass
-class TRMConfig(PeftConfig):
+class TRMConfig(LoraConfig):
     """
     Configuration for TRM LoRA adapter.
-    Proper PEFT config inheriting from PeftConfig.
+    Inherits from LoraConfig to get all standard LoRA features:
+    - init_lora_weights strategies (gaussian, pissa, loftq, olora, eva, corda, orthogonal)
+    - loftq_config, eva_config, corda_config
+    - use_rslora, use_dora
+    - rank_pattern, alpha_pattern
+    - All other LoRA config options
     """
-    # Basic LoRA parameters
-    r: int = field(default=8, metadata={"help": "TRM LoRA rank"})
-    lora_alpha: int = field(default=16, metadata={"help": "LoRA scaling parameter"})
-    lora_dropout: float = field(default=0.0, metadata={"help": "LoRA dropout probability"})
-    target_modules: Optional[Union[List[str], str]] = field(
-        default=None,
-        metadata={"help": "List of module names or regex expression to replace with TRM LoRA."}
-    )
-    exclude_modules: Optional[Union[List[str], str]] = field(
-        default=None,
-        metadata={"help": "List of module names to exclude from TRM LoRA."}
-    )
-    bias: str = field(default="none", metadata={"help": "Bias type for TRM LoRA. Can be 'none' or 'all'"})
+    # Override defaults for TRM
+    use_rslora: bool = field(default=True, metadata={"help": "Use rank-stabilized LoRA (recommended for stability)"})
     
     # TRM-specific parameters
     l_cycles: int = field(default=6, metadata={"help": "Number of L_net cycles per H cycle"})
     h_cycles: int = field(default=2, metadata={"help": "Number of H cycles"})
-    # hidden_size: int = field(default=2048, metadata={"help": "TRM hidden size"})
-    # llm_hidden_size: int = field(default=2048, metadata={"help": "LLM hidden size"})
     expansion: float = field(default=2.67, metadata={"help": "TRM expansion factor"})
     l_layers: int = field(default=2, metadata={"help": "Number of L_net layers"})
     num_heads: int = field(default=8, metadata={"help": "Number of attention heads"})
     update_mode: str = field(default="lora", metadata={"help": "Update mode: 'lora' or 'add_dora'"})
     transcoder_layers: int = field(default=2, metadata={"help": "Number of transcoder layers"})
     cycles: int = field(default=1, metadata={"help": "Additional refinement cycles"})
-    
-    # PEFT compatibility parameters
-    init_weights: bool = field(default=True, metadata={"help": "Whether to initialize weights"})
-    layers_to_transform: Optional[Union[List[int], int]] = field(
-        default=None, metadata={"help": "Layer indices to transform"}
-    )
-    layers_pattern: Optional[Union[List[str], str]] = field(
-        default=None, metadata={"help": "Layer pattern name"}
-    )
-    rank_pattern: Optional[dict] = field(default_factory=dict, metadata={"help": "Rank pattern mapping"})
-    modules_to_save: Optional[List[str]] = field(default=None, metadata={"help": "Modules to save"})
 
     def __post_init__(self):
         super().__post_init__()
-        # Use PeftType enum - register custom type if needed
+        # Override peft_type for TRM
         try:
             self.peft_type = PeftType.TRMLORA
         except AttributeError:
-            # Fallback if TRMLORA not in enum yet
             self.peft_type = "TRMLORA"
-        if isinstance(self.target_modules, list):
-            self.target_modules = set(self.target_modules)
+        
+        # Validate TRM-specific constraints
+        if self.h_cycles < 1:
+            raise ValueError(f"h_cycles must be >= 1, got {self.h_cycles}")
+        if self.l_cycles < 1:
+            raise ValueError(f"l_cycles must be >= 1, got {self.l_cycles}")
 
-class TRMLoraLayer(BaseTunerLayer):
+class TRMLoraLayer(LoraLayer):
     """
     TRM LoRA layer that wraps a base layer and overrides forward for inline recursion and low-rank delta.
-    Proper PEFT layer inheriting from BaseTunerLayer.
+    Subclasses LoraLayer for proper PEFT integration (following AdaLora pattern).
     """
     # All names of layers that may contain (trainable) adapter weights
     adapter_layer_names = (
-        # "trmlora_A", # 
-        "trmlora_B",
+        "lora_A",
+        "lora_B",
+        "l_nets",
     )
     # All names of other parameters that may contain adapter-related parameters
     other_param_names = (
         "r",
-        "trmlora_dropout",
+        "lora_alpha",
+        "scaling",
+        "lora_dropout",
+        "zL_init",
+        "zH_init",
     )
 
-    def __init__(self, base_layer: nn.Module, **kwargs):
-        super().__init__()
-        self.base_layer = base_layer
-        self.r = {}
-        self.trmlora_dropout = nn.ModuleDict({})
-        # self.trmlora_A = nn.ParameterDict({}) # FIXME is it used?
-        self.trmlora_B = nn.ParameterDict({})
+    def __init__(self, base_layer: nn.Module, **kwargs) -> None:
+        super().__init__(base_layer, **kwargs)
+        # TRM-specific state
         self.zL_init = BufferDict({})
         self.zH_init = BufferDict({})
-        
-        # Mark the weight as unmerged (PEFT pattern uses underscore)
-        self._disable_adapters = False
-        self.merged_adapters = []
-        self.kwargs = kwargs
+        self.trm_configs: Dict[str, TRMConfig] = {}
+        self.l_nets = nn.ModuleDict({})
         
         # Marker for Coconut to find TRM layers
         self._recursion_cache = None  # Injected by Coconut.recursion_context()
-        
-        # Get base layer info
-        base_layer_mod = self.get_base_layer()
-        if isinstance(base_layer_mod, nn.Linear):
-            self.in_features, self.out_features = base_layer_mod.in_features, base_layer_mod.out_features
-        else:
-            raise ValueError(f"Unsupported layer type {type(base_layer_mod)}")
     
     def update_layer(
         self,
         adapter_name: str,
-        r: int,
-        lora_alpha: int,
-        lora_dropout: float,
         trm_config: TRMConfig,
-        init_weights: bool = True,
         **kwargs
     ) -> None:
-        """Internal function to create TRM LoRA adapter"""
-        if r <= 0:
-            raise ValueError(f"`r` should be a positive integer value but the value passed is {r}")
+        """
+        Extend LoraLayer.update_layer to add TRM-specific components.
+        Calls parent to handle standard LoRA setup (A, B, scaling, dropout, DoRA, etc).
+        All LoRA params (r, lora_alpha, init_lora_weights, use_rslora, use_dora, etc) passed via kwargs.
+        """
+        # Call parent to handle standard LoRA setup (supports DoRA, rsLoRA, etc)
+        super().update_layer(
+            adapter_name=adapter_name,
+            **kwargs
+        )
         
+        # Add TRM-specific components
+        r = kwargs.get('r', trm_config.r)
+            
         base_weight = self.get_base_layer().weight
         device = base_weight.device
-
-        self.r[adapter_name] = r
-        # Removed unused trmlora_A
-        self.trmlora_B[adapter_name] = nn.Parameter(torch.empty(self.out_features, r, device=device))
-
-        if lora_dropout > 0.0:
-            module_dropout_layer = nn.Dropout(p=lora_dropout)
-        else:
-            module_dropout_layer = nn.Identity()
-        self.trmlora_dropout.update(nn.ModuleDict({adapter_name: module_dropout_layer}))
-
-        # Initialize TRM components for this adapter
-        if not hasattr(self, 'trm_configs'):
-            self.trm_configs = {}
-        self.trm_configs[adapter_name] = trm_config
         
-        # Initialize TRM networks
-        if not hasattr(self, 'l_nets'):
-            self.l_nets = {}
-
-        # Early creation of DoRA and DeLoRA params to avoid AttributeError
-        if not hasattr(self, 'dora_magnitudes'):
-            self.dora_magnitudes = nn.ParameterDict({})
-        if adapter_name not in self.dora_magnitudes:
-            self.dora_magnitudes[adapter_name] = nn.Parameter(torch.ones(self.out_features))
-
-        if not hasattr(self, 'delora_lambda'):
-            self.delora_lambda = nn.ParameterDict({})
-        if adapter_name not in self.delora_lambda:
-            self.delora_lambda[adapter_name] = nn.Parameter(torch.tensor(1.0))
-
-        r_dim = self.r[adapter_name]
-        r_dim = self.r[adapter_name]
-        self.down_projs = nn.ModuleDict({})
-        self.down_projs[adapter_name] = nn.Linear(self.out_features, r_dim)
+        self.trm_configs[adapter_name] = trm_config
 
         self.l_nets[adapter_name] = L_net(
-            r_dim,
+            r,
             trm_config.l_layers,
             trm_config.num_heads,
             trm_config.expansion,
-        ).to(device)
+        )#.to(device)
 
-        # Remove transcoder MLP, use LoRA-style up-proj with B
-        # self.transcoders[adapter_name] = ... (removed)
-
-        # Initialize initial states in r_dim
-        zH = torch.empty(r_dim, device=device)
-        zL = torch.empty(r_dim, device=device)
+        # Initialize TRM recursion states in r_dim
+        zH = torch.empty(r, device=device)
+        zL = torch.empty(r, device=device)
         torch.nn.init.trunc_normal_(zH, std=1.0)
         torch.nn.init.trunc_normal_(zL, std=1.0)
         self.zL_init[adapter_name] = zL
         self.zH_init[adapter_name] = zH
 
-        # Initialize LoRA weights (only B now) with small std for stability
-        if init_weights:
-            nn.init.normal_(self.trmlora_B[adapter_name], mean=0.0, std=0.02)  # Small init like in transformers
-
-        # Init DoRA magnitude to base weight norms for stability (DeLoRA inspiration)
-        base_norm = torch.norm(base_weight, dim=1)  # Per output channel
-        with torch.no_grad():
-            self.dora_magnitudes[adapter_name].copy_(base_norm)
-
-        # Init lambda to reasonable bound
-        with torch.no_grad():
-            self.delora_lambda[adapter_name].fill_(5.0)  # Example starting bound
-
-        # Move new weights to device (only does ModuleDicts, ParameterDict, BufferDict)
-        self._move_adapter_to_device_of_base_layer(adapter_name)
-        self.set_adapter(self.active_adapters)
-
-    def hrm(self, adapter_name: str, zL: Float[Tensor, 'b h'], zH: Float[Tensor, 'b h'], context_hs: Float[Tensor, 'b h']) -> tuple[Float[Tensor, 'b h'], Float[Tensor, 'b h']]:
+    def trm(self, adapter_name: str, zL: Float[Tensor, 'b h'], zH: Float[Tensor, 'b h'], context_hs: Float[Tensor, 'b h']) -> tuple[Float[Tensor, 'b h'], Float[Tensor, 'b h']]:
         """
-        Hierarchical Recursion Module (HRM) adapted from trm_adapter.py.
-        Runs fixed cycles with L_net.
+        Tiny Recursion Module (TRM) adapted from trm_adapter.py.
+        
+        Gradient flow: Early H cycles run no_grad (detached), final cycles keep grad.
+        When added to base_hidden (which has grad), detached recursions act as leaf nodes,
+        allowing model to learn error cleanup from its own accumulated mistakes (see TRM paper).
         """
         trm_config = self.trm_configs[adapter_name]
         l_net = self.l_nets[adapter_name]
@@ -212,7 +148,7 @@ class TRMLoraLayer(BaseTunerLayer):
         zLs = zL.unsqueeze(1)  # [b, 1, h]
         zHs = zH.unsqueeze(1)  # [b, 1, h]
 
-        # H cycles: run H cycles where earlier H cycles are run without grad except last
+        # Early H cycles detached: forms leaf nodes but gradients still flow via base_hidden trunk
         with torch.no_grad():
             for _ in range(max(0, trm_config.h_cycles - 1)):
                 for _ in range(trm_config.l_cycles):
@@ -224,11 +160,12 @@ class TRMLoraLayer(BaseTunerLayer):
             zLs = l_net(zLs, zHs + context_hs.unsqueeze(1))
         zHs = l_net(zHs, zLs)
 
-        # Additional refinement cycles (with grad)
-        for _ in range(trm_config.cycles):
-            for _ in range(trm_config.l_cycles):
-                zLs = l_net(zLs, zHs + context_hs.unsqueeze(1))
-            zHs = l_net(zHs, zLs)
+        # # FIXME is this right
+        # # Additional refinement cycles (with grad)
+        # for _ in range(trm_config.cycles):
+        #     for _ in range(trm_config.l_cycles):
+        #         zLs = l_net(zLs, zHs + context_hs.unsqueeze(1))
+        #     zHs = l_net(zHs, zLs)
 
         # Return (zL_next, zH_next) to match downstream expectation
         return zLs.squeeze(1), zHs.squeeze(1)
@@ -263,31 +200,12 @@ class TRMLoraLayer(BaseTunerLayer):
 
             # Apply TRM LoRA adapters
             for adapter in self.active_adapters:
-                if adapter not in self.trmlora_B:
+                if adapter not in self.lora_B:
                     continue
 
-                trm_config = self.trm_configs[adapter]
-                
-                # Get batch size from base_hidden
-                if base_hidden.dim() == 2:
-                    b = 1  # Assume batch size 1 for 2D tensors
-                    context_hs = base_hidden.mean(dim=0, keepdim=True)  # [1, h]
-                else:
-                    b = base_hidden.shape[0]
-                    # Use last hidden state instead of mean pooling
-                if base_hidden.dim() == 3:
-                    context_hs = base_hidden[:, -1, :]
-                elif base_hidden.dim() == 2:
-                    context_hs = base_hidden[-1].unsqueeze(0)
-                else:
-                    context_hs = base_hidden.mean(dim=0 if base_hidden.dim() == 1 else 1, keepdim=True)  # Fallback
-
-                # Project context to low-rank dim
-                # Ensure context has same dtype/device as the down projection weights to avoid matmul dtype errors
-                down_proj = self.down_projs[adapter]
-                # Move/cast context to the down_proj's device and dtype
-                context_hs_for_proj = context_hs.to(dtype=next(down_proj.parameters()).dtype, device=next(down_proj.parameters()).device)
-                context_proj = down_proj(context_hs_for_proj)  # [b, r]
+                # Use input hidden states (not output) for lora_A projection
+                hs = hidden_states[:, -1, :]
+                b = hs.shape[0]
 
                 # Initialize zH and zL in r_dim
                 zL = recursion_cache.get('zL', None)
@@ -296,34 +214,22 @@ class TRMLoraLayer(BaseTunerLayer):
                 zH = recursion_cache.get('zH', None)
                 if zH is None:
                     zH = self.zH_init[adapter].unsqueeze(0).expand(b, -1).to(base_hidden.device)
+                
+                # Project context to low-rank dim via lora_A
+                x_down = self.lora_A[adapter](hs)  # [b, r]
+                x_down = self.lora_dropout[adapter](x_down)
 
-                # Run HRM recursion in low-rank space
-                zL_next, zH_next = self.hrm(adapter, zL, zH, context_proj)  # Pass projected context
+                # Run TRM recursion in low-rank space
+                zL, zH = self.trm(adapter, zL, zH, x_down)
 
-                recursion_cache['zL'] = zL_next
-                recursion_cache['zH'] = zH_next
+                # Up-project refined state via lora_B with standard LoRA scaling
+                delta = self.lora_B[adapter](zH) * self.scaling[adapter]  # [b, out_features]
+        
+                # Add to base output (broadcast across sequence)
+                result = result + delta.unsqueeze(1)  # [b, 1, out] → [b, s, out]
 
-                # LoRA-style up-projection with DeLoRA-inspired normalization
-                scaling = trm_config.lora_alpha / max(1, self.r[adapter])
-                direction = (self.trmlora_B[adapter] @ zH_next.T).T  # [b, out]
-
-                # Normalize per output channel (column-wise like DeLoRA)
-                direction_norm = torch.norm(direction, dim=0, keepdim=True) + 1e-6  # [1, out]
-                direction = direction / direction_norm
-
-                # Bound norm with learnable lambda (DeLoRA style)
-                lambda_bound = self.delora_lambda[adapter].abs()  # Scalar or per-rank?
-                direction = direction * lambda_bound.clamp(min=0.1, max=10.0)  # Simple bounding
-
-                # DoRA: Scale by learned magnitude
-                magnitude = self.dora_magnitudes[adapter].unsqueeze(0).expand_as(direction)  # [b, out]
-                features = magnitude * direction * scaling
-
-                # Add dropout if needed
-                features = self.trmlora_dropout[adapter](features)
-
-                # Add per-batch features as broadcast delta (like context-dependent bias)
-                result = result + features.unsqueeze(1)  # [b, 1, out] broadcast to [b, s, out]
+                recursion_cache['zL'] = zL
+                recursion_cache['zH'] = zH
 
         result = result.to(previous_dtype)
         return result
@@ -334,17 +240,17 @@ class TRMLinear(nn.Module, TRMLoraLayer):
         self,
         base_layer,
         adapter_name: str,
-        r: int,
-        lora_alpha: int,
-        lora_dropout: float,
         trm_config: TRMConfig,
-        init_weights: bool = True,
         **kwargs,
     ) -> None:
         super().__init__()
         TRMLoraLayer.__init__(self, base_layer, **kwargs)
         self._active_adapter = adapter_name
-        self.update_layer(adapter_name, r, lora_alpha, lora_dropout, trm_config, init_weights)
+        self.update_layer(
+            adapter_name, 
+            trm_config=trm_config,
+            **kwargs,
+        )
 
     def forward(self, hidden_states: Float[Tensor, 'b s h'], *args: Any, **kwargs: Any) -> Float[Tensor, 'b s h']:
         """Forward pass - delegates to TRMLoraLayer.forward"""
@@ -389,29 +295,27 @@ class TRMLoraModel(BaseTuner):
         # config is our TRMConfig
         trm_config = config
 
-        # Regexp matching for patterns
+        # Regexp matching for patterns (like LoraModel does)
         r_key = get_pattern_key(trm_config.rank_pattern.keys(), current_key) if trm_config.rank_pattern else None
         r = trm_config.rank_pattern.get(r_key, trm_config.r) if r_key else trm_config.r
+        
+        alpha_key = get_pattern_key(trm_config.alpha_pattern.keys(), current_key) if trm_config.alpha_pattern else None
+        alpha = trm_config.alpha_pattern.get(alpha_key, trm_config.lora_alpha) if alpha_key else trm_config.lora_alpha
+
+        # Build kwargs for LoRA params
+        kwargs = {
+            "r": r,
+            "lora_alpha": alpha,
+            "lora_dropout": trm_config.lora_dropout,
+            "init_lora_weights": trm_config.init_lora_weights,
+            "use_rslora": trm_config.use_rslora,
+            "use_dora": trm_config.use_dora,
+        }
 
         if isinstance(target, TRMLoraLayer):
-            target.update_layer(
-                adapter_name,
-                r=r,
-                lora_alpha=trm_config.lora_alpha,
-                lora_dropout=trm_config.lora_dropout,
-                trm_config=trm_config,
-                init_weights=trm_config.init_weights,
-            )
+            target.update_layer(adapter_name, trm_config=trm_config, **kwargs)
         else:
-            new_module = self._create_new_module(
-                trm_config,
-                adapter_name, 
-                target, 
-                r=r,
-                lora_alpha=trm_config.lora_alpha,
-                lora_dropout=trm_config.lora_dropout,
-                init_weights=trm_config.init_weights,
-            )
+            new_module = self._create_new_module(trm_config, adapter_name, target, **kwargs)
             if adapter_name != self.active_adapter:
                 new_module.requires_grad_(False)
             self._replace_module(parent, target_name, new_module, target)

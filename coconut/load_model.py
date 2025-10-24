@@ -79,7 +79,7 @@ def load_new_model(conf: BaseConfig, device, dtype):
     
     target_layers = [int(x/num_layers) for x in range(0, 100, 10)]
     target_modules = [k for k,v in base_model.named_modules() if (".mlp." in k) and isinstance(v, torch.nn.Linear) and any(f".{i}." in k for i in target_layers)]
-    logger.info(f"Targeting {len(target_modules)} modules for TRM LoRA adapters")
+    logger.info(f"Targeting {len(target_modules)} modules for TRM LoRA adapters: {target_modules}")
     peft_config = TRMConfig(
         task_type="CAUSAL_LM",
         inference_mode=False,

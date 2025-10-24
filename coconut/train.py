@@ -41,7 +41,8 @@ from coconut.dataset import (
     get_question_only_latent_dataset,
 )
 from coconut.eval import evaluate, get_answer_perplexity, get_answer_preference
-from coconut.utils import Config, convert_to_bfloat16, set_seed, clear_memory, print_cuda_devices
+from coconut.utils import convert_to_bfloat16, set_seed, clear_memory, print_cuda_devices
+from coconut.configs import BaseConfig
 from coconut.load_model import (
     load_new_model,
     resume_model,
@@ -119,7 +120,7 @@ def create_optimizer(model, configs, warmup_fraction=0.1, opt_steps=None, cycles
 
 
 
-def train(conf: Config):
+def train(conf: BaseConfig):
     config_dict = asdict(conf)
     logger.info(f"Config: {config_dict}")
 

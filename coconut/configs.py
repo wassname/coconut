@@ -216,8 +216,8 @@ class TRM(BaseConfig):
 
     # trm_n_sup: int = 16  # Deep supervision steps (N_sup in HRM paper)
     # trm_h_layers: int = 0  # Layers for H_net (0 for single net mode)
-    trm_h_cycles: int = 3  # Outer cycles (T in paper)
-    trm_l_cycles: int = 6  # Inner cycles (n in paper)
+    trm_h_cycles: int = 2  # Outer cycles (T in paper)
+    trm_l_cycles: int = 3  # Inner cycles (n in paper) [has grad]
     trm_l_layers: int = 2  # Layers for L_net (or single net)
     trm_hidden_size: Optional[int] = None  # Dynamic from base model if None
     trm_num_heads: int = 4  # Number of attention heads in TRM (12 in paper)

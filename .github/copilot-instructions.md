@@ -55,6 +55,10 @@ Example results where
 ### Running Experiments
 ```bash
 
+# see options
+uv run scripts/run.py --help
+uv run scripts/run.py TRMLora --help
+
 # Or directly with tyro CLI
 uv run python scripts/run.py TRM --batch_size_training=8 --max_size=10000
 uv run python scripts/run.py Debug  # Fast iteration with tiny model
@@ -62,7 +66,7 @@ uv run python scripts/run.py Debug  # Fast iteration with tiny model
 uv run pytest # to get type errors and do an integration test on a tiny model
 ```
 
-Configs are Pydantic dataclasses in `coconut/configs.py`. CLI args override config fields via tyro. `uv run scripts/run.py TRMLora --help` for full options.
+Configs are Pydantic dataclasses in `coconut/configs.py`. CLI args override config fields via tyro. 
 
 ### Key Config Parameters
 
@@ -70,15 +74,13 @@ see ./coconut/configs.py for full details
 
 ## Development Patterns
 
-### Type Annotations
-I use jaxtyping for annotating tensor shapes:
-```python
-from jaxtyping import Float, Int
-from torch import Tensor
+- I use jaxtyping for annotating tensor shapes:
+    ```python
+    from jaxtyping import Float, Int
+    from torch import Tensor
 
-def forward(self, hs: Float[Tensor, 'b t h']) -> Float[Tensor, 'b t h']:
-```
-
+    def forward(self, hs: Float[Tensor, 'b t h']) -> Float[Tensor, 'b t h']:
+    ```
 
 - I use loguru to log
 - I use anycache to cache to disc as a function wrapper
@@ -87,7 +89,7 @@ def forward(self, hs: Float[Tensor, 'b t h']) -> Float[Tensor, 'b t h']:
 
 1. **Gradient flow in TRM mode**: LLM is frozen but used for grad in places.
 
-2. **Multi-pass processing**: `coconut.py` processes input in multiple passes (one per latent token). KV cache carries over between passes. Don't assume single forward pass.
+2. **Multi-pass processing**: `coconut.py` processes input in multiple passes (one per latent token). KV cache carries over between passes. Don't assume single forward pass. We also have a recursion context for TRM state carryover.
 
-4. **Detached recursions**: When `should_detach=True`, gradients don't flow through early passes. This is intentional (TRM paper design).
+4. TRM detaches all but the last one or two recursions. This is intentional, from the paper. In combination with deep supervision (or cirriculum learning here) this may still solve the fixed point problem.
 

@@ -197,8 +197,6 @@ class Coconut(nn.Module):
 
         # all_hs = []
 
-        # TRM state carryover across passes (for recursive refinement)
-        # zL_prev, zH_prev = None, None
         recursion_cache = {}
 
         with self.recursion_context(recursion_cache):
@@ -234,8 +232,6 @@ class Coconut(nn.Module):
                             output_hidden_states=True,
                             use_cache=True,
                         )
-                        # zL_prev = outputs.zL
-                        # zH_prev = outputs.zH
 
                         logits.append(outputs.logits)
 
