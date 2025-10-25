@@ -76,32 +76,6 @@ def get_nll(logits, labels=None, attention_mask=None):
     return nll, loss_per_token
 
 
-def slice_cache(past_key_values: DynamicCache, a: int, b: int):
-    """Subset the past_key_values to only keep those at the specified indices."""
-    if past_key_values is None:
-        return None
-    cache = [
-        (
-            k[:, :, a:b, :],
-            v[:, :, a:b, :],
-        )
-        for k, v in past_key_values
-    ]
-
-    # Qwen needs this
-    return DynamicCache.from_legacy_cache(cache)
-
-
-class slice_kvcache:
-    def __init__(self, cache: Optional[DynamicCache]=None):
-        self.cache = cache
-
-    def __getitem__(self, slice):
-        if self.cache is None:
-            return None
-        return slice_cache(self.cache, slice.start, slice.stop)
-
-
 class Coconut(nn.Module):
     def __init__(self, base_model: PreTrainedModel, config: BaseConfig):
         super().__init__()
@@ -234,7 +208,7 @@ class Coconut(nn.Module):
                             attention_mask=attention_mask[:, :b],
                             position_ids=position_ids[:, a:b],
                             recursion_cache=recursion_cache,
-                            past_key_values=slice_kvcache(kv_cache)[0:a],
+                            past_key_values=kv_cache,  # Cache already has exactly positions [0:a]
                             output_hidden_states=True,
                             use_cache=True,
                         )
@@ -254,8 +228,6 @@ class Coconut(nn.Module):
                         hidden_states = outputs.hidden_states
                         assert hidden_states is not None
                         kv_cache = outputs.past_key_values
-                        if isinstance(kv_cache, DynamicCache):
-                            kv_cache = kv_cache.to_legacy_cache()
                         assert kv_cache is not None
 
                         # to avoid in-place operations
@@ -291,7 +263,7 @@ class Coconut(nn.Module):
                     inputs_embeds=inputs_embeds[:, a:b],
                     attention_mask=attention_mask[:, :b],
                     position_ids=position_ids[:, a:b],
-                    past_key_values=slice_kvcache(kv_cache)[0:a],
+                    past_key_values=kv_cache,  # Cache already has exactly positions [0:a]
                     output_hidden_states=True,
                     recursion_cache=recursion_cache,
                     use_cache=True,
