@@ -4,7 +4,7 @@ from coconut.configs import BaseConfig, TRMLoRADebug, TRMDeloraDebug, TRMHraDebu
 from coconut.train import train
 
 @pytest.mark.parametrize(
-    "config_class, expected_model_class, adapter_name",
+    "config_class",
     [
         TRMLoRADebug,
         TRMDeloraDebug,
@@ -15,7 +15,6 @@ from coconut.train import train
 def test_tiny_train(config_class):
     # should train a small amount, eval, save
     conf = config_class()
-    conf['debug'] = True
     train(conf)
 
 # TODO test forward

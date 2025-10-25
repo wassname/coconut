@@ -12,7 +12,6 @@ import safetensors.torch
 import toml
 from transformers import BitsAndBytesConfig
 
-from coconut.trmlora.recursive_lora import TRMConfig, TRMLoraModel
 from peft import PeftModel, get_peft_model
 
 def load_new_model(conf: BaseConfig, device, dtype):
@@ -70,23 +69,37 @@ def load_new_model(conf: BaseConfig, device, dtype):
 
     base_model.resize_token_embeddings(len(tokenizer))
 
-    logger.info("Loading TRM LoRA adapter")
+    logger.debug("Loading TRM LoRA adapter")
 
     num_layers = base_model.config.num_hidden_layers
     # trm_hidden_size = base_model.config.hidden_size
 
 
-    target_layers = torch.linspace(int(num_layers*0.3), int(num_layers*0.9), steps=conf.lora_layers).long().tolist()
+    target_layers = torch.linspace(int(num_layers*0.3), int(num_layers*0.9), steps=conf.layers_spacing_adapter).long().tolist()
 
     logger.info(f"Targeting LoRA layers: {target_layers} out of {num_layers} total layers")
     target_modules = [k for k,v in base_model.named_modules() if  isinstance(v, torch.nn.Linear) and any(f".{i}." in k for i in target_layers)]
-    logger.info(f"Targeting {len(target_modules)} modules for TRM LoRA adapters: {target_modules}")
-    peft_config = TRMConfig(
+    logger.debug(f"Targeting {len(target_modules)} modules for TRM LoRA adapters: {target_modules}")
+
+
+    adapter_config_args = {}
+    prefixes = ['adapter_', ]
+    for k in conf.__dataclass_fields__.keys():
+        for p in prefixes:
+            if k.startswith(p):
+                kk = k[len(p):]
+                adapter_config_args[kk] = getattr(conf, k)
+                break
+
+    logger.debug(f"Adapter config args: {adapter_config_args}")
+    
+    AdapterConfig = conf._adapter_class
+    peft_config = AdapterConfig(
         task_type="CAUSAL_LM",
         inference_mode=False,
-        r=conf.lora_r,
-        lora_alpha=conf.lora_alpha,
-        lora_dropout=conf.lora_dropout,
+        # r=conf.lora_r,
+        # lora_alpha=conf.lora_alpha,
+        # lora_dropout=conf.lora_dropout,
         # target_modules="all-linear",  # Target all linear layers
         target_modules=target_modules,
         bias="none",
@@ -98,12 +111,13 @@ def load_new_model(conf: BaseConfig, device, dtype):
         num_heads=conf.trm_num_heads,
         # update_mode='lora',
         modules_to_save=None,
+        **adapter_config_args
     )
     # Use TRMLoraModel directly instead of get_peft_model
     # peft_model = TRMLoraModel(base_model, peft_config, "default")
 
     peft_model = get_peft_model(base_model, peft_config)
-    logger.info("Completed loading TRM LoRA adapter")
+    logger.debug("Completed loading TRM LoRA adapter")
     peft_model.enable_input_require_grads()
 
     peft_model.print_trainable_parameters()

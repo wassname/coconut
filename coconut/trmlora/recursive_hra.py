@@ -18,7 +18,7 @@ from peft.utils import PeftType
 from .trm_adapter import L_net
 
 @dataclass
-class TRMHraConfig(HRAConfig):
+class TRMHraAConfig(HRAConfig):
     """
     Configuration for TRM HRA adapter.
     Inherits from HRAConfig to get all standard HRA features.
@@ -71,7 +71,7 @@ class TRMHraLayer(HRALayer):
         # TRM-specific state, prefixed with hra for saving
         self.hra_zL_init = BufferDict({})
         self.hra_zH_init = BufferDict({})
-        self.hra_configs: Dict[str, TRMHraConfig] = {}
+        self.hra_configs: Dict[str, TRMHraAConfig] = {}
         self.hra_l_nets = nn.ModuleDict({})
         self.hra_alpha: Dict[str, float] = {}
         
@@ -81,7 +81,7 @@ class TRMHraLayer(HRALayer):
     def update_layer(
         self,
         adapter_name: str,
-        hra_config: TRMHraConfig,
+        hra_config: TRMHraAConfig,
         r: int,
         apply_GS: bool,
         init_weights: bool = True,
@@ -229,7 +229,7 @@ class TRMHraLinear(nn.Module, TRMHraLayer):
         self,
         base_layer,
         adapter_name: str,
-        hra_config: TRMHraConfig,
+        hra_config: TRMHraAConfig,
         r: int,
         apply_GS: bool,
         init_weights: bool = True,
@@ -275,7 +275,7 @@ class TRMHraModel(HRAModel):
         Falls back to parent implementation for non-TRM configs.
         """
         # Check if this is a TRM config
-        if not isinstance(hra_config, TRMHraConfig):
+        if not isinstance(hra_config, TRMHraAConfig):
             # Not a TRM config, use parent's implementation
             return HRAModel._create_new_module(hra_config, adapter_name, target, **kwargs)
         

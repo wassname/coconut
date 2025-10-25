@@ -8,7 +8,9 @@ setup:
 run_smol:
   #!/bin/bash
   . ./.venv/bin/activate
-  python scripts/run.py GSMQwen 
+  python scripts/run.py TRMDelora
+  python scripts/run.py TRMLoRA
+  python scripts/run.py TRMHra
 
 run_trm:
   #!/bin/bash

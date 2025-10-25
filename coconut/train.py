@@ -139,7 +139,7 @@ def train(conf: BaseConfig):
     print_cuda_devices()
     device = "cuda:0"  # if torch.cuda.is_available() else "cpu"
     dtype = torch.bfloat16 if (conf.bf16 is True) else torch.float32
-    logger.info(f"Using device: {device}, dtype: {dtype}")
+    logger.debug(f"Using device: {device}, dtype: {dtype}")
 
     if conf.resume_epochs>0 and conf.load_model_path:    
         logger.warning(f"Resuming from epoch {conf.resume_epochs}")    
@@ -154,7 +154,7 @@ def train(conf: BaseConfig):
 
     # setup eval
     # logger.debug(model)
-    summary(model, input_size=(4, 12), dtypes=[torch.long], depth=5)
+    # summary(model, input_size=(4, 12), dtypes=[torch.long], depth=3)
 
 
     max_size = 32 if conf.debug is True else (conf.max_size or 100000000)
@@ -165,7 +165,8 @@ def train(conf: BaseConfig):
         drop_unused=False,
         system_prompt=conf.system_prompt,
     )
-    logger.info("System prompt: \n" + conf.system_prompt)
+    if conf.system_prompt:
+        logger.info("System prompt: \n" + conf.system_prompt)
     # logger
 
     if not conf.only_eval:
@@ -218,7 +219,7 @@ def train(conf: BaseConfig):
                 stage = conf.max_latent_stage
 
             logger.info(
-                f"scheduled_stage={stage}, c_thought={conf.c_thought}, max_latent_stage={conf.max_latent_stage}"
+                f"scheduled_stage={stage}, c_thought={conf.c_thought}, max_latent_stage={conf.max_latent_stage}, epoch={epoch}"
             )
 
             # initial eval
@@ -280,7 +281,7 @@ def train(conf: BaseConfig):
 
                 gen_sample(model, tokenizer)
 
-            logger.info(f"Prep data for epoch={epoch} stage={stage}")
+            # logger.debug(f"Prep data for epoch={epoch} stage={stage}")
 
             dataset_loss_val = get_cot_latent_dataset(
                 stage,

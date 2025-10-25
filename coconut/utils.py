@@ -45,9 +45,9 @@ def print_cuda_devices():
     if torch.cuda.is_available():
         for i in range(torch.cuda.device_count()):
             torch.cuda.get_device_name(i)
-            logger.info(f"Device {i}: {torch.cuda.get_device_name(i)}")
-            logger.info(torch.cuda.get_device_capability(i))
-            logger.info(torch.cuda.get_device_properties(i))
+            logger.debug(f"Device {i}: {torch.cuda.get_device_name(i)}")
+            logger.debug(torch.cuda.get_device_capability(i))
+            logger.debug(torch.cuda.get_device_properties(i))
     else:
         logger.warning("CUDA is not available")
 

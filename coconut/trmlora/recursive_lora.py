@@ -23,7 +23,7 @@ from .trm_adapter import L_net
 
 
 @dataclass
-class TRMConfig(LoraConfig):
+class TRMLoraAConfig(LoraConfig):
     """
     Configuration for TRM LoRA adapter.
     Inherits from LoraConfig to get all standard LoRA features:
@@ -90,7 +90,7 @@ class TRMLoraLayer(LoraLayer):
         self.lora_zL_init = BufferDict({})
         self.lora_zH_init = BufferDict({})
         self.lora_l_nets = nn.ModuleDict({})
-        self.lora_configs: Dict[str, TRMConfig] = {}
+        self.lora_configs: Dict[str, TRMLoraAConfig] = {}
         
         # Marker for Coconut to find TRM layers
         self._recursion_cache = None  # Injected by Coconut.recursion_context()
@@ -98,7 +98,7 @@ class TRMLoraLayer(LoraLayer):
     def update_layer(
         self,
         adapter_name: str,
-        trm_config: TRMConfig,
+        trm_config: TRMLoraAConfig,
         **kwargs
     ) -> None:
         """
@@ -242,7 +242,7 @@ class TRMLinear(nn.Module, TRMLoraLayer):
         self,
         base_layer,
         adapter_name: str,
-        trm_config: TRMConfig,
+        trm_config: TRMLoraAConfig,
         **kwargs,
     ) -> None:
         super().__init__()
@@ -282,7 +282,7 @@ class TRMLoraModel(LoraModel):
         Falls back to parent implementation for non-TRM configs.
         """
         # Check if this is a TRM config
-        if not isinstance(lora_config, TRMConfig):
+        if not isinstance(lora_config, TRMLoraAConfig):
             # Not a TRM config, use parent's implementation
             return LoraModel._create_new_module(lora_config, adapter_name, target, **kwargs)
         

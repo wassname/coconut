@@ -7,9 +7,9 @@ from peft import PeftModel
 from peft.mapping import PEFT_TYPE_TO_PREFIX_MAPPING
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from coconut.adapters import is_hf_peft_model, is_plain_peft_model
-from coconut.trmlora.recursive_lora import TRMConfig, TRMLoraModel
-from coconut.trmlora.recursive_delora import TRMDeloraConfig, TRMDeloraModel
-from coconut.trmlora.recursive_hra import TRMHraConfig, TRMHraModel
+from coconut.trmlora.recursive_lora import TRMLoraAConfig, TRMLoraModel
+from coconut.trmlora.recursive_delora import TRMDeloraAConfig, TRMDeloraModel
+from coconut.trmlora.recursive_hra import TRMHraAConfig, TRMHraModel
 from coconut.gen import gen, gen_sample
 
 
@@ -17,9 +17,9 @@ from coconut.gen import gen, gen_sample
     "config_class, expected_model_class, adapter_name",
     [
         (LoraConfig, PeftModel, "lora"),
-        (TRMConfig, TRMLoraModel, "trmlora"),
-        (TRMDeloraConfig, TRMDeloraModel, "trmdelora"),
-        (TRMHraConfig, TRMHraModel, "trmhra"),
+        (TRMLoraAConfig, TRMLoraModel, "trmlora"),
+        (TRMDeloraAConfig, TRMDeloraModel, "trmdelora"),
+        (TRMHraAConfig, TRMHraModel, "trmhra"),
     ],
 )
 def test_adapter(config_class, expected_model_class, adapter_name):

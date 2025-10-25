@@ -21,7 +21,7 @@ from peft.utils import PeftType
 from .trm_adapter import L_net
 
 @dataclass
-class TRMDeloraConfig(DeloraConfig):
+class TRMDeloraAConfig(DeloraConfig):
     """
     Configuration for TRM DeLoRA adapter.
     Inherits from DeloraConfig to get all standard DeLoRA features.
@@ -73,7 +73,7 @@ class TRMDeloraLayer(DeloraLayer):
         # TRM-specific state, prefixed with delora for saving
         self.delora_zL_init = BufferDict({})
         self.delora_zH_init = BufferDict({})
-        self.delora_configs: Dict[str, TRMDeloraConfig] = {}
+        self.delora_configs: Dict[str, TRMDeloraAConfig] = {}
         self.delora_l_nets = nn.ModuleDict({})
         
         # Marker for Coconut to find TRM layers
@@ -82,7 +82,7 @@ class TRMDeloraLayer(DeloraLayer):
     def update_layer(
         self,
         adapter_name: str,
-        trm_config: TRMDeloraConfig,
+        trm_config: TRMDeloraAConfig,
         r: int,
         delora_lambda: float,
         module_dropout: float,
@@ -254,7 +254,7 @@ class TRMDeloraLinear(nn.Module, TRMDeloraLayer):
         self,
         base_layer,
         adapter_name: str,
-        trm_config: TRMDeloraConfig,
+        trm_config: TRMDeloraAConfig,
         r: int,
         delora_lambda: float,
         module_dropout: float,
@@ -302,7 +302,7 @@ class TRMDeloraModel(DeloraModel):
         Falls back to parent implementation for non-TRM configs.
         """
         # Check if this is a TRM config
-        if not isinstance(delora_config, TRMDeloraConfig):
+        if not isinstance(delora_config, TRMDeloraAConfig):
             # Not a TRM config, use parent's implementation
             return DeloraModel._create_new_module(delora_config, adapter_name, target, **kwargs)
         

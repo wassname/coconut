@@ -2,9 +2,9 @@
 import peft.utils.peft_types
 import enum
 from peft.utils import register_peft_method
-from coconut.trmlora.recursive_lora import TRMLoraModel, TRMConfig
-from coconut.trmlora.recursive_delora import TRMDeloraModel, TRMDeloraConfig
-from coconut.trmlora.recursive_hra import TRMHraModel, TRMHraConfig
+from coconut.trmlora.recursive_lora import TRMLoraModel, TRMLoraAConfig
+from coconut.trmlora.recursive_delora import TRMDeloraModel, TRMDeloraAConfig
+from coconut.trmlora.recursive_hra import TRMHraModel, TRMHraAConfig
 
 class PeftType2(str, enum.Enum):
     TRMLORA = 'TRMLORA'
@@ -13,19 +13,19 @@ class PeftType2(str, enum.Enum):
 peft.utils.peft_types.PeftType = PeftType2
 
 try:
-    register_peft_method(name="trmlora", model_cls=TRMLoraModel, config_cls=TRMConfig, prefix="lora_")
+    register_peft_method(name="trmlora", model_cls=TRMLoraModel, config_cls=TRMLoraAConfig, prefix="lora_")
 except KeyError:
     # already registered
     pass
 
 try:
-    register_peft_method(name="trmdelora", model_cls=TRMDeloraModel, config_cls=TRMDeloraConfig, prefix="delora_")
+    register_peft_method(name="trmdelora", model_cls=TRMDeloraModel, config_cls=TRMDeloraAConfig, prefix="delora_")
 except KeyError:
     # already registered
     pass
 
 try:
-    register_peft_method(name="trmhra", model_cls=TRMHraModel, config_cls=TRMHraConfig, prefix="hra_")
+    register_peft_method(name="trmhra", model_cls=TRMHraModel, config_cls=TRMHraAConfig, prefix="hra_")
 except KeyError:
     # already registered
     pass
