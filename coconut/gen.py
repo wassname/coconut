@@ -1,8 +1,8 @@
 import torch
 
 def gen_sample(model, tokenizer, verbose=True):
-    # try differen't lengthso f latent
-    for l in range(0, 10, 2):
+    # try different lengths of latent
+    for l in [0, 1, 2]:
         latent_tokens = '<|start-latent|>' + '<|latent|>' * l + '<|end-latent|>'
         s=[
         {'role':'user', 'content':'What is two plus two but wrong and french?'+latent_tokens},]

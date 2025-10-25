@@ -72,18 +72,18 @@ class TRMLoRA(BaseConfig):
     load_in_4bit: bool = False
     use_trm_lora: bool = True
     
-    resume_epochs: int = 8
+    resume_epochs: int = 2
     cot_epochs: int = 0
-    num_epochs: int = 55
+    num_epochs: int = 20
     epochs_per_stage: int = 10
     
     lr: float = 1e-3
-    weight_decay: float = 0.0
+    weight_decay: float = 0.01
     
     max_size: int = 20_000
     batch_size_training: int = 10
-    gradient_accumulation_steps: int = 6
-    
+    gradient_accumulation_steps: int = 700 // 10
+
     eval_first_epoch: bool = False
     loss_nll_ratio_margin: bool = False
     
@@ -91,6 +91,25 @@ class TRMLoRA(BaseConfig):
     lora_alpha: int = 32  # LoRA alpha scaling
     lora_dropout: float = 0.0
     lora_layers: int = 8  # number of spaced out layers to apply LoRA to
+    trm_h_cycles: int = 3  # high level recursive cycles (T in paper)
+    trm_l_cycles: int = 2  # low level recursive cycles (n in paper)
+    trm_l_layers: int = 2  # layers for L_net
+    trm_num_heads: int = 3  # number of attention heads in TRM
+    trm_expansion: float = 4  # MLP expansion factor in TRM
+
+
+
+@dataclass
+class TRMDelora(TRMLoRA):
+    """TRM DeLoRA mode: inline recursive DeLoRA adapter on frozen LLM."""
+    name: str = "trmdelora-qwen3-0.6b"
+    use_trm_delora: bool = True
+    use_trm_lora: bool = False
+    
+    delora_r: int = 18  # DeLoRA rank
+    delora_lambda: int = 15  # DeLoRA lambda
+    delora_dropout: float = 0.0
+    delora_layers: int = 8  # number of spaced out layers to apply DeLoRA to
     trm_h_cycles: int = 3  # high level recursive cycles (T in paper)
     trm_l_cycles: int = 2  # low level recursive cycles (n in paper)
     trm_l_layers: int = 2  # layers for L_net
