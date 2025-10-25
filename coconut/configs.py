@@ -17,7 +17,7 @@ class BaseConfig:
     load_model_path: str = ""  # set to checkpoint path to resume
     resume_epochs: int = 0  # set to phase/epoch to resume from
     
-    replacement_method: str = "supressed[0.75:]"  # how to replace latent tokens: 0.5, -3, supressed[0.5:], hs+supressed[0.5:], ie+supressed[0.5:]
+    # replacement_method: str = "supressed[0.75:]"  # how to replace latent tokens: 0.5, -3, supressed[0.5:], hs+supressed[0.5:], ie+supressed[0.5:]
     use_position_ids: bool = True  # experimental, might help model mode switch to latent tokens
     
     bf16: bool = True  # use bf16 for all model weights
@@ -121,7 +121,26 @@ class TRMDelora(TRMLoRA):
 
 
 @dataclass
-class TRMLoRADebug(TRMLoRA):
+class TRMHra(TRMLoRA):
+    """TRM HRA mode: inline recursive HRA adapter on frozen LLM."""
+    name: str = "trmhra-qwen3-0.6b"
+    use_trm_hra: bool = True
+    use_trm_delora: bool = False
+    use_trm_lora: bool = False
+    
+    hra_r: int = 8  # HRA rank (even recommended for symmetric init)
+    hra_apply_GS: bool = False  # Gram-Schmidt orthogonalization
+    hra_alpha: int = 16  # Scaling for TRM refinement delta
+    hra_dropout: float = 0.0
+    hra_layers: int = 8  # number of spaced out layers to apply HRA to
+    trm_h_cycles: int = 3  # high level recursive cycles (T in paper)
+    trm_l_cycles: int = 2  # low level recursive cycles (n in paper)
+    trm_l_layers: int = 2  # layers for L_net
+    trm_num_heads: int = 3  # number of attention heads in TRM
+    trm_expansion: float = 4  # MLP expansion factor in TRM
+
+@dataclass
+class Debug:
     """Fast iteration TRM LoRA config with tiny model."""
     model_id: str = "yujiepan/qwen3-tiny-random"
     name: str = "trmlora-debug"
@@ -141,20 +160,16 @@ class TRMLoRADebug(TRMLoRA):
 
 
 @dataclass
-class TRMHra(TRMLoRA):
-    """TRM HRA mode: inline recursive HRA adapter on frozen LLM."""
-    name: str = "trmhra-qwen3-0.6b"
-    use_trm_hra: bool = True
-    use_trm_delora: bool = False
-    use_trm_lora: bool = False
-    
-    hra_r: int = 8  # HRA rank (even recommended for symmetric init)
-    hra_apply_GS: bool = False  # Gram-Schmidt orthogonalization
-    hra_alpha: int = 16  # Scaling for TRM refinement delta
-    hra_dropout: float = 0.0
-    hra_layers: int = 8  # number of spaced out layers to apply HRA to
-    trm_h_cycles: int = 3  # high level recursive cycles (T in paper)
-    trm_l_cycles: int = 2  # low level recursive cycles (n in paper)
-    trm_l_layers: int = 2  # layers for L_net
-    trm_num_heads: int = 3  # number of attention heads in TRM
-    trm_expansion: float = 4  # MLP expansion factor in TRM
+class TRMLoRADebug(Debug, TRMLoRA):
+    """Fast iteration TRM LoRA config with tiny model."""
+    name: str = "trmlora-debug"
+
+@dataclass
+class TRMHraDebug(Debug, TRMHra):
+    """Fast iteration TRM HRA config with tiny model."""
+    name: str = "trmhra-debug"
+
+@dataclass
+class TRMDeloraDebug(Debug, TRMDelora):
+    """Fast iteration TRM DeLoRA config with tiny model."""
+    name: str = "trmdelora-debug"

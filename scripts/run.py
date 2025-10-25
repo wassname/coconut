@@ -1,14 +1,4 @@
-import warnings
-
-# can be emitted when generating schemas for dataclasses used by tyro.
-warnings.filterwarnings(
-    "ignore",
-    message="The 'repr' attribute with value False was provided to the `Field()` function",
-)
-warnings.filterwarnings(
-    "ignore",
-    message="The 'frozen' attribute with value True was provided to the `Field()` function",
-)
+import coconut.silence
 
 from torchinfo import summary
 import os
@@ -64,12 +54,12 @@ def main():
     import tyro
     from coconut import configs # this will be my dataclass files
     experiments = configs.__dict__.keys()
-    print(f"Available experiments: {experiments}")
+    # logger.debug(f"Available experiments: {experiments}")
     # parser = argparse.ArgumentParser(description="coconut")
     # parser.add_argument("experiment", type=str, help=f"experiment names: [{experiments}]")
     # args = parser.parse_args()
 
-    print(os.sys.argv)
+    # logger.debug(f"Command line arguments: {os.sys.argv}")
     ConfigCls = getattr(configs, os.sys.argv[1])
     conf = tyro.cli(ConfigCls, args=os.sys.argv[2:])
     return train(conf)

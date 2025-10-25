@@ -1,3 +1,4 @@
+import coconut.silence
 import torch
 import warnings
 import pytest
@@ -10,10 +11,6 @@ from coconut.trmlora.recursive_lora import TRMConfig, TRMLoraModel
 from coconut.trmlora.recursive_delora import TRMDeloraConfig, TRMDeloraModel
 from coconut.trmlora.recursive_hra import TRMHraConfig, TRMHraModel
 from coconut.gen import gen, gen_sample
-
-# Silence the pydantic warnings from tyro configs
-warnings.filterwarnings("ignore", category=UserWarning, module="pydantic._internal")
-warnings.filterwarnings("ignore", message="UnsupportedFieldAttributeWarning")
 
 
 @pytest.mark.parametrize(
