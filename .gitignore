@@ -1,5 +1,5 @@
 # /docs/
-/.anycache/
+.anycache/
 
 # exclude data from source control by default
 /data/
