@@ -203,280 +203,284 @@ def train(conf: BaseConfig):
 
     if conf.resume_epochs>0:
         logger.warning(f"Resuming from epoch {conf.resume_epochs}")
+    
+    try:
+        for epoch in tqdm(range(conf.resume_epochs, conf.num_epochs), unit="epoch"):
+            start_time = time.time()
 
-    for epoch in tqdm(range(conf.resume_epochs, conf.num_epochs), unit="epoch"):
-        start_time = time.time()
+            max_latent_epoch = conf.cot_epochs + conf.max_latent_stage * conf.epochs_per_stage
 
-        max_latent_epoch = conf.cot_epochs + conf.max_latent_stage * conf.epochs_per_stage
+            if epoch <= conf.cot_epochs:
+                stage = -1
+            elif epoch < max_latent_epoch:
+                stage = (epoch - conf.cot_epochs) // conf.epochs_per_stage
+            else:
+                stage = conf.max_latent_stage
 
-        if epoch <= conf.cot_epochs:
-            stage = -1
-        elif epoch < max_latent_epoch:
-            stage = (epoch - conf.cot_epochs) // conf.epochs_per_stage
-        else:
-            stage = conf.max_latent_stage
-
-        logger.info(
-            f"scheduled_stage={stage}, c_thought={conf.c_thought}, max_latent_stage={conf.max_latent_stage}"
-        )
-
-        # initial eval
-
-        dataset_gen_val = get_question_only_latent_dataset(
-            stage,
-            base_dataset_valid,
-            conf,
-            bot_id,
-            latent_id,
-            eot_id,
-            # drop_unused=False,
-        )
-        if "gsm" in conf.val_path:
-            max_new_tokens = 64
-        else:
-            max_new_tokens = 128
-        if conf.debug:
-            max_new_tokens = 16
-            print("DEBUG MODE: max_new_tokens set to 8")
-        valid_gen_dataloader = torch.utils.data.DataLoader(
-            dataset_gen_val,
-            num_workers=6,
-            pin_memory=True,
-            batch_size=conf.batch_size_training,
-            collate_fn=collator,
-        )
-        if epoch == 0 or (epoch==conf.resume_epochs) and conf.eval_first_epoch:
-            # quick QC to see how well untouched model does at the task
-            r = evaluate(
-                valid_gen_dataloader,
-                model,
-                tokenizer,
-                base_dataset_valid,
-                max_new_tokens=max_new_tokens,
-                name=f"eval_{epoch}_start",
-                dtype=dtype,
-                device=device,
-                # quick=True,
+            logger.info(
+                f"scheduled_stage={stage}, c_thought={conf.c_thought}, max_latent_stage={conf.max_latent_stage}"
             )
-            # r = {f"eval/quick_{k}": v for k, v in r.items()}
-            r2 = run_ratio_eval(
-                model,
-                tokenizer,
+
+            # initial eval
+
+            dataset_gen_val = get_question_only_latent_dataset(
+                stage,
                 base_dataset_valid,
-                conf,
-                stage,
-                device=device,
-                dtype=dtype,
-            )
-            if wandb_run:
-                wandb_run.log(r)
-                wandb_run.log(r2)
-            
-            r["epoch"] = -1
-            r["stage"] = stage
-            r['eval/ratios'] = r2['eval/ratios']
-            res.append(r)
-
-            gen_sample(model, tokenizer)
-
-        logger.info(f"Prep data for epoch={epoch} stage={stage}")
-
-        dataset_loss_val = get_cot_latent_dataset(
-            stage,
-            base_dataset_valid,
-            conf,
-            bot_id,
-            latent_id,
-            eot_id,
-        )
-        valid_loss_dataloader = torch.utils.data.DataLoader(
-            dataset_loss_val,
-            num_workers=1,
-            shuffle=False,
-            pin_memory=True,
-            batch_size=conf.batch_size_training,
-            collate_fn=collator,
-        )
-
-        log_dict = None
-        eval_log_dict = None
-
-        if not conf.only_eval:
-            dataset_train = get_cot_latent_dataset(
-                stage,
-                base_dataset_train,
                 conf,
                 bot_id,
                 latent_id,
                 eot_id,
-                shuffle=True,
+                # drop_unused=False,
             )
-            if (conf.reset_optimizer is True) or (optimiser is None):
-                opt_steps=len(dataset_train) // conf.gradient_accumulation_steps
-                if not conf.reset_optimizer:
-                    opt_steps *= conf.num_epochs
-                epochs=1 if conf.reset_optimizer else conf.num_epochs
-                optimizer, scheduler = create_optimizer(
-                    model, conf, warmup_fraction=0.1, opt_steps=opt_steps,
-                    cycles=epochs
-                )
-
-            train_dataloader = torch.utils.data.DataLoader(
-                dataset_train,
-                num_workers=1,
-                shuffle=True,
+            if "gsm" in conf.val_path:
+                max_new_tokens = 64
+            else:
+                max_new_tokens = 128
+            if conf.debug:
+                max_new_tokens = 16
+                print("DEBUG MODE: max_new_tokens set to 8")
+            valid_gen_dataloader = torch.utils.data.DataLoader(
+                dataset_gen_val,
+                num_workers=6,
                 pin_memory=True,
                 batch_size=conf.batch_size_training,
                 collate_fn=collator,
-                # sampler=DistributedSampler(dataset_train, shuffle=True),
             )
-
-            optimizer.zero_grad()
-            model.train()
-            total_length = len(train_dataloader) // conf.gradient_accumulation_steps
-            pbar = tqdm(
-                colour="blue",
-                desc=f"Training Epoch: {epoch}",
-                total=total_length,
-                dynamic_ncols=True,
-            )
-            total_train_steps = 0
-
-            for step, batch in enumerate(train_dataloader):
-                total_train_steps += 1
-                batch = {
-                    key: batch[key].to(device) for key in batch.keys() if key != "idx"
-                }
-
-                with torch.autocast(device_type=device, dtype=dtype):
-                    outputs = model(**batch)
-
-                    loss = outputs.loss / conf.gradient_accumulation_steps
-
-                loss.backward()
-
-                norm = None
-                # # every N steps (or last batch) do optimizer step
-                is_last_step = step == len(train_dataloader) - 1
-                if (
-                    step + 1
-                ) % conf.gradient_accumulation_steps == 0 or is_last_step:
-                    if (conf.grad_clip is not None) and (conf.grad_clip > 0):
-                        norm = torch.nn.utils.clip_grad_norm_(
-                            model.parameters(), conf.grad_clip
-                        )
-
-                    optimizer.step()
-                    optimizer.zero_grad()
-                    if scheduler is not None:
-                        scheduler.step()
-
-                    pbar.update(1)
-
-                if wandb_run:
-                    lr = torch.tensor(
-                        [group["lr"] for group in optimizer.param_groups]
-                    ).mean()
-                    log_dict = {
-                        "train/epoch": epoch,
-                        "train/step": epoch * len(train_dataloader) + step,
-                        "train/loss": loss.detach().float()
-                        * conf.gradient_accumulation_steps,
-                        "train/lr": lr,
-                        "train/grad_norm": norm,
-                        **{f'train/{k}': outputs.log[k] for k in outputs.log},
-                    }
-                    wandb_run.log(log_dict)
-
-                pbar.set_description(
-                    f"T Epoch: {epoch}/{conf.num_epochs}, batch {step}/{len(train_dataloader)} "
-                    f"(loss: {round(float(loss.detach().float() * conf.gradient_accumulation_steps), 4):2.2f}"
+            if epoch == 0 or (epoch==conf.resume_epochs) and conf.eval_first_epoch:
+                # quick QC to see how well untouched model does at the task
+                r = evaluate(
+                    valid_gen_dataloader,
+                    model,
+                    tokenizer,
+                    base_dataset_valid,
+                    max_new_tokens=max_new_tokens,
+                    name=f"eval_{epoch}_start",
+                    dtype=dtype,
+                    device=device,
+                    # quick=True,
                 )
-                if step % 5 == 0:
-                    clear_memory()
-            pbar.close()
+                # r = {f"eval/quick_{k}": v for k, v in r.items()}
+                r2 = run_ratio_eval(
+                    model,
+                    tokenizer,
+                    base_dataset_valid,
+                    conf,
+                    stage,
+                    device=device,
+                    dtype=dtype,
+                )
+                if wandb_run:
+                    wandb_run.log(r)
+                    wandb_run.log(r2)
+                
+                r["epoch"] = -1
+                r["stage"] = stage
+                r['eval/ratios'] = r2['eval/ratios']
+                res.append(r)
 
-            # val loss
-            total_loss = 0
-            with torch.no_grad():
-                model.eval()
-                for step, batch in enumerate(valid_loss_dataloader):
+                gen_sample(model, tokenizer)
+
+            logger.info(f"Prep data for epoch={epoch} stage={stage}")
+
+            dataset_loss_val = get_cot_latent_dataset(
+                stage,
+                base_dataset_valid,
+                conf,
+                bot_id,
+                latent_id,
+                eot_id,
+            )
+            valid_loss_dataloader = torch.utils.data.DataLoader(
+                dataset_loss_val,
+                num_workers=1,
+                shuffle=False,
+                pin_memory=True,
+                batch_size=conf.batch_size_training,
+                collate_fn=collator,
+            )
+
+            log_dict = None
+            eval_log_dict = None
+
+            if not conf.only_eval:
+                dataset_train = get_cot_latent_dataset(
+                    stage,
+                    base_dataset_train,
+                    conf,
+                    bot_id,
+                    latent_id,
+                    eot_id,
+                    shuffle=True,
+                )
+                if (conf.reset_optimizer is True) or (optimiser is None):
+                    opt_steps=len(dataset_train) // conf.gradient_accumulation_steps
+                    if not conf.reset_optimizer:
+                        opt_steps *= conf.num_epochs
+                    epochs=1 if conf.reset_optimizer else conf.num_epochs
+                    optimizer, scheduler = create_optimizer(
+                        model, conf, warmup_fraction=0.1, opt_steps=opt_steps,
+                        cycles=epochs
+                    )
+
+                train_dataloader = torch.utils.data.DataLoader(
+                    dataset_train,
+                    num_workers=1,
+                    shuffle=True,
+                    pin_memory=True,
+                    batch_size=conf.batch_size_training,
+                    collate_fn=collator,
+                    # sampler=DistributedSampler(dataset_train, shuffle=True),
+                )
+
+                optimizer.zero_grad()
+                model.train()
+                total_length = len(train_dataloader) // conf.gradient_accumulation_steps
+                pbar = tqdm(
+                    colour="blue",
+                    desc=f"Training Epoch: {epoch}",
+                    total=total_length,
+                    dynamic_ncols=True,
+                )
+                total_train_steps = 0
+
+                for step, batch in enumerate(train_dataloader):
+                    total_train_steps += 1
                     batch = {
-                        key: batch[key].to(device)
-                        for key in batch.keys()
-                        if key != "idx"
+                        key: batch[key].to(device) for key in batch.keys() if key != "idx"
                     }
 
                     with torch.autocast(device_type=device, dtype=dtype):
                         outputs = model(**batch)
-                    loss = outputs.loss
-                    total_loss += loss.item()
 
-                if wandb_run:
-                    eval_loss = total_loss / len(valid_loss_dataloader)
-                    eval_perplexity = torch.exp(torch.tensor(eval_loss)).item()  # Absolute perplexity
-                    eval_log_dict = {
-                        "eval/loss": eval_loss,
-                        "eval/perplexity": eval_perplexity,  # Track absolute confidence
-                        **{f'eval/{k}': outputs.log[k] for k in outputs.log},
-                    }
-                    wandb_run.log(eval_log_dict)
-                    
-                    print("eval loss", eval_loss)
-                    print("eval perplexity", eval_perplexity)
-                    
-                    # What to look for:
-                    # - Perplexity decreasing: Model gaining confidence on predictions
-                    # - Perplexity increasing while loss decreases: Potential overconfidence/miscalibration
-                    # - Stable low perplexity with improving ratios: Good sign of latent reasoning
+                        loss = outputs.loss / conf.gradient_accumulation_steps
 
-            clear_memory()
+                    loss.backward()
 
-        clear_memory()
-        r = evaluate(
-            valid_gen_dataloader,
-            model,
-            tokenizer,
-            base_dataset_valid,
-            max_new_tokens=max_new_tokens,
-            name=f"eval_{epoch}",
-            dtype=dtype,
-            device=device,
-        )
+                    norm = None
+                    # # every N steps (or last batch) do optimizer step
+                    is_last_step = step == len(train_dataloader) - 1
+                    if (
+                        step + 1
+                    ) % conf.gradient_accumulation_steps == 0 or is_last_step:
+                        if (conf.grad_clip is not None) and (conf.grad_clip > 0):
+                            norm = torch.nn.utils.clip_grad_norm_(
+                                model.parameters(), conf.grad_clip
+                            )
+
+                        optimizer.step()
+                        optimizer.zero_grad()
+                        if scheduler is not None:
+                            scheduler.step()
+
+                        pbar.update(1)
+
+                    if wandb_run:
+                        lr = torch.tensor(
+                            [group["lr"] for group in optimizer.param_groups]
+                        ).mean()
+                        log_dict = {
+                            "train/epoch": epoch,
+                            "train/step": epoch * len(train_dataloader) + step,
+                            "train/loss": loss.detach().float()
+                            * conf.gradient_accumulation_steps,
+                            "train/lr": lr,
+                            "train/grad_norm": norm,
+                            **{f'train/{k}': outputs.log[k] for k in outputs.log},
+                        }
+                        wandb_run.log(log_dict)
+
+                    pbar.set_description(
+                        f"T Epoch: {epoch}/{conf.num_epochs}, batch {step}/{len(train_dataloader)} "
+                        f"(loss: {round(float(loss.detach().float() * conf.gradient_accumulation_steps), 4):2.2f}"
+                    )
+                    if step % 5 == 0:
+                        clear_memory()
+                pbar.close()
+
+                # val loss
+                total_loss = 0
+                with torch.no_grad():
+                    model.eval()
+                    for step, batch in enumerate(valid_loss_dataloader):
+                        batch = {
+                            key: batch[key].to(device)
+                            for key in batch.keys()
+                            if key != "idx"
+                        }
+
+                        with torch.autocast(device_type=device, dtype=dtype):
+                            outputs = model(**batch)
+                        loss = outputs.loss
+                        total_loss += loss.item()
+
+                    if wandb_run:
+                        eval_loss = total_loss / len(valid_loss_dataloader)
+                        eval_perplexity = torch.exp(torch.tensor(eval_loss)).item()  # Absolute perplexity
+                        eval_log_dict = {
+                            "eval/loss": eval_loss,
+                            "eval/perplexity": eval_perplexity,  # Track absolute confidence
+                            **{f'eval/{k}': outputs.log[k] for k in outputs.log},
+                        }
+                        wandb_run.log(eval_log_dict)
+                        
+                        print("eval loss", eval_loss)
+                        print("eval perplexity", eval_perplexity)
+                        
+                        # What to look for:
+                        # - Perplexity decreasing: Model gaining confidence on predictions
+                        # - Perplexity increasing while loss decreases: Potential overconfidence/miscalibration
+                        # - Stable low perplexity with improving ratios: Good sign of latent reasoning
+
+                clear_memory()
+        
+    except KeyboardInterrupt:
+        logger.warning("Training interrupted by user")
+
+    clear_memory()
+    r = evaluate(
+        valid_gen_dataloader,
+        model,
+        tokenizer,
+        base_dataset_valid,
+        max_new_tokens=max_new_tokens,
+        name=f"eval_{epoch}",
+        dtype=dtype,
+        device=device,
+    )
 
 
-        r2 = run_ratio_eval(
-            model,
-            tokenizer,
-            base_dataset_valid,
-            conf,
-            stage,
-            device=device,
-            dtype=dtype,
-        )
-        # r3 = get_answer_perplexity(
-        #     model,
-        #     tokenizer,
-        #     valid_gen_dataloader,
-        #     dtype=dtype,
-        #     device=device,
-        # )
-        # r['eval/ppx'] = r3['eval/ppx']
-        r['eval/ratios'] = r2['eval/ratios']
-        r["epoch"] = epoch
-        r["stage"] = stage
-        r["train/minutes"] = (time.time() - start_time) / 60
-        clear_memory()
-        if wandb_run:
-            wandb_run.log(r)
+    r2 = run_ratio_eval(
+        model,
+        tokenizer,
+        base_dataset_valid,
+        conf,
+        stage,
+        device=device,
+        dtype=dtype,
+    )
+    # r3 = get_answer_perplexity(
+    #     model,
+    #     tokenizer,
+    #     valid_gen_dataloader,
+    #     dtype=dtype,
+    #     device=device,
+    # )
+    # r['eval/ppx'] = r3['eval/ppx']
+    r['eval/ratios'] = r2['eval/ratios']
+    r["epoch"] = epoch
+    r["stage"] = stage
+    r["train/minutes"] = (time.time() - start_time) / 60
+    clear_memory()
+    if wandb_run:
+        wandb_run.log(r)
 
-        if log_dict is not None:
-            r["train/loss"] = log_dict.get("train/loss", None)
-        if eval_log_dict is not None:
-            r['eval/loss'] = eval_log_dict.get("eval/loss", None)
-        res.append(r)
+    if log_dict is not None:
+        r["train/loss"] = log_dict.get("train/loss", None)
+    if eval_log_dict is not None:
+        r['eval/loss'] = eval_log_dict.get("eval/loss", None)
+    res.append(r)
 
-        save_model(model, tokenizer, config_dict, save_dir / f"checkpoint_{epoch}")
+    save_model(model, tokenizer, config_dict, save_dir / f"checkpoint_{epoch}")
 
     print(f"\n# Results: {run_name}")
     print(config_dict)

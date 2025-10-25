@@ -2002,3 +2002,27 @@ trmlora-qwen3-0.6b_20251024-120842 at:
 | 16 |      0.066 |         0     |        0.5856 |      24 |       3 |         13.1066 |     0.656774 |      0.6041 |
 
 Hey it actually learned! 
+
+# 2025-10-24 20:49:10
+
+# Results: trmlora-qwen3-0.6b_20251024-164034
+{'project': 'coconut', 'save_path': 'outputs/', 'name': 'trmlora-qwen3-0.6b', 'model_id': 'suayptalha/Qwen3-0.6B-Math-Expert', 'only_eval': False, 'load_model_path': '', 'resume_epochs': 8, 'replacement_method': 'supressed[0.75:]', 'use_position_ids': True, 'bf16': True, 'bf16_weight': False, 'opt_8b': False, 'cot_epochs': 0, 'epochs_per_stage': 6, 'max_latent_stage': 3, 'num_epochs': 25, 'batch_size_training': 16, 'gradient_accumulation_steps': 6, 'lr': 0.004, 'weight_decay': 0.0, 'grad_clip': 1.0, 'scheduler': 'linear', 'debug': False, 'seed': 42, 'reset_optimizer': False, 'loss_seq_vcr': False, 'n_detached_recursions': 2, 'load_in_4bit': False, 'load_in_8bit': False, 'collect_hs': False, 'max_size': 20000, 'c_thought': 1, 'pad_latent_to_max': True, 'uniform_prob': 0.0, 'train_path': 'data/gsm_train.json', 'val_path': 'data/gsm_valid.json', 'system_prompt': '', 'latent_token_id': None, 'bot_token_id': None, 'eot_token_id': None, 'eos_token_id': None, 'eval_first_epoch': False, 'use_trm_lora': True, 'loss_nll_ratio_margin': False, 'lora_r': 12, 'lora_alpha': 32, 'lora_dropout': 0.0, 'lora_layers': 4, 'trm_h_cycles': 2, 'trm_l_cycles': 2, 'trm_l_layers': 2, 'trm_hidden_size': None, 'trm_num_heads': 2, 'trm_expansion': 2.67, 'trm_transcoder_layers': 1}
+|    |   eval/acc |   eval/cot_em |   eval/ratios |   epoch |   stage |   train/minutes |   train/loss |   eval/loss |
+|---:|-----------:|--------------:|--------------:|--------:|--------:|----------------:|-------------:|------------:|
+|  0 |      0     |         0     |        1.6675 |       8 |       1 |         10.5042 |     3.59427  |      3.1139 |
+|  1 |      0     |         0     |        1.6675 |       9 |       1 |         10.4793 |     3.47333  |      3.1139 |
+|  2 |      0     |         0     |        1.6675 |      10 |       1 |         10.5077 |     3.39904  |      3.1139 |
+|  3 |      0     |         0     |        1.6675 |      11 |       1 |         10.4776 |     3.5408   |      3.1139 |
+|  4 |      0.068 |         0.006 |        0.683  |      12 |       2 |         14.0911 |     0.497209 |      0.5878 |
+|  5 |      0.058 |         0.006 |        0.6959 |      13 |       2 |         13.9862 |     0.404999 |      0.527  |
+|  6 |      0.044 |         0.016 |        0.6556 |      14 |       2 |         14.4071 |     0.341695 |      0.5125 |
+|  7 |      0.044 |         0.012 |        0.6818 |      15 |       2 |         14.2392 |     0.409725 |      0.5175 |
+|  8 |      0.028 |         0.012 |        0.6805 |      16 |       2 |         14.1803 |     0.465991 |      0.5015 |
+|  9 |      0.022 |         0.012 |        0.6972 |      17 |       2 |         14.154  |     0.424355 |      0.5045 |
+| 10 |      0.046 |         0.004 |        0.5411 |      18 |       3 |          9.0189 |     0.478736 |      0.5904 |
+| 11 |      0.042 |         0.002 |        0.5505 |      19 |       3 |          9.0078 |     0.388377 |      0.5655 |
+| 12 |      0.06  |         0.008 |        0.565  |      20 |       3 |          8.9927 |     0.509848 |      0.5877 |
+| 13 |      0.028 |         0.002 |        0.5283 |      21 |       3 |          8.8673 |     0.445213 |      0.5689 |
+| 14 |      0.046 |         0.004 |        0.5475 |      22 |       3 |          8.9089 |     0.463148 |      0.5672 |
+| 15 |      0.054 |         0.002 |        0.5384 |      23 |       3 |          8.9982 |     0.503659 |      0.5623 |
+| 16 |      0.05  |         0.01  |        0.5511 |      24 |       3 |          8.9604 |     0.410862 |      0.5599 |
