@@ -278,6 +278,8 @@ def get_cot_latent_dataset(
     format: question, latent, reasoning, answer
     """
     no_bot_eot = scheduled_stage < 0
+    # Number of wrapper tokens around latent block: [bot_id] + latents + [eot_id]
+    # These need to be masked in labels (set to -100) along with question and latent tokens
     n_additional_tokens = 0 if no_bot_eot else 2
 
     def process_dataset(sample):
@@ -336,7 +338,7 @@ def get_cot_latent_dataset(
                 n_latent_tokens
                 + n_additional_tokens
                 + len(sample["question_tokenized"]) :
-            ],
+            ],  
             "attention_mask": [1] * len(tokens),
             "idx": sample["idx"],
             "position_ids": list(range(len(tokens))),

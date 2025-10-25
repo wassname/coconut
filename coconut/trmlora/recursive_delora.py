@@ -241,7 +241,7 @@ class TRMDeloraLayer(DeloraLayer):
                 # 5. Up-project via B
                 h = nn.functional.linear(h, self.delora_B[adapter])  # [b, out]
 
-                add_out += h.unsqueeze(1)  # [b, 1, out] broadcasts to [b, s, out]
+                add_out += h.unsqueeze(1)  # [b, 1, out] broadcasts to [b, s, out], but it's only ever one token that we are processing with <latent>, so s=1
 
             result = base_out + add_out.to(base_out.dtype)
 

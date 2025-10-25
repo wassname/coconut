@@ -227,7 +227,7 @@ class TRMLoraLayer(LoraLayer):
                 delta = self.lora_B[adapter](zH) * self.scaling[adapter]  # [b, out_features]
         
                 # Add to base output (broadcast across sequence)
-                result = result + delta.unsqueeze(1)  # [b, 1, out] → [b, s, out]
+                result = result + delta.unsqueeze(1)  # [b, 1, out] broadcasts to [b, s, out], but it's only ever one token that we are processing with <latent>, so s=1
 
                 # Update cache for next layer
                 recursion_cache['zL'] = zL

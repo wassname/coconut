@@ -91,5 +91,11 @@ see ./coconut/configs.py for full details
 
 2. **Multi-pass processing**: `coconut.py` processes input in multiple passes (one per latent token). KV cache carries over between passes. Don't assume single forward pass. We also have a recursion context for TRM state carryover.
 
-4. TRM detaches all but the last one or two recursions. This is intentional, from the paper. In combination with deep supervision (or cirriculum learning here) this may still solve the fixed point problem.
+3. **Adapter shapes during generation**: During both training and generation, we process latent tokens one at a time (`s=1`). Adapters must output `[b, 1, out]` to match base model output shape, even though they may only process the last token. Use `.unsqueeze(1)` after computing deltas.
+
+4. **KV cache and TRM modifications**: When processing latent token N, the KV cache contains positions 0 to N-1. TRM modifications to the current token's hidden state flow through remaining layers but only get added to KV cache after the full forward pass completes. Next latent token (N+1) will then attend to the TRM-modified representation of token N via KV cache.
+
+5. **Adapter enable/disable per pass**: Non-latent tokens are processed with adapter disabled (base model only). Latent tokens are processed with adapter enabled (TRM active). This is controlled via `set_adapter()` context manager in `coconut.py`.
+
+6. TRM detaches all but the last one or two recursions. This is intentional, from the paper. In combination with deep supervision (or curriculum learning here) this may still solve the fixed point problem.
 

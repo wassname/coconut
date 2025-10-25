@@ -1,4 +1,5 @@
 import torch
+from loguru import logger
 
 def gen_sample(model, tokenizer, verbose=True, **kwargs):
     # try different lengths of latent
@@ -7,7 +8,7 @@ def gen_sample(model, tokenizer, verbose=True, **kwargs):
         s=[
         {'role':'user', 'content':'What is two plus two but wrong and french?'+latent_tokens},]
         if verbose:
-            print(f'--- Generating with {l} latent tokens ---')
+            logger.info(f'--- Generating with {l} latent tokens ---')
         yield gen(s, model, tokenizer, tokenizer_kwargs=dict(add_generation_prompt=True), verbose=verbose, **kwargs)
 
 def gen(s, model, tokenizer, min_new_tokens=4, max_new_tokens=16, do_sample=False, tokenizer_kwargs={}, generate_kwargs={}, verbose=True):
@@ -45,15 +46,15 @@ def gen(s, model, tokenizer, min_new_tokens=4, max_new_tokens=16, do_sample=Fals
             **generate_kwargs
         )
 
-    # TODO seperate out input vs output
     n = inputs["input_ids"].shape[1]
     out = out[:, n:]  # only return generated tokens
 
     s_input = tokenizer.batch_decode(inputs["input_ids"], skip_special_tokens=False)[0]
     s_output = tokenizer.batch_decode(out, skip_special_tokens=False)[0]
     if verbose:
-        print('---input---')
-        print(s_input)
-        print('---output---')
-        print(s_output)
+        ss = f'''---input---
+{s_input}
+---output---
+{s_output}'''
+        logger.info(ss)
     return s_output

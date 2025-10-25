@@ -52,7 +52,7 @@ class BaseConfig:
     collect_hs: bool = False  # whether to collect hidden states during forward pass
     
     max_size: int = 60_000  # full dataset ~400k in coconut
-    c_thought: int = 1  # for each reasoning step we use X thought tokens (up to our max)
+    c_thought: int = 1  # latent tokens per reasoning step (stage N → N * c_thought tokens)
     pad_latent_to_max: bool = True
     uniform_prob: float = 0.0  # with some prob, randomly sample earlier stage
     
@@ -72,6 +72,7 @@ class TRMConfig(BaseConfig):
     """TRM base config: shared settings for all TRM adapter modes."""
     resume_epochs: int = 2
     cot_epochs: int = 0
+    skip_stage_zero: bool = True  # skip stage 0 : <start_latent><end_latent> training with 0 latent tokens
     num_epochs: int = 20
     epochs_per_stage: int = 10
     

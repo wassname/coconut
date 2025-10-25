@@ -215,6 +215,8 @@ def train(conf: BaseConfig):
                 stage = -1
             elif epoch < max_latent_epoch:
                 stage = (epoch - conf.cot_epochs) // conf.epochs_per_stage
+                if conf.skip_stage_zero:
+                    stage += 1
             else:
                 stage = conf.max_latent_stage
 
@@ -279,7 +281,7 @@ def train(conf: BaseConfig):
                 r['eval/ratios'] = r2['eval/ratios']
                 res.append(r)
 
-                gen_sample(model, tokenizer)
+                list(gen_sample(model, tokenizer))
 
             # logger.debug(f"Prep data for epoch={epoch} stage={stage}")
 
@@ -479,7 +481,7 @@ def train(conf: BaseConfig):
                 r['eval/loss'] = eval_log_dict.get("eval/loss", None)
             res.append(r)
 
-            gen_sample(model, tokenizer)
+            list(gen_sample(model, tokenizer))
 
             save_model(model, tokenizer, config_dict, save_dir / f"checkpoint_{epoch}")
 

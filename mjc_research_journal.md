@@ -2026,3 +2026,94 @@ Hey it actually learned!
 | 14 |      0.046 |         0.004 |        0.5475 |      22 |       3 |          8.9089 |     0.463148 |      0.5672 |
 | 15 |      0.054 |         0.002 |        0.5384 |      23 |       3 |          8.9982 |     0.503659 |      0.5623 |
 | 16 |      0.05  |         0.01  |        0.5511 |      24 |       3 |          8.9604 |     0.410862 |      0.5599 |
+
+
+## 2025-10-25 18:58:45 Brainstorming at what stage to apply TRM to DeLoRA
+
+
+TRM DeLoRA combines DeLoRA's magnitude decoupling with TRM's recursive refinement:
+
+DeLoRA philosophy (from paper Section 2.2):
+- Normalize low-rank components to unit norm → learn pure directions (angles)
+- Apply learned scaling λ separately → control adaptation strength (magnitude)
+- This decouples angular learning from magnitude, preventing catastrophic overwriting
+
+TRM integration:
+- Down-project via A to low-rank space (r-dimensional)
+- Normalize by ||A|| to remove magnitude → get unit directions
+- TRM recursively refines these directions (operates on normalized space)
+- Apply λ/r/||B|| scaling to refined directions → controlled magnitude
+- Up-project via B back to full space
+
+Key insight: TRM learns to refine DIRECTIONS in normalized r-space, while λ 
+controls the final MAGNITUDE. This preserves DeLoRA's robustness properties 
+while adding TRM's recursive reasoning capability.
+
+### 2025-10-25 18:59:23
+
+Thinking about projection issue
+
+ a subtle but important point about how the adapter affects the sequence
+
+**Parent DeLoRA (non-recursive):**
+```python
+h = F.linear(x * w_norm, A)  # [b, s, r]
+h = h * scaling              # [b, s, r]
+h = F.linear(h, B)           # [b, s, out]
+add_out += h                 # [b, s, out]
+```
+- Each token position gets its **own** delta based on its **own** input
+- Mapping: `s -> s` (position-wise independent)
+
+**Your TRM DeLoRA:**
+```python
+h = F.linear(x * w_norm, A)  # [b, s, r]
+context = h[:, -1, :]        # [b, r] - last token only
+zL, zH = trm(zL, zH, context)  # refine based on last token
+h = F.linear(zH * scaling, B)  # [b, out]
+add_out += h.unsqueeze(1)    # [b, 1, out] broadcast to [b, s, out]
+```
+- **All** positions get the **same** delta based on **last token** only
+- Mapping: `s[-1] -> s[:]` (broadcast)
+
+
+# 2025-10-25 19:18:21 experiment for global plus local
+
+Here's a description for your research log:
+
+## Experiment: Global vs Local Adapter Application
+
+    Currently the TRM adapter is only active during latent token processing, with the base model running unchanged for all other tokens (questions and answers). This provides a clean separation where we can measure the pure effect of recursive refinement on latent reasoning tokens. The adapter learns to refine representations specifically during the "thinking" phase without risking degradation of the base model's question understanding or answer generation capabilities.
+
+    An alternative approach would enable the adapter globally across all tokens, but only activate TRM recursion during latent tokens. This would allow the adapter to learn two complementary behaviors: a global intervention that adjusts the model's "reasoning stance" throughout the entire forward pass (e.g., being more systematic or careful), and a local recursive refinement specifically during latent tokens. The hypothesis is that DeLoRA's magnitude decoupling makes this safe - the adapter can learn global behavioral adjustments without catastrophically overwriting pretrained features, while TRM adds recursive computation on top during latents.
+
+    The experiment would compare three conditions: (A) adapter only on latents with recursion (current), (B) adapter globally with recursion only on latents, and (C) adapter only on latents without recursion (ablation). If (B) outperforms (A), it suggests the model benefits from maintaining an adapted "reasoning mode" throughout processing, not just during explicit latent tokens. If (A) and (B) perform similarly, it validates that the recursive refinement is the key mechanism and global adaptation is unnecessary. The (C) ablation isolates whether any gains come from the adapter itself versus the TRM recursion.
+
+My thoughts: confuses the 2, need extra work to work out which part does what. Plus the A and B matrixes are no longer learning to provide a good basis for recursion if they are also learning global changes.
+
+
+# 2025-10-25 20:32:49
+
+{'project': 'coconut', 'save_path': 'outputs/', 'name': 'trmdelora-qwen3-0.6b', 'model_id': 'suayptalha/Qwen3-0.6B-Math-Expert', 'only_eval': False, 'load_model_path': '', 'resume_epochs': 2, 'use_position_ids': True, 'bf16': True, 'bf16_weight': False, 'opt_8b': False, 'load_in_4bit': False, 'load_in_8bit': False, 'cot_epochs': 0, 'epochs_per_stage': 10, 'max_latent_stage': 3, 'num_epochs': 20, 'batch_size_training': 14, 'gradient_accumulation_steps': 9, 'lr': 0.001, 'weight_decay': 0.01, 'grad_clip': 1.0, 'scheduler': 'cosine', 'debug': False, 'seed': 42, 'reset_optimizer': False, 'loss_seq_vcr': False, 'n_detached_recursions': 2, 'collect_hs': False, 'max_size': 20000, 'c_thought': 1, 'pad_latent_to_max': True, 'uniform_prob': 0.0, 'train_path': 'data/gsm_train.json', 'val_path': 'data/gsm_valid.json', 'system_prompt': '', 'latent_token_id': None, 'bot_token_id': None, 'eot_token_id': None, 'eos_token_id': None, 'skip_stage_zero': True, 'eval_first_epoch': False, 'loss_nll_ratio_margin': False, 'trm_h_cycles': 2, 'trm_l_cycles': 4, 'trm_l_layers': 2, 'trm_num_heads': 3, 'trm_expansion': 4.0, 'layers_spacing_adapter': 8, 'use_trm_delora': True, 'adapter_r': 18, 'adapter_delora_lambda': 15}
+
+DELORA
+|    |   eval/acc |   eval/cot_em |   eval/ratios |   epoch |   stage |   train/minutes |   train/loss |   eval/loss |
+|---:|-----------:|--------------:|--------------:|--------:|--------:|----------------:|-------------:|------------:|
+|  0 |      0.044 |         0.012 |        0.6849 |       2 |       2 |         16.1317 |     0.513245 |      0.4984 |
+|  1 |      0.016 |         0.012 |        0.6987 |       3 |       2 |         16.0478 |     0.289715 |      0.4765 |
+|  2 |      0.04  |         0.012 |        0.7015 |       4 |       2 |         16.0048 |     0.431902 |      0.4633 |
+|  3 |      0.048 |         0.012 |        0.6614 |       5 |       2 |         16.1044 |     0.288153 |      0.4654 |
+
+
+LORA OLD:
+|  4 |      0.068 |         0.006 |        0.683  |      12 |       2 |         14.0911 |     0.497209 |      0.5878 |
+|  5 |      0.058 |         0.006 |        0.6959 |      13 |       2 |         13.9862 |     0.404999 |      0.527  |
+|  6 |      0.044 |         0.016 |        0.6556 |      14 |       2 |         14.4071 |     0.341695 |      0.5125 |
+|  7 |      0.044 |         0.012 |        0.6818 |      15 |       2 |         14.2392 |     0.409725 |      0.5175 |
+
+
+
+HRA
+|    |   eval/acc |   eval/cot_em |   eval/ratios |   epoch |   stage |   train/minutes |   train/loss |   eval/loss |
+|---:|-----------:|--------------:|--------------:|--------:|--------:|----------------:|-------------:|------------:|
+|  0 |          0 |             0 |         1.658 |       2 |       2 |         20.9602 |      3.93035 |      3.4403 |

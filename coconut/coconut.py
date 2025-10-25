@@ -202,6 +202,8 @@ class Coconut(nn.Module):
 
         recursion_cache = {}
 
+        # TODO maybe it would be clearer if I explicitly break down into 3 passes: before latents, latents, after latents
+
         with self.recursion_context(recursion_cache) as cache:
             for pass_idx in range(max_n_latents):
                 # TRM-style detached recursions: detach gradients for early passes,
@@ -221,6 +223,7 @@ class Coconut(nn.Module):
                 else:
                     ctd_grad = torch.enable_grad()
 
+                # only turn on the adapter if we have latents
                 with set_adapter(
                     self.model, self.model.active_adapter if has_latents else None
                 ):
@@ -238,7 +241,7 @@ class Coconut(nn.Module):
 
                         logits.append(outputs.logits)
 
-                        # update compute range
+                        # update compute range. One latents step at a time, then all the rest
                         a, b = (
                             b,
                             (
@@ -282,7 +285,7 @@ class Coconut(nn.Module):
 
             # Now do the rest of the generation after the last latent
 
-            # 3, FINAL PASS
+            # 3, FINAL PASS - all the rest, using base model (adapter off)
             with set_adapter(self.model, None):
                 outputs = self.model.forward(
                     inputs_embeds=inputs_embeds[:, a:b],
