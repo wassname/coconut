@@ -9,6 +9,7 @@ from torch import Tensor
 from typing import Optional, Dict, Any
 from dataclasses import dataclass, field
 from jaxtyping import Float
+from einops import repeat, rearrange
 
 from peft.tuners.tuners_utils import BaseTunerLayer
 from peft.tuners.delora.layer import DeloraLayer
@@ -158,79 +159,91 @@ class TRMDeloraLayer(DeloraLayer):
         # Return (zL_next, zH_next) in [b, h]
         return zLs.squeeze(1), zHs.squeeze(1)
 
-    def forward(
-        self,
-        hidden_states: Float[Tensor, 'b s h'],
-        *args: Any,
-        **kwargs: Any
-    ) -> Float[Tensor, 'b s h']:
+
+    def forward(self, x: Float[Tensor, 'b s h'], *args: Any, **kwargs: Any) -> Float[Tensor, 'b s h']:
+        previous_dtype = x.dtype
         # Use injected cache from Coconut.recursion_context() if available
         if self._recursion_cache is None:
             recursion_cache = {}
         else:
             recursion_cache = self._recursion_cache
 
-        previous_dtype = hidden_states.dtype
-
         if self.disable_adapters:
             if self.merged:
                 self.unmerge()
-            result = self.base_layer(hidden_states, *args, **kwargs)
+            result = self.base_layer(x, *args, **kwargs)
         elif self.merged:
-            result = self.base_layer(hidden_states, *args, **kwargs)
+            result = self.base_layer(x, *args, **kwargs)
         else:
             if not self.active_adapters:
-                return self.base_layer(hidden_states, *args, **kwargs).to(previous_dtype)
+                return self.base_layer(x, *args, **kwargs).to(previous_dtype)
 
-            # Run base layer: W @ x
-            base_hidden = self.base_layer(hidden_states, *args, **kwargs)
-            result = base_hidden
+            base_out = self.base_layer(x, *args, **kwargs)
+            add_out = torch.zeros_like(base_out)
 
-            # Apply TRM DeLoRA adapters
-            # DeLoRA: h = W @ x + decomposed_delta(A @ (x * w_norm), scaling, B)
-            # TRM DeLoRA: h = W @ x + B @ (scaling * trm(A @ (x * w_norm) [-1]))
             for adapter in self.active_adapters:
                 if adapter not in self.delora_A:
                     continue
 
-                # Apply dropout and w_norm to input
-                x_d = self.delora_dropout[adapter](hidden_states)
-                x_scaled = x_d * self.delora_w_norm[adapter].unsqueeze(0).unsqueeze(0)  # broadcast to [b, s, in]
+                x_d = self.delora_dropout[adapter](x)
 
-                # Project INPUT down to low-rank via delora_A
-                down_proj = nn.functional.linear(x_scaled, self.delora_A[adapter])  # [b, s, r]
+                """
+                TRM DeLoRA combines DeLoRA's magnitude decoupling with TRM's recursive refinement:
+                
+                DeLoRA philosophy (from paper Section 2.2):
+                - Normalize low-rank components to unit norm → learn pure directions (angles)
+                - Apply learned scaling λ separately → control adaptation strength (magnitude)
+                - This decouples angular learning from magnitude, preventing catastrophic overwriting
+                
+                TRM integration:
+                - Down-project via A to low-rank space (r-dimensional)
+                - Normalize by ||A|| to remove magnitude → get unit directions
+                - TRM recursively refines these directions (operates on normalized space)
+                - Apply λ/r/||B|| scaling to refined directions → controlled magnitude
+                - Up-project via B back to full space
+                
+                Key insight: TRM learns to refine DIRECTIONS in normalized r-space, while λ 
+                controls the final MAGNITUDE. This preserves DeLoRA's robustness properties 
+                while adding TRM's recursive reasoning capability.
+                """
+                
+                # 1. Down-project via A: (x * w_norm) @ A.T
+                h = nn.functional.linear(x_d * self.delora_w_norm[adapter], self.delora_A[adapter])  # [b, s, r]
 
-                # For TRM, use last token's projection as context
-                context_hs = down_proj[:, -1, :]  # [b, r]
-                b = context_hs.shape[0]
+                # 2. Normalize by A (remove A's magnitude, get unit directions)
+                An = torch.clamp(self.delora_A[adapter].norm(dim=1), min=1e-4)  # [r]
+                h_normalized = h / An.unsqueeze(0).unsqueeze(0)  # [b, s, r] - unit norm per component
+
+                # 3. TRM recursion on normalized directions (last token)
+                context = h_normalized[:, -1, :]  # [b, r] - normalized direction
+                b = context.shape[0]
 
                 # Initialize or retrieve zH and zL in r_dim
                 zL = recursion_cache.get('zL', None)
                 if zL is None:
-                    zL = self.delora_zL_init[adapter].unsqueeze(0).expand(b, -1).to(base_hidden.device)
+                    zL = self.delora_zL_init[adapter].unsqueeze(0).expand(b, -1).to(h.device)
                 zH = recursion_cache.get('zH', None)
                 if zH is None:
-                    zH = self.delora_zH_init[adapter].unsqueeze(0).expand(b, -1).to(base_hidden.device)
+                    zH = self.delora_zH_init[adapter].unsqueeze(0).expand(b, -1).to(h.device)
 
-                # Run TRM recursion: trm(context_hs, zL, zH) -> refined zL, zH
-                zL, zH = self.trm(adapter, zL, zH, context_hs)
-
-                # Compute DeLoRA scaling: diag(lambda / r / (||A_i|| * ||B^j||))
-                An = torch.clamp(self.delora_A[adapter].norm(dim=1), min=1e-4)  # [r]
-                Bn = torch.clamp(self.delora_B[adapter].norm(dim=0), min=1e-4)  # [r]
-                r = self.r[adapter]
-                scaling = (self.delora_lambda[adapter] / r) / (An * Bn)  # [r]
-
-                # Apply scaling to refined zH and up-project via delora_B
-                refined_h = zH * scaling.unsqueeze(0)  # [b, r]
-                delta = nn.functional.linear(refined_h.unsqueeze(1), self.delora_B[adapter]).squeeze(1)  # [b, 1, out] -> [b, out]
-        
-                # Add to base output (broadcast across sequence)
-                result = result + delta.unsqueeze(1)  # [b, 1, out] → [b, s, out]
+                # TRM refines direction (operates on normalized space)
+                zL, zH = self.trm(adapter, zL, zH, context)  # zH is refined direction
 
                 # Update cache for next layer
                 recursion_cache['zL'] = zL
                 recursion_cache['zH'] = zH
+
+                # 4. Apply magnitude control (lambda/r, compensate for B)
+                Bn = torch.clamp(self.delora_B[adapter].norm(dim=0), min=1e-4)  # [r]
+                scaling = (self.delora_lambda[adapter] / self.r[adapter]) / Bn  # [r]
+                h = zH * scaling  # [b, r] - refined direction * controlled magnitude
+
+                # 5. Up-project via B
+                h = nn.functional.linear(h, self.delora_B[adapter])  # [b, out]
+
+                add_out += h.unsqueeze(1)  # [b, 1, out] broadcasts to [b, s, out]
+
+            result = base_out + add_out.to(base_out.dtype)
 
         result = result.to(previous_dtype)
         return result

@@ -99,6 +99,7 @@ class TRMLoRA(BaseConfig):
 
 
 
+
 @dataclass
 class TRMDelora(TRMLoRA):
     """TRM DeLoRA mode: inline recursive DeLoRA adapter on frozen LLM."""
@@ -115,6 +116,7 @@ class TRMDelora(TRMLoRA):
     trm_l_layers: int = 2  # layers for L_net
     trm_num_heads: int = 3  # number of attention heads in TRM
     trm_expansion: float = 4  # MLP expansion factor in TRM
+
 
 
 
@@ -136,3 +138,23 @@ class TRMLoRADebug(TRMLoRA):
     num_epochs: int = 5
     
     eval_first_epoch: bool = False
+
+
+@dataclass
+class TRMHra(TRMLoRA):
+    """TRM HRA mode: inline recursive HRA adapter on frozen LLM."""
+    name: str = "trmhra-qwen3-0.6b"
+    use_trm_hra: bool = True
+    use_trm_delora: bool = False
+    use_trm_lora: bool = False
+    
+    hra_r: int = 8  # HRA rank (even recommended for symmetric init)
+    hra_apply_GS: bool = False  # Gram-Schmidt orthogonalization
+    hra_alpha: int = 16  # Scaling for TRM refinement delta
+    hra_dropout: float = 0.0
+    hra_layers: int = 8  # number of spaced out layers to apply HRA to
+    trm_h_cycles: int = 3  # high level recursive cycles (T in paper)
+    trm_l_cycles: int = 2  # low level recursive cycles (n in paper)
+    trm_l_layers: int = 2  # layers for L_net
+    trm_num_heads: int = 3  # number of attention heads in TRM
+    trm_expansion: float = 4  # MLP expansion factor in TRM

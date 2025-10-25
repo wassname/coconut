@@ -3,10 +3,12 @@ import warnings
 import pytest
 from peft import get_peft_model, LoraConfig
 from peft import PeftModel
+from peft.mapping import PEFT_TYPE_TO_PREFIX_MAPPING
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from coconut.adapters import is_hf_peft_model, is_plain_peft_model
 from coconut.trmlora.recursive_lora import TRMConfig, TRMLoraModel
 from coconut.trmlora.recursive_delora import TRMDeloraConfig, TRMDeloraModel
+from coconut.trmlora.recursive_hra import TRMHraConfig, TRMHraModel
 from coconut.gen import gen, gen_sample
 
 # Silence the pydantic warnings from tyro configs
@@ -20,6 +22,7 @@ warnings.filterwarnings("ignore", message="UnsupportedFieldAttributeWarning")
         (LoraConfig, PeftModel, "lora"),
         (TRMConfig, TRMLoraModel, "trmlora"),
         (TRMDeloraConfig, TRMDeloraModel, "trmdelora"),
+        (TRMHraConfig, TRMHraModel, "trmhra"),
     ],
 )
 def test_adapter(config_class, expected_model_class, adapter_name):
@@ -32,6 +35,8 @@ def test_adapter(config_class, expected_model_class, adapter_name):
     model = get_peft_model(base_model, peft_config)
     model.print_trainable_parameters()
 
+    prefix = PEFT_TYPE_TO_PREFIX_MAPPING.get(peft_config.peft_type)
+
     # Assert it's a PEFT model
     assert is_hf_peft_model(model) or is_plain_peft_model(model)
     
@@ -39,15 +44,23 @@ def test_adapter(config_class, expected_model_class, adapter_name):
     assert isinstance(model, PeftModel)
 
     # randomize adapter weights for test
-    for param in model.parameters():
-        torch.nn.init.normal_(param, mean=0.0, std=0.1)
+    for name, param in model.named_parameters():
+        if prefix in name:
+            print(f"Randomizing {name}")
+            torch.nn.init.normal_(param, mean=1.1, std=0.5)
 
     # Test forward pass with dummy input
-    s1 = gen_sample(model, tokenizer)
+    input_text = "What is two plus two? <latent><latent><latent>"
+    input_text = [
+        {'role':'user', 'content':'What is two plus two but wrong and french?'},
+        {'role':'assistant', 'content':'<latent><latent><latent>'},]
 
-    # now make sure disabling works?
+    s1 = gen(input_text, model, tokenizer, max_new_tokens=4, verbose=False)
+    print("Generating sample with adapter enabled...", s1)
+
     with model.disable_adapter():
-        s2 = gen_sample(model, tokenizer)
+        s2 = gen(input_text, model, tokenizer, max_new_tokens=4, verbose=False)
+    print("Generating sample with adapter disabled...", s2)
 
     # make sure they are different
     assert s1 != s2
@@ -59,5 +72,6 @@ def test_adapter(config_class, expected_model_class, adapter_name):
     # Test load
     loaded_model = PeftModel.from_pretrained(AutoModelForCausalLM.from_pretrained(model_id), save_path)
     assert isinstance(loaded_model, PeftModel)
-    s3 = gen_sample(loaded_model, tokenizer)
-
+    s3 = gen(input_text, loaded_model, tokenizer, max_new_tokens=4, verbose=False)
+    print("Generating sample with loaded adapter...", s3)
+    assert s1 == s3

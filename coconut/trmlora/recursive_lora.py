@@ -71,7 +71,9 @@ class TRMLoraLayer(LoraLayer):
     adapter_layer_names = (
         "lora_A",
         "lora_B",
-        "l_nets",
+        "lora_l_nets",
+        "lora_zL_init",
+        "lora_zH_init",
     )
     # All names of other parameters that may contain adapter-related parameters
     other_param_names = (
@@ -79,8 +81,7 @@ class TRMLoraLayer(LoraLayer):
         "lora_alpha",
         "scaling",
         "lora_dropout",
-        "zL_init",
-        "zH_init",
+        'lora_configs',
     )
 
     def __init__(self, base_layer: nn.Module, **kwargs) -> None:
@@ -88,8 +89,8 @@ class TRMLoraLayer(LoraLayer):
         # TRM-specific state, need to prefix with lora for saving
         self.lora_zL_init = BufferDict({})
         self.lora_zH_init = BufferDict({})
-        self.lora_configs: Dict[str, TRMConfig] = {}
         self.lora_l_nets = nn.ModuleDict({})
+        self.lora_configs: Dict[str, TRMConfig] = {}
         
         # Marker for Coconut to find TRM layers
         self._recursion_cache = None  # Injected by Coconut.recursion_context()
