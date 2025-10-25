@@ -433,55 +433,59 @@ def train(conf: BaseConfig):
                         # - Stable low perplexity with improving ratios: Good sign of latent reasoning
 
                 clear_memory()
+
+
+            clear_memory()
+            r = evaluate(
+                valid_gen_dataloader,
+                model,
+                tokenizer,
+                base_dataset_valid,
+                max_new_tokens=max_new_tokens,
+                name=f"eval_{epoch}",
+                dtype=dtype,
+                device=device,
+            )
+
+
+            r2 = run_ratio_eval(
+                model,
+                tokenizer,
+                base_dataset_valid,
+                conf,
+                stage,
+                device=device,
+                dtype=dtype,
+            )
+            # r3 = get_answer_perplexity(
+            #     model,
+            #     tokenizer,
+            #     valid_gen_dataloader,
+            #     dtype=dtype,
+            #     device=device,
+            # )
+            # r['eval/ppx'] = r3['eval/ppx']
+            r['eval/ratios'] = r2['eval/ratios']
+            r["epoch"] = epoch
+            r["stage"] = stage
+            r["train/minutes"] = (time.time() - start_time) / 60
+            clear_memory()
+            if wandb_run:
+                wandb_run.log(r)
+
+            if log_dict is not None:
+                r["train/loss"] = log_dict.get("train/loss", None)
+            if eval_log_dict is not None:
+                r['eval/loss'] = eval_log_dict.get("eval/loss", None)
+            res.append(r)
+
+            gen_sample(model, tokenizer)
+
+            save_model(model, tokenizer, config_dict, save_dir / f"checkpoint_{epoch}")
+
         
     except KeyboardInterrupt:
         logger.warning("Training interrupted by user")
-
-    clear_memory()
-    r = evaluate(
-        valid_gen_dataloader,
-        model,
-        tokenizer,
-        base_dataset_valid,
-        max_new_tokens=max_new_tokens,
-        name=f"eval_{epoch}",
-        dtype=dtype,
-        device=device,
-    )
-
-
-    r2 = run_ratio_eval(
-        model,
-        tokenizer,
-        base_dataset_valid,
-        conf,
-        stage,
-        device=device,
-        dtype=dtype,
-    )
-    # r3 = get_answer_perplexity(
-    #     model,
-    #     tokenizer,
-    #     valid_gen_dataloader,
-    #     dtype=dtype,
-    #     device=device,
-    # )
-    # r['eval/ppx'] = r3['eval/ppx']
-    r['eval/ratios'] = r2['eval/ratios']
-    r["epoch"] = epoch
-    r["stage"] = stage
-    r["train/minutes"] = (time.time() - start_time) / 60
-    clear_memory()
-    if wandb_run:
-        wandb_run.log(r)
-
-    if log_dict is not None:
-        r["train/loss"] = log_dict.get("train/loss", None)
-    if eval_log_dict is not None:
-        r['eval/loss'] = eval_log_dict.get("eval/loss", None)
-    res.append(r)
-
-    save_model(model, tokenizer, config_dict, save_dir / f"checkpoint_{epoch}")
 
     print(f"\n# Results: {run_name}")
     print(config_dict)

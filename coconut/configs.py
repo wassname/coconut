@@ -79,8 +79,8 @@ class TRMConfig(BaseConfig):
     weight_decay: float = 0.01
     
     max_size: int = 20_000
-    batch_size_training: int = 18
-    gradient_accumulation_steps: int = 128 // 18
+    batch_size_training: int = 14
+    gradient_accumulation_steps: int = 128 // 14 # paper had effective batch size of 768
 
     eval_first_epoch: bool = False
     loss_nll_ratio_margin: bool = False
@@ -118,7 +118,7 @@ class TRMDelora(TRMConfig):
     adapter_r: int = 18  # DeLoRA rank
     adapter_delora_lambda: int = 15  # DeLoRA lambda
     # adapter_dropout: float = 0.0
-    lr=1e-2 # delora paper shows it supports a higher lr
+    lr=3e-3 # delora paper shows it supports a higher lr
     
 
 
