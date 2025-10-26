@@ -127,7 +127,7 @@ class TRMDeloraLayer(DeloraLayer):
         self.delora_zL_init[adapter_name] = zL
         self.delora_zH_init[adapter_name] = zH
 
-    def trm(self, adapter_name: str, zL: Float[Tensor, 'b h'], zH: Float[Tensor, 'b h'], context_hs: Float[Tensor, 'b s h'], h_cycles = None) -> tuple[Float[Tensor, 'b s h'], Float[Tensor, 'b s h']]:
+    def trm(self, adapter_name: str, zL: Float[Tensor, 'b r'], zH: Float[Tensor, 'b r'], context_hs: Float[Tensor, 'b s r'], h_cycles = None) -> tuple[Float[Tensor, 'b s r'], Float[Tensor, 'b s r']]:
         """
         Tiny Recursion Module (TRM) adapted from trm_adapter.py.
         
