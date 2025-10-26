@@ -47,7 +47,7 @@ class BaseConfig:
     reset_optimizer: bool = False
     
     loss_seq_vcr: bool = False  # experimental loss, might help with intermediate state stability
-    n_detached_recursions: int = 2  # 0=disabled, 2=keep gradients only for last 2 passes (TRM-style)
+    # n_detached_recursions: int = 2  # 0=disabled, 2=keep gradients only for last 2 passes (TRM-style)
     
     collect_hs: bool = False  # whether to collect hidden states during forward pass
     
@@ -77,21 +77,21 @@ class TRMConfig(BaseConfig):
     epochs_per_stage: int = 10
     
     lr: float = 1e-4 # 1e-4 in paper
-    weight_decay: float = 1.0 # 1 in paper
+    weight_decay: float = 0.01 # 1 and 0.1 in paper. But we are already operating in a heavily constrained space (low rank adapter space)
     
     max_size: int = 20_000
-    batch_size_training: int = 14
-    gradient_accumulation_steps: int = 256 // 14 # paper had effective batch size of 768
+    batch_size_training: int = 16
+    gradient_accumulation_steps: int = 768 // 14 # paper had effective batch size of 768
 
     eval_first_epoch: bool = False
     loss_nll_ratio_margin: bool = False
     
     # see https://github.com/SamsungSAILMontreal/TinyRecursiveModels/blob/e7b68717f0a6c4cbb4ce6fbef787b14f42083bd9/config/arch/trm.yaml paper
-    trm_h_cycles: int = 3  # high level recursive cycles (T=3 in repo)
-    trm_l_cycles: int = 6  # low level recursive cycles (n=6 in repo)
+    trm_h_cycles: int = 2  # high level recursive cycles (T=3 in repo)
+    trm_l_cycles: int = 3  # low level recursive cycles (n=6 in repo)
     trm_l_layers: int = 2  # layers for L_net, 2 best in paper/repo
     trm_num_heads: int = 8  # number of attention heads in TRM, 8 in repo
-    trm_expansion: float = 48  # MLP expansion factor in TRM, 4 in repo, meaning it expands to 4*512=2048. But we are expanding from a lower rank so might want hs/rank=2048/18=114
+    trm_expansion: float = 8  # MLP expansion factor in TRM, 4 in repo, meaning it expands to 4*512=2048. But we are expanding from a lower rank so might want hs/rank=2048/18=114
 
     layers_spacing_adapter: int = 2000  # number of spaced out layers to apply adapter to, larger number means all
     layers_start_adapter: float = 0.3  # start layer fraction to apply adapter
@@ -105,7 +105,7 @@ class TRMLoRA(TRMConfig):
     name: str = "trmlora-qwen3-0.6b"
     use_trm_lora: bool = True
 
-    adapter_r: int = 18  # LoRA rank
+    adapter_r: int = 8  # LoRA rank
     adapter_lora_alpha: int = 32  # LoRA alpha scaling
     # adapter_dropout: float = 0.0
 
@@ -119,10 +119,10 @@ class TRMDelora(TRMConfig):
     name: str = "trmdelora-qwen3-0.6b"
     use_trm_delora: bool = True
     
-    adapter_r: int = 18  # DeLoRA rank
-    adapter_delora_lambda: int = 15  # DeLoRA lambda
+    adapter_r: int = 8  # DeLoRA rank
+    adapter_delora_lambda: int = 30  # DeLoRA lambda
     # adapter_dropout: float = 0.0
-    lr=3e-3 # delora paper shows it supports a higher lr
+    # lr=1e-3 # delora paper shows it supports a higher lr
     
 
 

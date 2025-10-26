@@ -33,7 +33,7 @@ from transformers import (
 
 
 import wandb
-from coconut.gen import gen_sample
+from coconut.gen import gen_sample2
 from coconut.dataset import (
     CoconutCollator,
     get_cot_latent_dataset,
@@ -281,7 +281,7 @@ def train(conf: BaseConfig):
                 r['eval/ratios'] = r2['eval/ratios']
                 res.append(r)
 
-                list(gen_sample(model, tokenizer))
+                gen_sample2(model, tokenizer)
 
             # logger.debug(f"Prep data for epoch={epoch} stage={stage}")
 
@@ -488,7 +488,7 @@ def train(conf: BaseConfig):
                 r['eval/loss'] = eval_log_dict.get("eval/loss", None)
             res.append(r)
 
-            list(gen_sample(model, tokenizer))
+            gen_sample2(model, tokenizer)
 
             save_model(model, tokenizer, config_dict, save_dir / f"checkpoint_{epoch}")
 

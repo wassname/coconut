@@ -5,6 +5,7 @@ Adapted from recursive_lora.py to use DeLoRA instead of LoRA, integrating TRM re
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from torch import Tensor
 from typing import Optional, Dict, Any
 from dataclasses import dataclass, field
@@ -208,7 +209,7 @@ class TRMDeloraLayer(DeloraLayer):
                 """
                 
                 # 1. Down-project via A: (x * w_norm) @ A.T
-                h = nn.functional.linear(x_d * self.delora_w_norm[adapter], self.delora_A[adapter])  # [b, s, r]
+                h = F.linear(x_d * self.delora_w_norm[adapter], self.delora_A[adapter])  # [b, s, r]
 
                 # 2. Normalize by A (remove A's magnitude, get unit directions)
                 An = torch.clamp(self.delora_A[adapter].norm(dim=1), min=1e-4)  # [r]
@@ -239,7 +240,7 @@ class TRMDeloraLayer(DeloraLayer):
                 h = zH * scaling  # [b, r] - refined direction * controlled magnitude
 
                 # 5. Up-project via B
-                h = nn.functional.linear(h, self.delora_B[adapter])  # [b, out]
+                h = F.linear(h, self.delora_B[adapter])  # [b, out]
 
                 add_out += h.unsqueeze(1)  # [b, 1, out] broadcasts to [b, s, out], but it's only ever one token that we are processing with <latent>, so s=1
 

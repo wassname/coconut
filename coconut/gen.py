@@ -1,6 +1,24 @@
 import torch
 from loguru import logger
 
+def gen_sample2(model, tokenizer, verbose=True, latents=[0, 1, 2], **kwargs):
+    # try different lengths of latent
+    outs = []
+    for i, l in enumerate(latents):
+        latent_tokens = '<|start-latent|>' + '<|latent|>' * l + '<|end-latent|>'
+        s=[
+        {'role':'user', 'content':'What is two plus two but wrong and french?'},
+        {'role':'assistant', 'content':latent_tokens}
+        ]
+        if i==0 and verbose:
+            logger.info(f'--- Generating with {l} latent tokens ---')
+        outs.append(gen(s, model, tokenizer, tokenizer_kwargs=dict(add_generation_prompt=True), verbose=False, **kwargs))
+    if verbose:
+        sout = f"Input: {s[0]['content']}\n"
+        sout += '\n'.join([f'--- Generated with {ll} latent tokens ---\n{out}' for ll, out in zip(latents, outs)])
+        logger.info(sout)
+    return outs
+
 def gen_sample(model, tokenizer, verbose=True, **kwargs):
     # try different lengths of latent
     for l in [0, 1, 2]:
