@@ -127,7 +127,7 @@ class TRMDeloraLayer(DeloraLayer):
         self.delora_zL_init[adapter_name] = zL
         self.delora_zH_init[adapter_name] = zH
 
-    def trm(self, adapter_name: str, zL: Float[Tensor, 'b h'], zH: Float[Tensor, 'b h'], context_hs: Float[Tensor, 'b h'], h_cycles = None) -> tuple[Float[Tensor, 'b h'], Float[Tensor, 'b h']]:
+    def trm(self, adapter_name: str, zL: Float[Tensor, 'b h'], zH: Float[Tensor, 'b h'], context_hs: Float[Tensor, 'b s h'], h_cycles = None) -> tuple[Float[Tensor, 'b s h'], Float[Tensor, 'b s h']]:
         """
         Tiny Recursion Module (TRM) adapted from trm_adapter.py.
         
@@ -137,31 +137,37 @@ class TRMDeloraLayer(DeloraLayer):
         """
         trm_config = self.delora_configs[adapter_name]
         l_net = self.delora_l_nets[adapter_name]
-        
-        # Expect zL, zH to be [b, h]
-        zLs = zL.unsqueeze(1)  # [b, 1, h]
-        zHs = zH.unsqueeze(1)  # [b, 1, h]
-        context = context_hs.unsqueeze(1)  # [b, 1, h]
 
         if h_cycles is None:
             h_cycles = trm_config.h_cycles
+        
+        # Fold sequence into batch for L_net processing
+        b, s, r = context_hs.shape
+        zLs = repeat(zL, 'b r -> (b s) 1 r', s=s)
+        zHs = repeat(zH, 'b r -> (b s) 1 r', s=s)
+        context = rearrange(context_hs, 'b s r -> (b s) 1 r') # [(b*s), 1, r]
+
+
+        def latent_recursion(hs, zH, zL, n=1):
+            for i in range(n): # latent reasoning with context
+                zL = l_net(zL, hs + zH)
+            zH = l_net(zH, zL) # refine output answer
+            return zH, zL
+
 
         # Early H cycles detached: forms leaf nodes but gradients still flow via base_hidden trunk and also via `context`
         with torch.no_grad():
             for _ in range(max(0, h_cycles - 1)):
-                # L cycles: refine zL with context + zH injection
-                for _ in range(trm_config.l_cycles):
-                    zLs = l_net(zLs, context + zHs)
-                # H cycle: refine zH with zL injection
-                zHs = l_net(zHs, zLs)
+                zHs, zLs = latent_recursion(context, zHs, zLs, n=trm_config.l_cycles)
+        
+        zHs, zLs = latent_recursion(context, zHs, zLs, n=1)
 
-        # Last H cycle with grad for backprop
-        for _ in range(trm_config.l_cycles):
-            zLs = l_net(zLs, context + zHs)
-        zHs = l_net(zHs, zLs)
+        # unfold batch back to (b, s, r)
+        zLs = rearrange(zLs, '(b s) 1 r -> b s r', b=b, s=s)
+        zHs = rearrange(zHs, '(b s) 1 r -> b s r', b=b, s=s)
 
         # Return (zL_next, zH_next) in [b, h]
-        return zLs.squeeze(1), zHs.squeeze(1)
+        return zLs, zHs
 
 
     def forward(self, x: Float[Tensor, 'b s h'], *args: Any, **kwargs: Any) -> Float[Tensor, 'b s h']:
@@ -212,15 +218,13 @@ class TRMDeloraLayer(DeloraLayer):
                     # scaling = (self.delora_lambda[adapter] / self.r[adapter]) / Bn
                     # h = (zH * scaling).detach()  # Detach to prevent grad flow
 
-                    # fold sequence dimension into b, then back out
-                    context = rearrange(h_normalized, 'b s r -> (b s) r')  # [b*s, r]
-                    zL = repeat(zL, 'b r -> (b s) r', b=h.shape[0], s=h.shape[1])
-                    zH = repeat(zH, 'b r -> (b s) r', b=h.shape[0], s=h.shape[1])
+                    # # fold sequence dimension into b, then back out
+                    # context = rearrange(h_normalized, 'b s r -> (b s) r')  # [b*s, r]
+                    # zL = repeat(zL, 'b r -> (b s) r', b=h.shape[0], s=h.shape[1])
+                    # zH = repeat(zH, 'b r -> (b s) r', b=h.shape[0], s=h.shape[1])
 
                     # TRM refines direction (operates on normalized space)
-                    zL, zH = self.trm(adapter, zL, zH, context, h_cycles=1)  # zH is refined 1 time
-
-                    zH = rearrange(zH, '(b s) r -> b s r', b=x.shape[0], s=x.shape[1])  # [b, s, r]
+                    zLs, zHs = self.trm(adapter, zL, zH, h_normalized, h_cycles=1)  # zH is refined 1 time
                 else:                       
                     """
                     TRM DeLoRA combines DeLoRA's magnitude decoupling with TRM's recursive refinement:
@@ -244,7 +248,7 @@ class TRMDeloraLayer(DeloraLayer):
 
 
                     # 3. TRM recursion on normalized directions (last token)
-                    context = h_normalized[:, -1, :]  # [b, r] - normalized direction
+                    context = h_normalized[:, -1:, :]  # [b, 1, r] - normalized direction
                     b = context.shape[0]
 
                     # Initialize or retrieve zH and zL in r_dim
@@ -256,18 +260,18 @@ class TRMDeloraLayer(DeloraLayer):
                         zH = self.delora_zH_init[adapter].unsqueeze(0).expand(b, -1).to(h.device)
 
                     # TRM refines direction (operates on normalized space)
-                    zL, zH = self.trm(adapter, zL, zH, context)  # zH is refined direction
+                    zLs, zHs = self.trm(adapter, zL, zH, context)  # zH is refined direction
 
                     # Update cache for next layer
-                    recursion_cache['zL'] = zL
-                    recursion_cache['zH'] = zH
+                    recursion_cache['zL'] = zLs[:, -1, :]  # [b, r]
+                    recursion_cache['zH'] = zHs[:, -1, :]  # [b, r]
 
-                    zH = zH.unsqueeze(1)  # [b, 1, r]
+                    # zH = zH.unsqueeze(1)  # [b, 1, r]
 
                 # 4. Apply magnitude control (lambda/r, compensate for B)
                 Bn = torch.clamp(self.delora_B[adapter].norm(dim=0), min=1e-4)  # [r]
                 scaling = (self.delora_lambda[adapter] / self.r[adapter]) / Bn  # [r]
-                h = zH * scaling  # [b, 1, r] - refined direction * controlled magnitude
+                h = zHs * scaling  # [b, 1, r] - refined direction * controlled magnitude
 
                 # 5. Up-project via B
                 h = F.linear(h, self.delora_B[adapter])  # [b, out]
