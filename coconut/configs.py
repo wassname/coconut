@@ -76,23 +76,26 @@ class TRMConfig(BaseConfig):
     num_epochs: int = 20
     epochs_per_stage: int = 10
     
-    lr: float = 1e-3
-    weight_decay: float = 0.01
+    lr: float = 1e-4 # 1e-4 in paper
+    weight_decay: float = 1.0 # 1 in paper
     
     max_size: int = 20_000
     batch_size_training: int = 14
-    gradient_accumulation_steps: int = 128 // 14 # paper had effective batch size of 768
+    gradient_accumulation_steps: int = 256 // 14 # paper had effective batch size of 768
 
     eval_first_epoch: bool = False
     loss_nll_ratio_margin: bool = False
     
-    trm_h_cycles: int = 2  # high level recursive cycles (T=3 in repo)
-    trm_l_cycles: int = 4  # low level recursive cycles (n=6 in repo)
+    # see https://github.com/SamsungSAILMontreal/TinyRecursiveModels/blob/e7b68717f0a6c4cbb4ce6fbef787b14f42083bd9/config/arch/trm.yaml paper
+    trm_h_cycles: int = 3  # high level recursive cycles (T=3 in repo)
+    trm_l_cycles: int = 6  # low level recursive cycles (n=6 in repo)
     trm_l_layers: int = 2  # layers for L_net, 2 best in paper/repo
-    trm_num_heads: int = 3  # number of attention heads in TRM, 8 in repo
-    trm_expansion: float = 4  # MLP expansion factor in TRM, 4 in repo
+    trm_num_heads: int = 8  # number of attention heads in TRM, 8 in repo
+    trm_expansion: float = 48  # MLP expansion factor in TRM, 4 in repo, meaning it expands to 4*512=2048. But we are expanding from a lower rank so might want hs/rank=2048/18=114
 
-    layers_spacing_adapter: int = 8  # number of spaced out layers to apply adapter to
+    layers_spacing_adapter: int = 2000  # number of spaced out layers to apply adapter to, larger number means all
+    layers_start_adapter: float = 0.3  # start layer fraction to apply adapter
+    layers_end_adapter: float = 0.9  # end layer fraction to apply adapter
 
 
 @dataclass

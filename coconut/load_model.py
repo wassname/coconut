@@ -75,7 +75,8 @@ def load_new_model(conf: BaseConfig, device, dtype):
     # trm_hidden_size = base_model.config.hidden_size
 
 
-    target_layers = torch.linspace(int(num_layers*0.3), int(num_layers*0.9), steps=conf.layers_spacing_adapter).long().tolist()
+    target_layers = torch.linspace(int(num_layers*conf.layers_start_adapter), int(num_layers*conf.layers_end_adapter), steps=conf.layers_spacing_adapter).long().tolist()
+    target_layers = sorted(set(target_layers))
 
     logger.info(f"Targeting LoRA layers: {target_layers} out of {num_layers} total layers")
     target_modules = [k for k,v in base_model.named_modules() if  isinstance(v, torch.nn.Linear) and any(f".{i}." in k for i in target_layers)]

@@ -6,7 +6,9 @@ def gen_sample(model, tokenizer, verbose=True, **kwargs):
     for l in [0, 1, 2]:
         latent_tokens = '<|start-latent|>' + '<|latent|>' * l + '<|end-latent|>'
         s=[
-        {'role':'user', 'content':'What is two plus two but wrong and french?'+latent_tokens},]
+        {'role':'user', 'content':'What is two plus two but wrong and french?'},
+        {'role':'assistant', 'content':latent_tokens}
+        ]
         if verbose:
             logger.info(f'--- Generating with {l} latent tokens ---')
         yield gen(s, model, tokenizer, tokenizer_kwargs=dict(add_generation_prompt=True), verbose=verbose, **kwargs)
@@ -20,20 +22,19 @@ def gen(s, model, tokenizer, min_new_tokens=4, max_new_tokens=16, do_sample=Fals
             [{'role': 'user', 'content': s}],    return_tensors='pt',
             return_dict=True, **tokenizer_kwargs
         ).to(device)
-    elif isinstance(s, list):
-        last_role = s[-1].get('role')
-        if last_role == 'assistant':
-            tokenizer_kwargs['add_generation_prompt'] = False
-            tokenizer_kwargs['continue_final_message'] = True
-        elif last_role == 'user':
-            tokenizer_kwargs['add_generation_prompt'] = True
-            tokenizer_kwargs['continue_final_message'] = False
-        inputs = tokenizer.apply_chat_template(
-            s,    return_tensors='pt',
-            return_dict=True, **tokenizer_kwargs
-        ).to(device)
-    else:
-        raise ValueError('s should be str or list')
+    
+    last_role = s[-1].get('role')
+    if last_role == 'assistant':
+        tokenizer_kwargs['add_generation_prompt'] = False
+        tokenizer_kwargs['continue_final_message'] = True
+    elif last_role == 'user':
+        tokenizer_kwargs['add_generation_prompt'] = True
+        tokenizer_kwargs['continue_final_message'] = False
+    
+    inputs = tokenizer.apply_chat_template(
+        s,    return_tensors='pt',
+        return_dict=True, **tokenizer_kwargs
+    ).to(device)
 
     with torch.autocast(device_type='cuda', dtype=dtype):
         inputs = {k: v.to(device=device) for k, v in inputs.items()}
