@@ -30,7 +30,7 @@
       "program": "./scripts/run.py",
       "console": "integratedTerminal",
       "args": [
-        "TRMLoRA",
+        "TRMDelora",
         "--num-epochs=9", "--max_size=2000"
       ],
       "justMyCode": false,

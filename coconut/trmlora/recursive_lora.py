@@ -55,6 +55,7 @@ class TRMLoraAConfig(LoraConfig):
         super().__post_init__()
         # Keep peft_type as LORA since we're just extending LoRA
         # TRMLoraModel will handle TRM-specific behavior
+        self.peft_type = 'TRMLORA'
         
         # Validate TRM-specific constraints
         if self.h_cycles < 1:

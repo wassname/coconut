@@ -33,6 +33,8 @@ from contextlib import contextmanager
 from coconut.configs import BaseConfig
 from coconut.adapters import set_adapter
 from coconut.trmlora.recursive_lora import TRMLoraLayer
+from coconut.trmlora.recursive_delora import TRMDeloraLayer
+from coconut.trmlora.recursive_hra import TRMHraLayer
 
 
 Outputs = namedtuple(
@@ -90,14 +92,18 @@ class Coconut(nn.Module):
         self._recursion_cache = None  # Will be set via context manager
 
     @contextmanager
-    def recursion_context(self, cache: dict):
+    def recursion_context(self, cache: dict, steering_mode=None):
         """Context manager to inject recursion_cache into all TRM layers."""
         # Walk down model tree and inject cache into TRM layers
         trm_layers = []
         for name, module in self.model.named_modules():
-            if isinstance(module, (TRMLoraLayer,)):
+            if isinstance(module, (TRMLoraLayer, TRMDeloraLayer, TRMHraLayer)):
                 trm_layers.append(module)
-                module._recursion_cache = cache
+                if name not in cache:
+                    cache[name] = {}
+                if steering_mode is not None:
+                    cache[name]['steering_mode'] = steering_mode
+                module._recursion_cache = cache[name]
         
         try:
             yield cache
@@ -234,16 +240,19 @@ class Coconut(nn.Module):
                             all_hs.append(hs)
                         
                         a = b  # Move to next position
+                
+                assert len(recursion_cache) > 0, "Recursion cache should be populated after latent processing"
 
         # STAGE 3: After latents (base model only)
         # If no latents exist (max_n_latents==0), a=0 so this processes entire sequence
         b = input_ids.shape[1]
         if a < b:  # True when: (1) tokens remain after latents, or (2) no latents at all
 
+            has_zH = len(recursion_cache) and ('zH' in next(iter(recursion_cache.values())))  # just to make sure it's not empty
+
             # in peristent steering mode, the learned latent is applied even after the <latent> tokens
-            if self.config.trm_persistent_steering and (recursion_cache.get('zH') is not None):
-                with self.recursion_context(recursion_cache):
-                    recursion_cache['steering_model'] = True
+            if self.config.trm_persistent_steering and has_zH:
+                with self.recursion_context(recursion_cache, steering_mode=True):
                     with set_adapter(self.model, self.model.active_adapter):
                         outputs = self.model.forward(
                             inputs_embeds=inputs_embeds[:, a:b],

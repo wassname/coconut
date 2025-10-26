@@ -2189,3 +2189,63 @@ we=0.01
 perisstent_steering=True
 
 learning a bit! 1.4% at epoch 1
+
+# 2025-10-26 14:27:11
+
+Trying persistent steering that uses one last h_cycle to customiser the steering for each generated token
+
+
+
+    ### 2. **Persistent Steering Trade-offs**
+    - **Without steering**: Adapter only active during `<latent>` tokens
+    - **With steering**: Apply cached zH to all subsequent tokens (answer generation)
+    - Pro: Maintains "reasoning mode" throughout
+    - Con: Distribution shift for frozen LLM, detached breaks gradient flow
+    - Implementation: Single TRM pass per token using current hs as context
+
+
+    ### 4. **Critical Bug Fix**
+    - **Bug**: Latent tokens were being skipped during recursion (wrong mask logic)
+    - **Fix**: Proper `latent_mask` propagation through PEFT layers
+    - **Impact**: Acc jumped from 0% → 4.8% after fix (epoch 5)
+
+    ### 5. **Hyperparameter Insights**
+    - `r=18` (rank): Good balance of expressivity vs memory
+    - `h_cycles=2, l_cycles=4`: Fewer cycles than paper (6/3) due to memory constraints
+    - `expansion=4.0`: Higher than paper (2.67) to compensate for lower rank
+    - `weight_decay=0.01`: Prevents overfitting in low-rank space
+    - `lr=0.001` with cosine: Stable learning, no explosions
+
+    ## Current Status
+
+    **Next experiments** (from earlier brainstorm):
+    1. Reduce cycles (`h=2, l=3`) - less overfitting risk
+    2. Lower weight decay (`wd=0.01`) - more capacity
+    3. Persistent steering ablation - measure impact
+
+    ## Key Design Decisions
+
+    1. **Low-rank recursion**: Operate in r-space (r=18) not full hidden (h=2048) → 100x memory savings
+    2. **DeLoRA over LoRA**: Magnitude decoupling prevents catastrophic overwriting during recursion
+    3. **Subclass PEFT properly**: Inherit from `DeloraLayer`, override `_create_new_module` in model
+    4. **Cache injection**: Use `_recursion_cache` attribute set by `Coconut.recursion_context()`
+    5. **Steering as optional**: Can enable/disable via `recursion_cache['steering_mode']`
+
+    ## Remaining Questions
+
+    - Does persistent steering help or hurt? (needs ablation)
+    - Can we undetach one more cycle for stronger gradients?
+    - Should we add VCR loss to zH/zL for sparsity? (deprioritized for now)
+    - What's the right balance of h_cycles vs l_cycles for this setup?
+
+
+# 2025-10-26 15:00:22
+
+So maybe bugs! 
+- I was injecting delora layers not trm
+- I was only using recursion case with termlora not the other variants
+- I was using same cache for all layers
+
+all fixed now but previous results should be ignored
+
+

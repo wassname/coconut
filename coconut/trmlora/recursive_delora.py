@@ -39,8 +39,8 @@ class TRMDeloraAConfig(DeloraConfig):
 
     def __post_init__(self):
         super().__post_init__()
-        # Ensure peft_type is DELORA
-        self.peft_type = PeftType.DELORA
+        # Ensure peft_type is TRMDELORA
+        self.peft_type = 'TRMDELORA'
         
         # Validate TRM-specific constraints
         if self.h_cycles < 1:
@@ -58,15 +58,15 @@ class TRMDeloraLayer(DeloraLayer):
         "delora_A",
         "delora_B",
         "delora_lambda",
-        "l_nets",
+        "delora_l_nets",
     )
     # All names of other parameters that may contain adapter-related parameters
     other_param_names = (
         "r",
         "delora_dropout",
         "delora_w_norm",
-        "zL_init",
-        "zH_init",
+        "delora_zL_init",
+        "delora_zH_init",
     )
 
     def __init__(self, base_layer: nn.Module, **kwargs) -> None:
@@ -127,7 +127,7 @@ class TRMDeloraLayer(DeloraLayer):
         self.delora_zL_init[adapter_name] = zL
         self.delora_zH_init[adapter_name] = zH
 
-    def trm(self, adapter_name: str, zL: Float[Tensor, 'b h'], zH: Float[Tensor, 'b h'], context_hs: Float[Tensor, 'b h']) -> tuple[Float[Tensor, 'b h'], Float[Tensor, 'b h']]:
+    def trm(self, adapter_name: str, zL: Float[Tensor, 'b h'], zH: Float[Tensor, 'b h'], context_hs: Float[Tensor, 'b h'], h_cycles = None) -> tuple[Float[Tensor, 'b h'], Float[Tensor, 'b h']]:
         """
         Tiny Recursion Module (TRM) adapted from trm_adapter.py.
         
@@ -143,9 +143,12 @@ class TRMDeloraLayer(DeloraLayer):
         zHs = zH.unsqueeze(1)  # [b, 1, h]
         context = context_hs.unsqueeze(1)  # [b, 1, h]
 
+        if h_cycles is None:
+            h_cycles = trm_config.h_cycles
+
         # Early H cycles detached: forms leaf nodes but gradients still flow via base_hidden trunk and also via `context`
         with torch.no_grad():
-            for _ in range(max(0, trm_config.h_cycles - 1)):
+            for _ in range(max(0, h_cycles - 1)):
                 # L cycles: refine zL with context + zH injection
                 for _ in range(trm_config.l_cycles):
                     zLs = l_net(zLs, context + zHs)
@@ -165,6 +168,7 @@ class TRMDeloraLayer(DeloraLayer):
         previous_dtype = x.dtype
         # Use injected cache from Coconut.recursion_context() if available
         # FIXME, to be consistent should this be per-adapter?
+        assert len(self.active_adapters) <= 1, "TRM DeLoRA currently supports only one active adapter at a time."
         if self._recursion_cache is None:
             recursion_cache = {}
         else:
@@ -187,21 +191,36 @@ class TRMDeloraLayer(DeloraLayer):
                 if adapter not in self.delora_A:
                     continue
 
+                x_d = self.delora_dropout[adapter](x)
+                
+                # 1. Down-project via A: (x * w_norm) @ A.T
+                h = F.linear(x_d * self.delora_w_norm[adapter], self.delora_A[adapter])  # [b, s, r]
 
+                # 2. Normalize by A (remove A's magnitude, get unit directions)
+                An = torch.clamp(self.delora_A[adapter].norm(dim=1), min=1e-4)  # [r]
+                h_normalized = h / An.unsqueeze(0).unsqueeze(0)  # [b, s, r] - unit norm per component
+                    
                 # Check if we're in steering mode (post-latent)
                 steering_mode = recursion_cache.get('steering_mode', False)
                 if steering_mode:
                     # Don't run TRM, just apply cached zH
                     zH = recursion_cache.get('zH')
-                    # zL = recursion_cache.get('zL')
+                    zL = recursion_cache.get('zL')
                     
                     # Apply steering (detached, no grad)
-                    Bn = torch.clamp(self.delora_B[adapter].norm(dim=0), min=1e-4)
-                    scaling = (self.delora_lambda[adapter] / self.r[adapter]) / Bn
-                    h = (zH * scaling).detach()  # Detach to prevent grad flow
-                    
-                    h = base_out + F.linear(h, self.delora_B[adapter])
-                    add_out += h.unsqueeze(1)
+                    # Bn = torch.clamp(self.delora_B[adapter].norm(dim=0), min=1e-4)
+                    # scaling = (self.delora_lambda[adapter] / self.r[adapter]) / Bn
+                    # h = (zH * scaling).detach()  # Detach to prevent grad flow
+
+                    # fold sequence dimension into b, then back out
+                    context = rearrange(h_normalized, 'b s r -> (b s) r')  # [b*s, r]
+                    zL = repeat(zL, 'b r -> (b s) r', b=h.shape[0], s=h.shape[1])
+                    zH = repeat(zH, 'b r -> (b s) r', b=h.shape[0], s=h.shape[1])
+
+                    # TRM refines direction (operates on normalized space)
+                    zL, zH = self.trm(adapter, zL, zH, context, h_cycles=1)  # zH is refined 1 time
+
+                    zH = rearrange(zH, '(b s) r -> b s r', b=x.shape[0], s=x.shape[1])  # [b, s, r]
                 else:                       
                     """
                     TRM DeLoRA combines DeLoRA's magnitude decoupling with TRM's recursive refinement:
@@ -222,14 +241,7 @@ class TRMDeloraLayer(DeloraLayer):
                     controls the final MAGNITUDE. This preserves DeLoRA's robustness properties 
                     while adding TRM's recursive reasoning capability.
                     """
-                    x_d = self.delora_dropout[adapter](x)
-                    
-                    # 1. Down-project via A: (x * w_norm) @ A.T
-                    h = F.linear(x_d * self.delora_w_norm[adapter], self.delora_A[adapter])  # [b, s, r]
 
-                    # 2. Normalize by A (remove A's magnitude, get unit directions)
-                    An = torch.clamp(self.delora_A[adapter].norm(dim=1), min=1e-4)  # [r]
-                    h_normalized = h / An.unsqueeze(0).unsqueeze(0)  # [b, s, r] - unit norm per component
 
                     # 3. TRM recursion on normalized directions (last token)
                     context = h_normalized[:, -1, :]  # [b, r] - normalized direction
@@ -250,15 +262,17 @@ class TRMDeloraLayer(DeloraLayer):
                     recursion_cache['zL'] = zL
                     recursion_cache['zH'] = zH
 
-                    # 4. Apply magnitude control (lambda/r, compensate for B)
-                    Bn = torch.clamp(self.delora_B[adapter].norm(dim=0), min=1e-4)  # [r]
-                    scaling = (self.delora_lambda[adapter] / self.r[adapter]) / Bn  # [r]
-                    h = zH * scaling  # [b, r] - refined direction * controlled magnitude
+                    zH = zH.unsqueeze(1)  # [b, 1, r]
 
-                    # 5. Up-project via B
-                    h = F.linear(h, self.delora_B[adapter])  # [b, out]
+                # 4. Apply magnitude control (lambda/r, compensate for B)
+                Bn = torch.clamp(self.delora_B[adapter].norm(dim=0), min=1e-4)  # [r]
+                scaling = (self.delora_lambda[adapter] / self.r[adapter]) / Bn  # [r]
+                h = zH * scaling  # [b, 1, r] - refined direction * controlled magnitude
 
-                    add_out += h.unsqueeze(1)  # [b, 1, out] broadcasts to [b, s, out], but it's only ever one token that we are processing with <latent>, so s=1
+                # 5. Up-project via B
+                h = F.linear(h, self.delora_B[adapter])  # [b, out]
+
+                add_out += h  # [b, 1, out] broadcasts to [b, s, out], but it's only ever one token that we are processing with <latent>, so s=1
 
             result = base_out + add_out.to(base_out.dtype)
 
@@ -331,10 +345,10 @@ class TRMDeloraModel(DeloraModel):
 
         if isinstance(target_base_layer, torch.nn.Linear):
             # Pass required DeLoRA params
-            r = kwargs.get('r', delora_config.r)
-            delora_lambda = kwargs.get('delora_lambda', delora_config.delora_lambda)
-            module_dropout = kwargs.get('module_dropout', delora_config.module_dropout)
-            init_weights = kwargs.get('init_weights', delora_config.init_weights)
+            r = kwargs.pop('r', delora_config.r)
+            delora_lambda = kwargs.pop('delora_lambda', delora_config.delora_lambda)
+            module_dropout = kwargs.pop('module_dropout', delora_config.module_dropout)
+            init_weights = kwargs.pop('init_weights', delora_config.init_weights)
             new_module = TRMDeloraLinear(
                 target, 
                 adapter_name, 

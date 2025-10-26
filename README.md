@@ -6,12 +6,11 @@ The core idea is to use a frozen, quantized LLM for perception and generation, w
 
 ```py
 
-uv run scripts/run.py TRMLoRA --help
+uv run scripts/run.py TRMDelora --help
 
 # run
-uv run scripts/run.py TRMLoRA
+uv run scripts/run.py TRMDelora
 ```
-
 
 ```py
 uv run pytest --beartype-packages=''
@@ -19,7 +18,7 @@ uv run pytest --beartype-packages=''
 # pytest with beartype type checking
 uv run pytest --beartype-packages='coconut'
 
-uv run scripts/run.py TRMLoRADebug
+uv run scripts/run.py TRMDeloraDebug
 ```
 
 Testing

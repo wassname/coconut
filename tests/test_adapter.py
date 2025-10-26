@@ -34,6 +34,14 @@ def test_adapter(config_class, expected_model_class, adapter_name):
 
     prefix = PEFT_TYPE_TO_PREFIX_MAPPING.get(peft_config.peft_type)
 
+    # I would also like to make sure it has at least one linear layer replaced, so one with trm in tpye
+    found_replaced_layer = False
+    for name, module in model.named_modules():
+        if isinstance(module, nn.Linear) and prefix in name:
+            found_replaced_layer = True
+            break
+    assert found_replaced_layer, f"No layer replaced with prefix {prefix} found in model."
+
     # Assert it's a PEFT model
     assert is_hf_peft_model(model) or is_plain_peft_model(model)
     

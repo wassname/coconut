@@ -39,7 +39,7 @@ class TRMHraAConfig(HRAConfig):
     def __post_init__(self):
         super().__post_init__()
         # Ensure peft_type is HRA
-        self.peft_type = PeftType.HRA
+        self.peft_type = 'TRMHRA'
         
         # Validate TRM-specific constraints
         if self.h_cycles < 1:
