@@ -19,6 +19,7 @@ from jaxtyping import Float, Int, Bool
 from torch import Tensor
 from .trm_layers import Attention, SwiGLU, rms_norm, CastedLinear, trunc_normal_init_
 import wandb
+from einops import repeat, rearrange
 
 hs_bsh = Float[Tensor, 'b s h']
 hs_b1h = Float[Tensor, 'b 1 h']
@@ -80,3 +81,58 @@ class L_net(nn.Module):
         for layer in self.layers:
             hidden_states = layer(hidden_states=hidden_states, **kwargs)
         return hidden_states
+
+
+def trm_recursion(
+    l_net: L_net,
+    zL: Float[Tensor, 'b r'],
+    zH: Float[Tensor, 'b r'], 
+    context: Float[Tensor, 'b s r'],
+    l_cycles: int,
+    h_cycles: int,
+) -> tuple[Float[Tensor, 'b s r'], Float[Tensor, 'b s r']]:
+    """
+    Tiny Recursion Module (TRM) core logic.
+    
+    Gradient flow: Early H cycles run no_grad (detached), final cycles keep grad.
+    When added to base_hidden (which has grad), detached recursions act as leaf nodes,
+    allowing model to learn error cleanup from its own accumulated mistakes (see TRM paper).
+    
+    Args:
+        l_net: L_net module for recursive refinement
+        zL: Latent reasoning state [b, r]
+        zH: High-level output state [b, r]
+        context: Context from down-projection [b, s, r]
+        l_cycles: Number of L_net cycles per H cycle
+        h_cycles: Number of H cycles
+        
+    Returns:
+        (zL_refined, zH_refined) both [b, s, r]
+    """
+    
+    
+    # Fold sequence into batch for L_net processing
+    b, s, r = context.shape
+    zLs = repeat(zL, 'b r -> (b s) 1 r', s=s)
+    zHs = repeat(zH, 'b r -> (b s) 1 r', s=s)
+    context_flat = rearrange(context, 'b s r -> (b s) 1 r')
+
+    def latent_recursion(hs, zH, zL, n=1):
+        for _ in range(n):  # latent reasoning with context
+            zL = l_net(zL, hs + zH)
+        zH = l_net(zH, zL)  # refine output answer
+        return zH, zL
+
+    # Early H cycles detached: forms leaf nodes but gradients still flow via base_hidden trunk and also via `context`
+    with torch.no_grad():
+        for _ in range(max(0, h_cycles - 1)):
+            zHs, zLs = latent_recursion(context_flat, zHs, zLs, n=l_cycles)
+    
+    # Final cycle with grad
+    zHs, zLs = latent_recursion(context_flat, zHs, zLs, n=l_cycles)
+
+    # Unfold batch back to (b, s, r)
+    zLs = rearrange(zLs, '(b s) 1 r -> b s r', b=b, s=s)
+    zHs = rearrange(zHs, '(b s) 1 r -> b s r', b=b, s=s)
+
+    return zLs, zHs

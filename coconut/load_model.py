@@ -13,6 +13,7 @@ import toml
 from transformers import BitsAndBytesConfig
 
 from peft import PeftModel, get_peft_model
+from coconut import trmlora  # ensure trmlora is imported to register peft types
 
 def load_new_model(conf: BaseConfig, device, dtype):
     # load tokenizer

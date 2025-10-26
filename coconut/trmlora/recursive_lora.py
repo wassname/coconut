@@ -15,7 +15,7 @@ from peft.tuners.lora.model import LoraModel
 from peft.tuners.lora.config import LoraConfig
 from peft.tuners._buffer_dict import BufferDict
 
-from .trm_adapter import L_net
+from .trm_adapter import L_net, trm_recursion
 
 
 
@@ -136,38 +136,26 @@ class TRMLoraLayer(LoraLayer):
         self.lora_zL_init[adapter_name] = zL
         self.lora_zH_init[adapter_name] = zH
 
-    def trm(self, adapter_name: str, zL: Float[Tensor, 'b h'], zH: Float[Tensor, 'b h'], context_hs: Float[Tensor, 'b h']) -> tuple[Float[Tensor, 'b h'], Float[Tensor, 'b h']]:
-        """
-        Tiny Recursion Module (TRM) adapted from trm_adapter.py.
-        
-        Gradient flow: Early H cycles run no_grad (detached), final cycles keep grad.
-        When added to base_hidden (which has grad), detached recursions act as leaf nodes,
-        allowing model to learn error cleanup from its own accumulated mistakes (see TRM paper).
-        """
+    def trm(self, adapter_name: str, zL: Float[Tensor, 'b h'], zH: Float[Tensor, 'b h'], context_hs: Float[Tensor, 'b h'], h_cycles=None) -> tuple[Float[Tensor, 'b h'], Float[Tensor, 'b h']]:
+        """Wrapper around trm_recursion with adapter-specific config."""
         trm_config = self.lora_configs[adapter_name]
-        l_net = self.lora_l_nets[adapter_name]
+        if h_cycles is None:
+            h_cycles = trm_config.h_cycles
         
-        # Expect zL, zH to be [b, h]
-        zLs = zL.unsqueeze(1)  # [b, 1, h]
-        zHs = zH.unsqueeze(1)  # [b, 1, h]
-        context = context_hs.unsqueeze(1)  # [b, 1, h]
-
-        # Early H cycles detached: forms leaf nodes but gradients still flow via base_hidden trunk and also via `context`
-        with torch.no_grad():
-            for _ in range(max(0, trm_config.h_cycles - 1)):
-                # L cycles: refine zL with context + zH injection
-                for _ in range(trm_config.l_cycles):
-                    zLs = l_net(zLs, context + zHs)
-                # H cycle: refine zH with zL injection
-                zHs = l_net(zHs, zLs)
-
-        # Last H cycle with grad for backprop
-        for _ in range(trm_config.l_cycles):
-            zLs = l_net(zLs, context + zHs)
-        zHs = l_net(zHs, zLs)
-
-        # Return (zL_next, zH_next) in [b, h]
-        return zLs.squeeze(1), zHs.squeeze(1)
+        # trm_recursion expects [b, s, r], so add sequence dimension
+        context = context_hs.unsqueeze(1)  # [b, 1, r]
+        
+        zLs, zHs = trm_recursion(
+            l_net=self.lora_l_nets[adapter_name],
+            zL=zL,
+            zH=zH,
+            context=context,
+            l_cycles=trm_config.l_cycles,
+            h_cycles=h_cycles,
+        )
+        
+        # Return last token: [b, s, r] -> [b, r]
+        return zLs[:, -1, :], zHs[:, -1, :]
 
     def forward(
         self,

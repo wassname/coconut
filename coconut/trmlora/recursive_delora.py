@@ -19,7 +19,7 @@ from peft.tuners.delora.config import DeloraConfig
 from peft.tuners._buffer_dict import BufferDict
 from peft.utils import PeftType
 
-from .trm_adapter import L_net
+from .trm_adapter import L_net, trm_recursion
 
 @dataclass
 class TRMDeloraAConfig(DeloraConfig):
@@ -127,47 +127,20 @@ class TRMDeloraLayer(DeloraLayer):
         self.delora_zL_init[adapter_name] = zL
         self.delora_zH_init[adapter_name] = zH
 
-    def trm(self, adapter_name: str, zL: Float[Tensor, 'b r'], zH: Float[Tensor, 'b r'], context_hs: Float[Tensor, 'b s r'], h_cycles = None) -> tuple[Float[Tensor, 'b s r'], Float[Tensor, 'b s r']]:
-        """
-        Tiny Recursion Module (TRM) adapted from trm_adapter.py.
-        
-        Gradient flow: Early H cycles run no_grad (detached), final cycles keep grad.
-        When added to base_hidden (which has grad), detached recursions act as leaf nodes,
-        allowing model to learn error cleanup from its own accumulated mistakes (see TRM paper).
-        """
-        trm_config = self.delora_configs[adapter_name]
-        l_net = self.delora_l_nets[adapter_name]
-
+    def trm(self, adapter_name: str, zL, zH, context_hs, h_cycles=None):
+                
+        trm_config = self.lora_configs[adapter_name]  # or delora_configs
         if h_cycles is None:
             h_cycles = trm_config.h_cycles
         
-        # Fold sequence into batch for L_net processing
-        b, s, r = context_hs.shape
-        zLs = repeat(zL, 'b r -> (b s) 1 r', s=s)
-        zHs = repeat(zH, 'b r -> (b s) 1 r', s=s)
-        context = rearrange(context_hs, 'b s r -> (b s) 1 r') # [(b*s), 1, r]
-
-
-        def latent_recursion(hs, zH, zL, n=1):
-            for i in range(n): # latent reasoning with context
-                zL = l_net(zL, hs + zH)
-            zH = l_net(zH, zL) # refine output answer
-            return zH, zL
-
-
-        # Early H cycles detached: forms leaf nodes but gradients still flow via base_hidden trunk and also via `context`
-        with torch.no_grad():
-            for _ in range(max(0, h_cycles - 1)):
-                zHs, zLs = latent_recursion(context, zHs, zLs, n=trm_config.l_cycles)
-        
-        zHs, zLs = latent_recursion(context, zHs, zLs, n=1)
-
-        # unfold batch back to (b, s, r)
-        zLs = rearrange(zLs, '(b s) 1 r -> b s r', b=b, s=s)
-        zHs = rearrange(zHs, '(b s) 1 r -> b s r', b=b, s=s)
-
-        # Return (zL_next, zH_next) in [b, h]
-        return zLs, zHs
+        return trm_recursion(
+            l_net=self.lora_l_nets[adapter_name],  # or delora_l_nets
+            zL=zL,
+            zH=zH,
+            context=context_hs,
+            l_cycles=trm_config.l_cycles,
+            h_cycles=h_cycles,
+        )
 
 
     def forward(self, x: Float[Tensor, 'b s h'], *args: Any, **kwargs: Any) -> Float[Tensor, 'b s h']:
