@@ -1,5 +1,6 @@
 import coconut.silence
 import torch
+import torch.nn as nn
 import warnings
 import pytest
 from peft import get_peft_model, LoraConfig
@@ -28,7 +29,7 @@ def test_adapter(config_class, expected_model_class, adapter_name):
     base_model = AutoModelForCausalLM.from_pretrained(model_id)
     tokenizer = AutoTokenizer.from_pretrained(model_id)
 
-    peft_config = config_class(r=4)  # Low rank for quick test
+    peft_config = config_class()  # Low rank for quick test
     model = get_peft_model(base_model, peft_config)
     model.print_trainable_parameters()
 

@@ -128,13 +128,13 @@ class TRMDeloraLayer(DeloraLayer):
         self.delora_zH_init[adapter_name] = zH
 
     def trm(self, adapter_name: str, zL, zH, context_hs, h_cycles=None):
-                
-        trm_config = self.lora_configs[adapter_name]  # or delora_configs
+        """Wrapper around trm_recursion with adapter-specific config."""
+        trm_config = self.delora_configs[adapter_name]
         if h_cycles is None:
             h_cycles = trm_config.h_cycles
         
         return trm_recursion(
-            l_net=self.lora_l_nets[adapter_name],  # or delora_l_nets
+            l_net=self.delora_l_nets[adapter_name],
             zL=zL,
             zH=zH,
             context=context_hs,

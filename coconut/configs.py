@@ -91,7 +91,7 @@ class TRMConfig(BaseConfig):
     trm_h_cycles: int = 2  # high level recursive cycles (T=3 in repo)
     trm_l_cycles: int = 3  # low level recursive cycles (n=6 in repo)
     trm_l_layers: int = 2  # layers for L_net, 2 best in paper/repo
-    trm_num_heads: int = 4  # number of attention heads in TRM, 8 in repo
+    trm_num_heads: int = 2  # number of attention heads in TRM, 8 in repo
     trm_expansion: float = 4  # MLP expansion factor in TRM, 4 in repo, meaning it expands to 4*512=2048. But we are expanding from a lower rank so might want hs/rank=2048/18=114
 
     trm_persistent_steering: bool = True  # persistent steering vector across recursions

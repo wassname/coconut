@@ -1,3 +1,4 @@
+import coconut.trmlora  # MUST be first to register PEFT methods before any peft imports
 import coconut.silence
 
 from torchinfo import summary

@@ -7,6 +7,7 @@ from coconut.coconut import Coconut
 from coconut.configs import BaseConfig
 from loguru import logger
 from pathlib import Path
+import os
 import torch
 import safetensors.torch
 import toml
@@ -154,11 +155,42 @@ def save_model(model, tokenizer, configs, save_dir: Path):
     logger.info(f"saving model {save_dir}")
 
     # save state dict (only TRM adapter, not frozen base model)
-    state_dict = model.state_dict()
-    state_dict = {k: v for k, v in state_dict.items() if not k.startswith('model.model.')}
     save_folder = str(save_dir / "trmlora/")
-    # logger.error("FIXME save with custom peft type: Unknown PEFT type passed: TRMLORA")
-    # need to add to PEFT_TYPE_TO_PREFIX_MAPPING
-    # https://github.com/huggingface/peft/blob/98a88c01a42be4bb2fa13a1c0dd5340c42f82c87/src/peft/utils/save_and_load.py#L228
-    model.model.save_pretrained(save_folder, save_embedding_layers=False)
-    logger.info(f"saving model {save_folder}")
+    os.makedirs(save_folder, exist_ok=True)
+    
+    # Custom save logic for TRM adapters (bypasses PEFT's type checking)
+    from peft.mapping import PEFT_TYPE_TO_PREFIX_MAPPING
+    import re
+    
+    adapter_name = "default"
+    config = model.model.peft_config[adapter_name]
+    state_dict = model.model.state_dict()
+    
+    # Filter by prefix (same logic as PEFT but without type check)
+    prefix = PEFT_TYPE_TO_PREFIX_MAPPING.get(config.peft_type)
+    if prefix:
+        to_return = {k: state_dict[k] for k in state_dict if prefix in k}
+        
+        # Remove adapter name from keys
+        pattern = re.compile(re.escape(f".{adapter_name}") + r"$")
+        def remove_adapter_name(key):
+            if "." not in key:
+                return key
+            if key.endswith(f".{adapter_name}"):
+                return key.removesuffix(f".{adapter_name}")
+            key, _, suffix = key.rpartition(".")
+            key = pattern.sub("", key)
+            return f"{key}.{suffix}"
+        
+        to_return = {remove_adapter_name(k): v for k, v in to_return.items()}
+        
+        # Save adapter weights
+        torch.save(to_return, os.path.join(save_folder, "adapter_model.bin"))
+        
+        # Save adapter config
+        config.save_pretrained(save_folder)
+        
+        logger.info(f"Saved TRM adapter to {save_folder}")
+    else:
+        logger.warning(f"No prefix found for {config.peft_type}, falling back to save_pretrained")
+        model.model.save_pretrained(save_folder, save_embedding_layers=False)

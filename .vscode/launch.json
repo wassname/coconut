@@ -13,9 +13,9 @@
       "program": "./scripts/run.py",
       "console": "integratedTerminal",
       "args": [
-        "TRMLoRADebug"
+        "TRMDeloraDebug"
       ],
-      // "justMyCode": false,
+      "justMyCode": false,
       // "autoReload": {
       //  "enable": true
       // },
