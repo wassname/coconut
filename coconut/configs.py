@@ -70,28 +70,31 @@ class BaseConfig:
 @dataclass
 class TRMConfig(BaseConfig):
     """TRM base config: shared settings for all TRM adapter modes."""
+    # see COCOCNUT https://github.com/facebookresearch/coconut/blob/27273cb8cca4bb763c041a63b036d0c3b7cbbb48/args/gsm_coconut.yaml#L34
+    # see TRM https://github.com/SamsungSAILMontreal/TinyRecursiveModels/blob/e7b68717f0a6c4cbb4ce6fbef787b14f42083bd9/config/arch/trm.yaml paper
     resume_epochs: int = 2
     cot_epochs: int = 0
     skip_stage_zero: bool = True  # skip stage 0 : <start_latent><end_latent> training with 0 latent tokens
     num_epochs: int = 20
-    epochs_per_stage: int = 10
+    epochs_per_stage: int = 8
     
     lr: float = 1e-4 # 1e-4 in paper
-    weight_decay: float = 0.01 # 1 and 0.1 in paper. But we are already operating in a heavily constrained space (low rank adapter space)
+    weight_decay: float = 0.01 # 1 and 0.1 in TRM paper. 0.01 in COCONUT paper. But we are already operating in a heavily constrained space (low rank adapter space)
     
     max_size: int = 20_000
     batch_size_training: int = 16
-    gradient_accumulation_steps: int = 768 // 14 # paper had effective batch size of 768
+    gradient_accumulation_steps: int = 1 # 768 // 14 # paper had effective batch size of 768
 
     eval_first_epoch: bool = False
     loss_nll_ratio_margin: bool = False
     
-    # see https://github.com/SamsungSAILMontreal/TinyRecursiveModels/blob/e7b68717f0a6c4cbb4ce6fbef787b14f42083bd9/config/arch/trm.yaml paper
     trm_h_cycles: int = 2  # high level recursive cycles (T=3 in repo)
     trm_l_cycles: int = 3  # low level recursive cycles (n=6 in repo)
     trm_l_layers: int = 2  # layers for L_net, 2 best in paper/repo
     trm_num_heads: int = 8  # number of attention heads in TRM, 8 in repo
     trm_expansion: float = 8  # MLP expansion factor in TRM, 4 in repo, meaning it expands to 4*512=2048. But we are expanding from a lower rank so might want hs/rank=2048/18=114
+
+    trm_persistent_steering: bool = True  # persistent steering vector across recursions
 
     layers_spacing_adapter: int = 2000  # number of spaced out layers to apply adapter to, larger number means all
     layers_start_adapter: float = 0.3  # start layer fraction to apply adapter

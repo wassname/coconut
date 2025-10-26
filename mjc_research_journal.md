@@ -2180,3 +2180,12 @@ HRA
 |  7 |      0.034 |         0.008 |        0.9366 |       9 |       1 |         13.0092 |     0.219476 |      0.3503 |
 
 Now try all layers
+
+
+# 2025-10-26 14:06:04
+
+grad_accum_steps =1 
+we=0.01
+perisstent_steering=True
+
+learning a bit! 1.4% at epoch 1
