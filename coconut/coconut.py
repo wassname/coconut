@@ -176,16 +176,16 @@ class Coconut(nn.Module):
 
         recursion_cache = {}
 
-        # Three-pass structure: (1) before latents, (2) latents one-by-one, (3) after latents
-
-        # 1. INITIAL PASS - before first latent (adapter off)
+        # Three-stage processing: (1) before latents, (2) latents one-by-one, (3) after latents
+        # Each stage is a forward pass through the model on a different portion of the sequence
+        
+        # STAGE 1: Before first latent (base model only)
         if max_n_latents > 0:
             with set_adapter(self.model, None):
                 outputs = self.model.forward(
                     inputs_embeds=inputs_embeds[:, a:b],
                     attention_mask=attention_mask[:, :b],
                     position_ids=position_ids[:, a:b],
-                    recursion_cache=recursion_cache,
                     past_key_values=kv_cache,
                     output_hidden_states=True,
                     use_cache=True,
@@ -202,62 +202,64 @@ class Coconut(nn.Module):
                 
                 a = b  # Move to first latent position
             
-            # 2. LATENT PASSES - one token at a time (adapter on)
-            for pass_idx in range(max_n_latents):
-                # TRM-style detached recursions: detach gradients for early passes,
-                # keep gradients for last N passes to learn error cleanup
-                should_detach = (
-                    self.training
-                    and (self.config.n_detached_recursions > 0)
-                    and (pass_idx < (max_n_latents - self.config.n_detached_recursions))
-                )
-
-                if should_detach:
-                    ctd_grad = torch.no_grad()
-                else:
-                    ctd_grad = torch.enable_grad()
-
-                # Process one latent token
-                b = a + 1
-                
-                with set_adapter(self.model, self.model.active_adapter):
-                    with ctd_grad:
-                        outputs = self.model.forward(
-                            inputs_embeds=inputs_embeds[:, a:b],
-                            attention_mask=attention_mask[:, :b],
-                            position_ids=position_ids[:, a:b],
-                            recursion_cache=recursion_cache,
-                            past_key_values=kv_cache,  # Cache already has exactly positions [0:a]
-                            output_hidden_states=True,
-                            use_cache=True,
-                        )
-
-                        logits.append(outputs.logits)
-
-                        kv_cache = outputs.past_key_values
-                        assert kv_cache is not None
-
-                        if self.config.collect_hs:
-                            hs = rearrange(
-                                list(outputs.hidden_states),
-                                "l b t h -> l b t h",
-                            ).detach().cpu()
-                            all_hs.append(hs)
-                        
-                        a = b  # Move to next position
-
-            # 3. FINAL PASS - all the rest after latents, using base model (adapter off)
-            b = input_ids.shape[1]
-            if a < b:  # Only if there are tokens remaining
-                with set_adapter(self.model, None):
-                    outputs = self.model.forward(
-                        inputs_embeds=inputs_embeds[:, a:b],
-                        attention_mask=attention_mask[:, :b],
-                        position_ids=position_ids[:, a:b],
-                        past_key_values=kv_cache,  # Cache already has exactly positions [0:a]
-                        output_hidden_states=True,
-                        use_cache=True,
+            # STAGE 2: Latent tokens - one forward pass per token (adapter + recursion active)
+            with self.recursion_context(recursion_cache):
+                for pass_idx in range(max_n_latents):
+                    # TRM-style detached recursions: detach gradients for early passes,
+                    # keep gradients for last N passes to learn error cleanup
+                    should_detach = (
+                        self.training
+                        and (self.config.n_detached_recursions > 0)
+                        and (pass_idx < (max_n_latents - self.config.n_detached_recursions))
                     )
+
+                    if should_detach:
+                        ctd_grad = torch.no_grad()
+                    else:
+                        ctd_grad = torch.enable_grad()
+
+                    # Process one latent token
+                    b = a + 1
+                    
+                    with set_adapter(self.model, self.model.active_adapter):
+                        with ctd_grad:
+                            outputs = self.model.forward(
+                                inputs_embeds=inputs_embeds[:, a:b],
+                                attention_mask=attention_mask[:, :b],
+                                position_ids=position_ids[:, a:b],
+                                recursion_cache=recursion_cache,
+                                past_key_values=kv_cache,  # Cache already has exactly positions [0:a]
+                                output_hidden_states=True,
+                                use_cache=True,
+                            )
+
+                            logits.append(outputs.logits)
+
+                            kv_cache = outputs.past_key_values
+                            assert kv_cache is not None
+
+                            if self.config.collect_hs:
+                                hs = rearrange(
+                                    list(outputs.hidden_states),
+                                    "l b t h -> l b t h",
+                                ).detach().cpu()
+                                all_hs.append(hs)
+                            
+                            a = b  # Move to next position
+
+        # STAGE 3: After latents (base model only)
+        # If no latents exist (max_n_latents==0), a=0 so this processes entire sequence
+        b = input_ids.shape[1]
+        if a < b:  # True when: (1) tokens remain after latents, or (2) no latents at all
+            with set_adapter(self.model, None):
+                outputs = self.model.forward(
+                    inputs_embeds=inputs_embeds[:, a:b],
+                    attention_mask=attention_mask[:, :b],
+                    position_ids=position_ids[:, a:b],
+                    past_key_values=kv_cache,
+                    output_hidden_states=True,
+                    use_cache=True,
+                )
 
                 logits.append(outputs.logits)
 
