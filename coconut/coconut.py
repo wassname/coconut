@@ -134,6 +134,7 @@ class Coconut(nn.Module):
             "Adapter must be active during forward"
         )
         if self.config.loss_nll_ratio_margin and all_labels is not None:
+            # Here we just do one full run of the base model is we need it for the extra loss
             with set_adapter(self.model, None):
                 with torch.no_grad():
                     base_outputs = self.model.forward(
@@ -141,7 +142,6 @@ class Coconut(nn.Module):
                         attention_mask=attention_mask,
                         position_ids=position_ids,
                         output_hidden_states=False,
-                        # recursion_cache={},
                     )
                     
                     nll_base = get_nll(base_outputs.logits, all_labels, attention_mask)[
@@ -176,9 +176,33 @@ class Coconut(nn.Module):
 
         recursion_cache = {}
 
-        # TODO maybe it would be clearer if I explicitly break down into 3 passes: before latents, latents, after latents
+        # Three-pass structure: (1) before latents, (2) latents one-by-one, (3) after latents
 
-        with self.recursion_context(recursion_cache) as cache:
+        # 1. INITIAL PASS - before first latent (adapter off)
+        if max_n_latents > 0:
+            with set_adapter(self.model, None):
+                outputs = self.model.forward(
+                    inputs_embeds=inputs_embeds[:, a:b],
+                    attention_mask=attention_mask[:, :b],
+                    position_ids=position_ids[:, a:b],
+                    recursion_cache=recursion_cache,
+                    past_key_values=kv_cache,
+                    output_hidden_states=True,
+                    use_cache=True,
+                )
+                logits.append(outputs.logits)
+                kv_cache = outputs.past_key_values
+                
+                if self.config.collect_hs:
+                    hs = rearrange(
+                        list(outputs.hidden_states),
+                        "l b t h -> l b t h",
+                    ).detach().cpu()
+                    all_hs.append(hs)
+                
+                a = b  # Move to first latent position
+            
+            # 2. LATENT PASSES - one token at a time (adapter on)
             for pass_idx in range(max_n_latents):
                 # TRM-style detached recursions: detach gradients for early passes,
                 # keep gradients for last N passes to learn error cleanup
@@ -188,21 +212,16 @@ class Coconut(nn.Module):
                     and (pass_idx < (max_n_latents - self.config.n_detached_recursions))
                 )
 
-                has_latents = (
-                    (input_ids[:, a:b] == self.config.latent_token_id).any().item()
-                )
-
                 if should_detach:
                     ctd_grad = torch.no_grad()
                 else:
                     ctd_grad = torch.enable_grad()
 
-                # only turn on the adapter if we have latents
-                with set_adapter(
-                    self.model, self.model.active_adapter if has_latents else None
-                ):
+                # Process one latent token
+                b = a + 1
+                
+                with set_adapter(self.model, self.model.active_adapter):
                     with ctd_grad:
-
                         outputs = self.model.forward(
                             inputs_embeds=inputs_embeds[:, a:b],
                             attention_mask=attention_mask[:, :b],
@@ -215,38 +234,8 @@ class Coconut(nn.Module):
 
                         logits.append(outputs.logits)
 
-                        # update compute range. One latents step at a time, then all the rest
-                        a, b = (
-                            b,
-                            (
-                                input_ids.shape[1]
-                                if pass_idx + 1 >= max_n_latents
-                                else b + 1
-                            ),
-                        )
-
-                        hidden_states = outputs.hidden_states
-                        assert hidden_states is not None
                         kv_cache = outputs.past_key_values
                         assert kv_cache is not None
-
-                        # to avoid in-place operations
-                        # break down inputs_embeds (bs, len, hidden_size) into a list of list of 1-d tensors
-                        tensor_list = [
-                            [
-                                inputs_embeds[batch_idx, pos, :]
-                                for pos in range(inputs_embeds.shape[1])
-                            ]
-                            for batch_idx in range(inputs_embeds.shape[0])
-                        ]
-
-                        # assemble the new inputs_embeds
-                        inputs_embeds = torch.stack(
-                            [
-                                torch.stack(tensor_list[batch_idx])
-                                for batch_idx in range(inputs_embeds.shape[0])
-                            ]
-                        )
 
                         if self.config.collect_hs:
                             hs = rearrange(
@@ -254,28 +243,29 @@ class Coconut(nn.Module):
                                 "l b t h -> l b t h",
                             ).detach().cpu()
                             all_hs.append(hs)
+                        
+                        a = b  # Move to next position
 
-            # Now do the rest of the generation after the last latent
+            # 3. FINAL PASS - all the rest after latents, using base model (adapter off)
+            b = input_ids.shape[1]
+            if a < b:  # Only if there are tokens remaining
+                with set_adapter(self.model, None):
+                    outputs = self.model.forward(
+                        inputs_embeds=inputs_embeds[:, a:b],
+                        attention_mask=attention_mask[:, :b],
+                        position_ids=position_ids[:, a:b],
+                        past_key_values=kv_cache,  # Cache already has exactly positions [0:a]
+                        output_hidden_states=True,
+                        use_cache=True,
+                    )
 
-            # 3, FINAL PASS - all the rest, using base model (adapter off)
-            with set_adapter(self.model, None):
-                outputs = self.model.forward(
-                    inputs_embeds=inputs_embeds[:, a:b],
-                    attention_mask=attention_mask[:, :b],
-                    position_ids=position_ids[:, a:b],
-                    past_key_values=kv_cache,  # Cache already has exactly positions [0:a]
-                    output_hidden_states=True,
-                    recursion_cache=recursion_cache,
-                    use_cache=True,
-                )
+                logits.append(outputs.logits)
 
-            logits.append(outputs.logits)
-
-        # collect hs
-        if self.config.collect_hs:
-            hs = rearrange(list(outputs.hidden_states), "l b t h -> l b t h").detach().cpu()
-            all_hs.append(hs)
-            all_hs = torch.concat(all_hs, dim=2)
+            # collect hs
+            if self.config.collect_hs:
+                hs = rearrange(list(outputs.hidden_states), "l b t h -> l b t h").detach().cpu()
+                all_hs.append(hs)
+                all_hs = torch.concat(all_hs, dim=2)
 
 
         logits = torch.cat(logits, dim=-2)

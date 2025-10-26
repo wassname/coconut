@@ -215,7 +215,7 @@ def train(conf: BaseConfig):
                 stage = -1
             elif epoch < max_latent_epoch:
                 stage = (epoch - conf.cot_epochs) // conf.epochs_per_stage
-                if conf.skip_stage_zero:
+                if conf.skip_stage_zero and (stage < conf.max_latent_stage):
                     stage += 1
             else:
                 stage = conf.max_latent_stage
@@ -315,6 +315,13 @@ def train(conf: BaseConfig):
                     eot_id,
                     shuffle=True,
                 )
+
+                # TODO log sample of train data
+                t = dataset_train[0]['input_ids']
+                s = tokenizer.decode(t, skip_special_tokens=False)
+                logger.debug(f"Sample train data (epoch {epoch} stage {stage}):\n{s}")
+
+
                 if (conf.reset_optimizer is True) or (optimiser is None):
                     opt_steps=len(dataset_train) // conf.gradient_accumulation_steps
                     if not conf.reset_optimizer:

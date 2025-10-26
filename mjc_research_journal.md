@@ -2117,3 +2117,50 @@ HRA
 |    |   eval/acc |   eval/cot_em |   eval/ratios |   epoch |   stage |   train/minutes |   train/loss |   eval/loss |
 |---:|-----------:|--------------:|--------------:|--------:|--------:|----------------:|-------------:|------------:|
 |  0 |          0 |             0 |         1.658 |       2 |       2 |         20.9602 |      3.93035 |      3.4403 |
+
+
+# Results: trmlora-qwen3-0.6b_20251026-011425
+{'project': 'coconut', 'save_path': 'outputs/', 'name': 'trmlora-qwen3-0.6b', 'model_id': 'suayptalha/Qwen3-0.6B-Math-Expert', 'only_eval': False, 'load_model_path': '', 'resume_epochs': 2, 'use_position_ids': True, 'bf16': True, 'bf16_weight': False, 'opt_8b': False, 'load_in_4bit': False, 'load_in_8bit': False, 'cot_epochs': 0, 'epochs_per_stage': 10, 'max_latent_stage': 3, 'num_epochs': 20, 'batch_size_training': 14, 'gradient_accumulation_steps': 9, 'lr': 0.001, 'weight_decay': 0.01, 'grad_clip': 1.0, 'scheduler': 'cosine', 'debug': False, 'seed': 42, 'reset_optimizer': False, 'loss_seq_vcr': False, 'n_detached_recursions': 2, 'collect_hs': False, 'max_size': 20000, 'c_thought': 1, 'pad_latent_to_max': True, 'uniform_prob': 0.0, 'train_path': 'data/gsm_train.json', 'val_path': 'data/gsm_valid.json', 'system_prompt': '', 'latent_token_id': None, 'bot_token_id': None, 'eot_token_id': None, 'eos_token_id': None, 'skip_stage_zero': True, 'eval_first_epoch': False, 'loss_nll_ratio_margin': False, 'trm_h_cycles': 2, 'trm_l_cycles': 4, 'trm_l_layers': 2, 'trm_num_heads': 3, 'trm_expansion': 4.0, 'layers_spacing_adapter': 8, 'use_trm_lora': True, 'adapter_r': 18, 'adapter_lora_alpha': 32}
+|    |   eval/acc |   eval/cot_em |   eval/ratios |   epoch |   stage |   train/minutes |   train/loss |   eval/loss |
+|---:|-----------:|--------------:|--------------:|--------:|--------:|----------------:|-------------:|------------:|
+|  0 |      0     |         0     |        1.7153 |       2 |       1 |         10.9934 |     3.31153  |      3.1209 |
+|  1 |      0     |         0     |        1.7153 |       3 |       1 |         11.0378 |     2.87605  |      3.1209 |
+|  2 |      0     |         0     |        1.7153 |       4 |       1 |         11.0558 |     3.27911  |      3.1209 |
+|  3 |      0     |         0     |        1.7153 |       5 |       1 |         11.0666 |     3.41369  |      3.1209 |
+|  4 |      0     |         0     |        1.7153 |       6 |       1 |         11.1754 |     4.15342  |      3.1209 |
+|  5 |      0     |         0     |        1.7153 |       7 |       1 |         11.0394 |     3.12628  |      3.1209 |
+|  6 |      0     |         0     |        1.7153 |       8 |       1 |         10.9858 |     3.30152  |      3.1209 |
+|  7 |      0     |         0     |        1.7153 |       9 |       1 |         10.9967 |     3.10288  |      3.1209 |
+|  8 |      0.056 |         0.012 |        0.6893 |      10 |       2 |         15.6406 |     0.381594 |      0.5561 |
+|  9 |      0.046 |         0.012 |        0.669  |      11 |       2 |         15.5133 |     0.521238 |      0.5277 |
+| 10 |      0.062 |         0.012 |        0.6924 |      12 |       2 |         15.6465 |     0.422876 |      0.5036 |
+| 11 |      0.084 |         0.008 |        0.6841 |      13 |       2 |         15.5244 |     0.699863 |      0.4904 |
+| 12 |      0.05  |         0.012 |        0.6773 |      14 |       2 |         15.5299 |     0.339024 |      0.4774 |
+| 13 |      0.058 |         0.002 |        0.6753 |      15 |       2 |         15.5811 |     0.37138  |      0.4884 |
+| 14 |      0.072 |         0.012 |        0.6826 |      16 |       2 |         15.5708 |     0.262936 |      0.4689 |
+| 15 |      0.052 |         0.012 |        0.6817 |      17 |       2 |         15.6231 |     0.355756 |      0.4679 |
+| 16 |      0.054 |         0.012 |        0.6693 |      18 |       2 |         15.5508 |     0.3091   |      0.468  |
+| 17 |      0.044 |         0.01  |        0.6559 |      19 |       2 |         15.6138 |     0.312969 |      0.4713 |
+
+# Results: trmdelora-qwen3-0.6b_20251025-210458
+{'project': 'coconut', 'save_path': 'outputs/', 'name': 'trmdelora-qwen3-0.6b', 'model_id': 'suayptalha/Qwen3-0.6B-Math-Expert', 'only_eval': False, 'load_model_path': '', 'resume_epochs': 2, 'use_position_ids': True, 'bf16': True, 'bf16_weight': False, 'opt_8b': False, 'load_in_4bit': False, 'load_in_8bit': False, 'cot_epochs': 0, 'epochs_per_stage': 10, 'max_latent_stage': 3, 'num_epochs': 20, 'batch_size_training': 14, 'gradient_accumulation_steps': 9, 'lr': 0.001, 'weight_decay': 0.01, 'grad_clip': 1.0, 'scheduler': 'cosine', 'debug': False, 'seed': 42, 'reset_optimizer': False, 'loss_seq_vcr': False, 'n_detached_recursions': 2, 'collect_hs': False, 'max_size': 20000, 'c_thought': 1, 'pad_latent_to_max': True, 'uniform_prob': 0.0, 'train_path': 'data/gsm_train.json', 'val_path': 'data/gsm_valid.json', 'system_prompt': '', 'latent_token_id': None, 'bot_token_id': None, 'eot_token_id': None, 'eos_token_id': None, 'skip_stage_zero': True, 'eval_first_epoch': False, 'loss_nll_ratio_margin': False, 'trm_h_cycles': 2, 'trm_l_cycles': 4, 'trm_l_layers': 2, 'trm_num_heads': 3, 'trm_expansion': 4.0, 'layers_spacing_adapter': 8, 'use_trm_delora': True, 'adapter_r': 18, 'adapter_delora_lambda': 15}
+|    |   eval/acc |   eval/cot_em |   eval/ratios |   epoch |   stage |   train/minutes |   train/loss |   eval/loss |
+|---:|-----------:|--------------:|--------------:|--------:|--------:|----------------:|-------------:|------------:|
+|  0 |      0     |         0     |        1.7153 |       2 |       1 |         11.0264 |     2.67611  |      3.1209 |
+|  1 |      0     |         0     |        1.7153 |       3 |       1 |         11.0596 |     3.88671  |      3.1209 |
+|  2 |      0     |         0     |        1.7153 |       4 |       1 |         11.0035 |     3.06495  |      3.1209 |
+|  3 |      0     |         0     |        1.7153 |       5 |       1 |         10.9354 |     3.51003  |      3.1209 |
+|  4 |      0     |         0     |        1.7153 |       6 |       1 |         10.9536 |     4.00484  |      3.1209 |
+|  5 |      0     |         0     |        1.7153 |       7 |       1 |         10.9927 |     3.05607  |      3.1209 |
+|  6 |      0     |         0     |        1.7153 |       8 |       1 |         10.951  |     3.4932   |      3.1209 |
+|  7 |      0     |         0     |        1.7153 |       9 |       1 |         10.9868 |     4.18694  |      3.1209 |
+|  8 |      0.058 |         0.012 |        0.6738 |      10 |       2 |         16.0868 |     0.403685 |      0.5025 |
+|  9 |      0.036 |         0.012 |        0.6825 |      11 |       2 |         16.0627 |     0.316718 |      0.482  |
+| 10 |      0.042 |         0.012 |        0.6786 |      12 |       2 |         16.0689 |     0.276161 |      0.4683 |
+| 11 |      0.042 |         0.014 |        0.6725 |      13 |       2 |         16.0594 |     0.406331 |      0.4606 |
+| 12 |      0.048 |         0.012 |        0.6628 |      14 |       2 |         16.071  |     0.358142 |      0.4601 |
+| 13 |      0.034 |         0.012 |        0.6733 |      15 |       2 |         16.0692 |     0.258621 |      0.4626 |
+| 14 |      0.044 |         0.012 |        0.6644 |      16 |       2 |         16.0005 |     0.302327 |      0.4627 |
+| 15 |      0.046 |         0.012 |        0.6702 |      17 |       2 |         15.9561 |     0.349265 |      0.4718 |
+| 16 |      0.042 |         0.012 |        0.6574 |      18 |       2 |         16.0717 |     0.364065 |      0.4732 |
+| 17 |      0.048 |         0.008 |        0.6124 |      19 |       2 |         16.1421 |     0.395231 |      0.4822 |
