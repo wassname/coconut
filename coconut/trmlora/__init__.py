@@ -7,6 +7,7 @@ class PeftType2(str, enum.Enum):
     TRMLORA = 'TRMLORA'
     TRMDELORA = 'TRMDELORA'
     TRMHRA = 'TRMHRA'
+    TRMSVFT = 'TRMSVFT'
 peft.utils.peft_types.PeftType = PeftType2
 
 
@@ -66,6 +67,7 @@ peft.utils.get_peft_model_state_dict = custom_get_peft_model_state_dict  # peft_
 from coconut.trmlora.recursive_lora import TRMLoraModel, TRMLoraAConfig
 from coconut.trmlora.recursive_delora import TRMDeloraModel, TRMDeloraAConfig
 from coconut.trmlora.recursive_hra import TRMHraModel, TRMHraAConfig
+from coconut.trmlora.recursive_svft import TRMSvftModel, TRMSvftConfig
 
 
 
@@ -84,6 +86,12 @@ try:
 except KeyError:
     pass
 
+try:
+    register_peft_method(name="trmsvft", model_cls=TRMSvftModel, config_cls=TRMSvftConfig, prefix="svft_")
+except KeyError:
+    pass
+
 PEFT_TYPE_TO_PREFIX_MAPPING[PeftType2.TRMLORA] = "lora_"
 PEFT_TYPE_TO_PREFIX_MAPPING[PeftType2.TRMDELORA] = "delora_"
 PEFT_TYPE_TO_PREFIX_MAPPING[PeftType2.TRMHRA] = "hra_"
+PEFT_TYPE_TO_PREFIX_MAPPING[PeftType2.TRMSVFT] = "svft_"
