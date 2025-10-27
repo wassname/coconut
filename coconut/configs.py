@@ -78,25 +78,26 @@ class TRMConfig(BaseConfig):
     num_epochs: int = 20
     epochs_per_stage: int = 8
     
-    lr: float = 1e-4 # 1e-4 in paper
+    scheduler: str = "cosine"
+    lr: float = 3e-3 # 1e-4 in paper
     weight_decay: float = 0.01 # 1 and 0.1 in TRM paper. 0.01 in COCONUT paper. But we are already operating in a heavily constrained space (low rank adapter space)
     
     max_size: int = 10_000
     batch_size_training: int = 16
-    gradient_accumulation_steps: int = 1 # 768 // 14 # paper had effective batch size of 768
+    gradient_accumulation_steps: int = 4 # 768 // 14 # paper had effective batch size of 768
 
     eval_first_epoch: bool = False
     loss_nll_ratio_margin: bool = False
     
-    trm_h_cycles: int = 2  # high level recursive cycles (T=3 in repo)
-    trm_l_cycles: int = 3  # low level recursive cycles (n=6 in repo)
+    trm_h_cycles: int = 3  # high level recursive cycles (T=3 in repo)
+    trm_l_cycles: int = 6  # low level recursive cycles (n=6 in repo)
     trm_l_layers: int = 2  # layers for L_net, 2 best in paper/repo
-    trm_num_heads: int = 2  # number of attention heads in TRM, 8 in repo
-    trm_expansion: float = 4  # MLP expansion factor in TRM, 4 in repo, meaning it expands to 4*512=2048. But we are expanding from a lower rank so might want hs/rank=2048/18=114
+    trm_num_heads: int = 8  # number of attention heads in TRM, 8 in repo
+    trm_expansion: float = 8  # MLP expansion factor in TRM, 4 in repo, meaning it expands to 4*512=2048. But we are expanding from a lower rank so might want hs/rank=2048/18=114
 
     trm_persistent_steering: bool = True  # persistent steering vector across recursions
 
-    layers_spacing_adapter: int = 2000  # number of spaced out layers to apply adapter to, larger number means all
+    layers_spacing_adapter: int = 5  # number of spaced out layers to apply adapter to, larger number means all
     layers_start_adapter: float = 0.35  # start layer fraction to apply adapter
     layers_end_adapter: float = 0.85  # end layer fraction to apply adapter
 

@@ -2249,3 +2249,54 @@ So maybe bugs!
 all fixed now but previous results should be ignored
 
 
+# 2025-10-27 05:52:09
+
+Bug slow one with persistent steering meh
+
+# Results: trmdelora-qwen3-0.6b_20251026-201143
+{'project': 'coconut', 'save_path': 'outputs/', 'name': 'trmdelora-qwen3-0.6b', 'model_id': 'suayptalha/Qwen3-0.6B-Math-Expert', 'only_eval': False, 'load_model_path': '', 'resume_epochs': 2, 'use_position_ids': True, 'bf16': True, 'bf16_weight': False, 'opt_8b': False, 'load_in_4bit': False, 'load_in_8bit': False, 'cot_epochs': 0, 'epochs_per_stage': 8, 'max_latent_stage': 3, 'num_epochs': 40, 'batch_size_training': 16, 'gradient_accumulation_steps': 6, 'lr': 0.0001, 'weight_decay': 0.01, 'grad_clip': 1.0, 'scheduler': 'cosine', 'debug': False, 'seed': 42, 'reset_optimizer': False, 'loss_seq_vcr': False, 'collect_hs': False, 'max_size': 20000, 'c_thought': 1, 'pad_latent_to_max': True, 'uniform_prob': 0.0, 'train_path': 'data/gsm_train.json', 'val_path': 'data/gsm_valid.json', 'system_prompt': '', 'latent_token_id': None, 'bot_token_id': None, 'eot_token_id': None, 'eos_token_id': None, 'skip_stage_zero': True, 'eval_first_epoch': False, 'loss_nll_ratio_margin': False, 'trm_h_cycles': 2, 'trm_l_cycles': 3, 'trm_l_layers': 2, 'trm_num_heads': 2, 'trm_expansion': 4.0, 'trm_persistent_steering': True, 'layers_spacing_adapter': 2000, 'layers_start_adapter': 0.35, 'layers_end_adapter': 0.85, 'use_trm_delora': True, 'adapter_r': 8, 'adapter_delora_lambda': 30}
+|    |   eval/acc |   eval/cot_em |   eval/ratios |   epoch |   stage |   train/minutes |   train/loss |   eval/loss |
+|---:|-----------:|--------------:|--------------:|--------:|--------:|----------------:|-------------:|------------:|
+|  0 |      0.004 |         0.006 |        0.9506 |       2 |       1 |         101.757 |     0.342012 |      0.5266 |
+|  1 |      0.016 |         0.01  |        0.9197 |       3 |       1 |         101.173 |     0.277696 |      0.4714 |
+|  2 |      0.006 |         0     |        0.9255 |       4 |       1 |         101.355 |     0.252481 |      0.4044 |
+|  3 |      0     |         0.002 |        0.9496 |       5 |       1 |         101.378 |     0.258454 |      0.392  |
+|  4 |      0.028 |         0.01  |        0.9258 |       6 |       1 |         101.45  |     0.23829  |      0.3791 |
+
+
+
+Huh will lots of small adapters it doesn't work
+
+with a few larges ones it does!
+ python scripts/run.py TRMDelora --lr=3e-3 --layers_spacing_adapter=4 --trm_h_cycles=3 --trm_l_cycles=6 --trm_num_heads=8 --trm_expansion=8 --gradient_accumulation_steps=4
+
+
+# 2025-10-27 20:21:08
+
+# Results: trmdelora-qwen3-0.6b_20251027-062352
+{'project': 'coconut', 'save_path': 'outputs/', 'name': 'trmdelora-qwen3-0.6b', 'model_id': 'suayptalha/Qwen3-0.6B-Math-Expert', 'only_eval': False, 'load_model_path': '', 'resume_epochs': 2, 'use_position_ids': True, 'bf16': True, 'bf16_weight': False, 'opt_8b': False, 'load_in_4bit': False, 'load_in_8bit': False, 'cot_epochs': 0, 'epochs_per_stage': 8, 'max_latent_stage': 3, 'num_epochs': 20, 'batch_size_training': 16, 'gradient_accumulation_steps': 4, 'lr': 0.003, 'weight_decay': 0.01, 'grad_clip': 1.0, 'scheduler': 'cosine', 'debug': False, 'seed': 42, 'reset_optimizer': False, 'loss_seq_vcr': False, 'collect_hs': False, 'max_size': 10000, 'c_thought': 1, 'pad_latent_to_max': True, 'uniform_prob': 0.0, 'train_path': 'data/gsm_train.json', 'val_path': 'data/gsm_valid.json', 'system_prompt': '', 'latent_token_id': None, 'bot_token_id': None, 'eot_token_id': None, 'eos_token_id': None, 'skip_stage_zero': True, 'eval_first_epoch': False, 'loss_nll_ratio_margin': False, 'trm_h_cycles': 3, 'trm_l_cycles': 6, 'trm_l_layers': 2, 'trm_num_heads': 8, 'trm_expansion': 8.0, 'trm_persistent_steering': True, 'layers_spacing_adapter': 4, 'layers_start_adapter': 0.35, 'layers_end_adapter': 0.85, 'use_trm_delora': True, 'adapter_r': 8, 'adapter_delora_lambda': 30}
+|    |   eval/acc |   eval/cot_em |   eval/ratios |   epoch |   stage |   train/minutes |   train/loss |   eval/loss |
+|---:|-----------:|--------------:|--------------:|--------:|--------:|----------------:|-------------:|------------:|
+|  0 |     0.0446 |        0.006  |        0.9145 |       2 |       1 |         35.9436 |     0.294424 |      0.435  |
+|  1 |     0.0417 |        0.003  |        0.9294 |       3 |       1 |         34.81   |     0.300684 |      0.3944 |
+|  2 |     0.0685 |        0.003  |        0.9261 |       4 |       1 |         34.8798 |     0.473565 |      0.3732 |
+|  3 |     0.1012 |        0.006  |        0.927  |       5 |       1 |         34.7114 |     0.246281 |      0.3659 |
+|  4 |     0.0982 |        0.003  |        0.9099 |       6 |       1 |         34.6325 |     0.163347 |      0.3772 |
+|  5 |     0.1042 |        0.003  |        0.9202 |       7 |       1 |         34.7413 |     0.318264 |      0.3712 |
+|  6 |     0.0595 |        0.0089 |        0.6229 |       8 |       2 |         44.7343 |     0.402372 |      0.4784 |
+|  7 |     0.0625 |        0.0089 |        0.6186 |       9 |       2 |         44.7637 |     0.268759 |      0.4783 |
+|  8 |     0.0774 |        0.0089 |        0.6176 |      10 |       2 |         44.8088 |     0.343206 |      0.4692 |
+|  9 |     0.0744 |        0.0089 |        0.5813 |      11 |       2 |         44.5965 |     0.284971 |      0.4741 |
+| 10 |     0.0506 |        0.0089 |        0.5913 |      12 |       2 |         44.8857 |     0.199038 |      0.4796 |
+| 11 |     0.0506 |        0.0089 |        0.5889 |      13 |       2 |         44.5729 |     0.386588 |      0.4676 |
+| 12 |     0.0685 |        0.0089 |        0.5802 |      14 |       2 |         44.8392 |     0.283451 |      0.4689 |
+| 13 |     0.0625 |        0.0089 |        0.6037 |      15 |       2 |         44.3527 |     0.237279 |      0.4846 |
+| 14 |     0.0625 |        0.0089 |        0.4643 |      16 |       3 |         55.1522 |     0.315563 |      0.582  |
+| 15 |     0.0595 |        0.0089 |        0.4871 |      17 |       3 |         55.2007 |     0.397172 |      0.5567 |
+| 16 |     0.0476 |        0.0089 |        0.4972 |      18 |       3 |         54.9309 |     0.427072 |      0.5552 |
+| 17 |     0.0774 |        0.0089 |        0.4745 |      19 |       3 |         55.2371 |     0.427683 |      0.5672 |
+
+outputs/trmdelora-qwen3-0.6b_20251027-062352/checkpoint_19    
+
+
+while lora got 0.01 on first epoch

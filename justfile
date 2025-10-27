@@ -5,12 +5,13 @@ setup:
   . ./.venv/bin/activate
   bash scripts/preprocessing/gsm_icot.bash
 
-run_smol:
+run:
   #!/bin/bash
   . ./.venv/bin/activate
-  python scripts/run.py TRMDelora
+  python scripts/run.py TRMDelora --lr=3e-3 --layers_spacing_adapter=4 --trm_h_cycles=3 --trm_l_cycles=6 --trm_num_heads=8 --trm_expansion=8 --gradient_accumulation_steps=4
   python scripts/run.py TRMLoRA
   python scripts/run.py TRMHra
+  python scripts/run.py TRMDelora --no-trm-persistent-steering --loss-nll-ratio-margin
 
 
 sync_file:
