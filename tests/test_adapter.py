@@ -1,3 +1,4 @@
+import coconut.trmlora  # ensure trmlora adapters are registered
 import coconut.silence
 import torch
 import torch.nn as nn
@@ -11,6 +12,7 @@ from coconut.adapters import is_hf_peft_model, is_plain_peft_model
 from coconut.trmlora.recursive_lora import TRMLoraAConfig, TRMLoraModel
 from coconut.trmlora.recursive_delora import TRMDeloraAConfig, TRMDeloraModel
 from coconut.trmlora.recursive_hra import TRMHraAConfig, TRMHraModel
+from coconut.trmlora.recursive_svft import TRMSvftConfig, TRMSvftModel
 from coconut.gen import gen, gen_sample
 
 
@@ -21,6 +23,7 @@ from coconut.gen import gen, gen_sample
         (TRMLoraAConfig, TRMLoraModel, "trmlora"),
         (TRMDeloraAConfig, TRMDeloraModel, "trmdelora"),
         (TRMHraAConfig, TRMHraModel, "trmhra"),
+        (TRMSvftConfig, TRMSvftModel, "trmsvft"),
     ],
 )
 def test_adapter(config_class, expected_model_class, adapter_name):

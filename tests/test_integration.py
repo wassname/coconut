@@ -1,6 +1,7 @@
-import pytest
+import coconut.trmlora  # ensure trmlora adapters are registered
 import coconut.silence
-from coconut.configs import BaseConfig, TRMLoRADebug, TRMDeloraDebug, TRMHraDebug
+import pytest
+from coconut.configs import BaseConfig, TRMLoRADebug, TRMDeloraDebug, TRMHraDebug, TRMSvftDebug
 from coconut.train import train
 
 @pytest.mark.parametrize(
@@ -9,6 +10,7 @@ from coconut.train import train
         TRMLoRADebug,
         TRMDeloraDebug,
         TRMHraDebug,
+        TRMSvftDebug,
     ],
 )
 
