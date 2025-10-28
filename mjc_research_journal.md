@@ -2524,7 +2524,3 @@ Your orthogonal tail: Random basis orthogonal to principal V → spans the compl
 
 - Implemented **delta parameterization** for the U matrix in TRM SVFT. Instead of learning `U` directly, we learn `ΔU` (delta from SVD initialization). The delta means that weight decay pulls U back toward its SVD initialisation rather than zero.
 - Initialised tail S at a small non zero value
-- **Fixed critical normalization bug**: Was normalizing TRM output instead of input (like DeLoRA does). Now normalize `x_v` by `S0` before TRM, let TRM refine directions, then apply magnitude scaling after. No re-normalization.
-- **Fixed per-component scaling**: Use `S0 + eps` per-component `[r]` (like DeLoRA's per-column `||A||`), not global scalar. Add epsilon instead of clamp to preserve relative magnitudes of singular values.
-- **Fixed S_tail init**: Now `S_p.mean() * 0.01` (1% of principal mean) instead of `1e-5` to avoid div-by-zero
-- Tests pass, no more NaN in training. SVFT now learning (finally!)
