@@ -23,12 +23,12 @@ from peft.config import PeftConfig
 from peft.tuners._buffer_dict import BufferDict
 from peft.utils import PeftType
 from peft.utils.other import get_pattern_key
+import bitsandbytes as bnb
 
 from peft.utils import (
     TRANSFORMERS_MODELS_TO_LORA_TARGET_MODULES_MAPPING,
 )
 
-from .bnb_utils import cast_adapter_input, cast_adapter_output
 from .trm_adapter import L_net, trm_recursion
 
 
@@ -152,10 +152,15 @@ class TRMSvftLayer(BaseTunerLayer):
         self.svft_configs[adapter_name] = svft_config
         
         # Compute SVD of base weight
-        base_weight = self.get_base_layer().weight  # [out, in]
+        base_weight = self.get_base_layer().weight
+        # if isinstance(base_weight, 'Params4bit'):
+        #     bnb.functional.dequantize_4bit(base_weight.data, base_weight.quant_state)
+        # elif isinstance(base_weight, 'Params8bit'):
+        #     bnb.functional.dequantize_8bit(base_weight.data, base_weight.quant_state)
+        base_weight = base_weight.float()  # [out, in]
         device = base_weight.device
         
-        U, S, Vh = torch.linalg.svd(base_weight.float(), full_matrices=False)  # U: [out, min], S: [min], Vh: [min, in]
+        U, S, Vh = torch.linalg.svd(base_weight, full_matrices=False)  # U: [out, min], S: [min], Vh: [min, in]
         # base_weight.half().cpu()  # free up GPU memory
         
         # Determine rank
@@ -256,16 +261,69 @@ class TRMSvftLayer(BaseTunerLayer):
         s_eff = (s0 + sd).coalesce()
         
         return s_eff
+    
+
+    def get_delta(self, x, adapter: str) -> torch.Tensor:
+
+        if self._recursion_cache is None:
+            recursion_cache = {}
+        else:
+            recursion_cache = self._recursion_cache
+
+        U = self.svft_u[adapter]
+        V = self.svft_v[adapter]
+        
+        # Check if we're in steering mode (post-latent)
+        steering_mode = recursion_cache.get('steering_mode', False)
+
+        # Project to singular value space
+        h_s = x @ V.T  # [b, s, r]
+        
+        if steering_mode:
+            # Don't run TRM, just apply cached refined sd
+            zH = recursion_cache.get('zH')
+            zL = recursion_cache.get('zL')
+            zHs = zH.unsqueeze(1)  # [b, 1, r]
+
+            # TRM refines direction (operates on normalized space)
+            zLs, zHs = self.trm(adapter, zL, zH, h_s, h_cycles=1)  # zH is refined 1 time
+        else:
+            # TRM recursion mode
+            
+            # For diagonal SVFT, k=r, so context is full singular value projection
+            b = h_s.shape[0]
+
+            # Initialize or retrieve zH and zL in r_dim (singular value space)
+            zL = recursion_cache.get('zL', None)
+            if zL is None:
+                zL = self.svft_zL_init[adapter].unsqueeze(0).expand(b, -1).to(x.device)
+            zH = recursion_cache.get('zH', None)
+            if zH is None:
+                zH = self.svft_zH_init[adapter].unsqueeze(0).expand(b, -1).to(x.device)
+            
+            # TRM refines all r singular value deltas
+            zLs, zHs = self.trm(adapter, zL, zH, h_s)
+            
+            # Update cache for next layer
+            recursion_cache['zL'] = zLs[:, -1, :]  # [b, r]
+            recursion_cache['zH'] = zHs[:, -1, :]  # [b, r]
+            
+        # Apply refined singular values (diagonal matrix - no sparse ops needed)
+        sd_values = zHs[:, -1, :] * F.sigmoid(self.svft_gate[adapter])  # [b, r]
+        s_eff_diag = self.svft_s0[adapter] + sd_values  # [b, r] broadcast with [r]
+        
+        # Complete transformation: x @ V.T @ diag(s_eff) @ U.T
+        # h_s is already x @ V.T: [b, s, r]
+        # For diagonal matrix: h_s @ diag(s_eff) = h_s * s_eff (elementwise)
+        h = (h_s * s_eff_diag.unsqueeze(1)) @ U.T  # [b, s, r] * [b, 1, r] -> [b, s, out]
+
+        return h
 
     def forward(self, x: Float[Tensor, 'b s h'], *args: Any, **kwargs: Any) -> Float[Tensor, 'b s h']:
         previous_dtype = x.dtype
         
         # Use injected cache from Coconut.recursion_context() if available
         assert len(self.active_adapters) <= 1, "TRM SVFT currently supports only one active adapter at a time."
-        if self._recursion_cache is None:
-            recursion_cache = {}
-        else:
-            recursion_cache = self._recursion_cache
 
         if self.disable_adapters:
             if self.merged:
@@ -279,66 +337,12 @@ class TRMSvftLayer(BaseTunerLayer):
 
             base_out = self.base_layer(x, *args, **kwargs)
             add_out = torch.zeros_like(base_out)
-            
-            # Store expected dtype for quantized models
-            expected_dtype = base_out.dtype
 
             for adapter in self.active_adapters:
                 if adapter not in self.svft_u:
                     continue
 
-                # Cast input for quantized models
-                x_cast = cast_adapter_input(x, self.svft_v[adapter])
-
-                U = self.svft_u[adapter]
-                V = self.svft_v[adapter]
-                
-                # Check if we're in steering mode (post-latent)
-                steering_mode = recursion_cache.get('steering_mode', False)
-
-                # Project to singular value space
-                h_s = x_cast @ V.T  # [b, s, r]
-                
-                if steering_mode:
-                    # Don't run TRM, just apply cached refined sd
-                    zH = recursion_cache.get('zH')
-                    zL = recursion_cache.get('zL')
-                    zHs = zH.unsqueeze(1)  # [b, 1, r]
-
-                    # TRM refines direction (operates on normalized space)
-                    zLs, zHs = self.trm(adapter, zL, zH, h_s, h_cycles=1)  # zH is refined 1 time
-                else:
-                    # TRM recursion mode
-                    
-                    # For diagonal SVFT, k=r, so context is full singular value projection
-                    b = h_s.shape[0]
-
-                    # Initialize or retrieve zH and zL in r_dim (singular value space)
-                    zL = recursion_cache.get('zL', None)
-                    if zL is None:
-                        zL = self.svft_zL_init[adapter].unsqueeze(0).expand(b, -1).to(x.device)
-                    zH = recursion_cache.get('zH', None)
-                    if zH is None:
-                        zH = self.svft_zH_init[adapter].unsqueeze(0).expand(b, -1).to(x.device)
-                    
-                    # TRM refines all r singular value deltas
-                    zLs, zHs = self.trm(adapter, zL, zH, h_s)
-                    
-                    # Update cache for next layer
-                    recursion_cache['zL'] = zLs[:, -1, :]  # [b, r]
-                    recursion_cache['zH'] = zHs[:, -1, :]  # [b, r]
-                    
-                # Apply refined singular values (diagonal matrix - no sparse ops needed)
-                sd_values = zHs[:, -1, :] * F.sigmoid(self.svft_gate[adapter])  # [b, r]
-                s_eff_diag = self.svft_s0[adapter] + sd_values  # [b, r] broadcast with [r]
-                
-                # Complete transformation: x @ V.T @ diag(s_eff) @ U.T
-                # h_s is already x @ V.T: [b, s, r]
-                # For diagonal matrix: h_s @ diag(s_eff) = h_s * s_eff (elementwise)
-                h = (h_s * s_eff_diag.unsqueeze(1)) @ U.T  # [b, s, r] * [b, 1, r] -> [b, s, out]
-                
-                # Cast output for quantized models
-                h = cast_adapter_output(h, expected_dtype)
+                h = self.get_delta(x, adapter)
                 
                 add_out += h
 

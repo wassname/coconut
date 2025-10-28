@@ -2331,3 +2331,5 @@ New problem, out of memory!
 # 2025-10-28 11:10:48
 
 hmm 8bit and 4bit look simple
+
+actually if I have autocast there is not problem anyway! so just use 4bit and don't worry

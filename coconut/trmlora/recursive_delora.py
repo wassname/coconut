@@ -19,7 +19,6 @@ from peft.tuners.delora.config import DeloraConfig
 from peft.tuners._buffer_dict import BufferDict
 from peft.utils import PeftType
 
-from .bnb_utils import cast_adapter_input, cast_adapter_output
 from .trm_adapter import L_net, trm_recursion
 
 @dataclass
@@ -166,17 +165,12 @@ class TRMDeloraLayer(DeloraLayer):
 
             base_out = self.base_layer(x, *args, **kwargs)
             add_out = torch.zeros_like(base_out)
-            
-            # Store expected dtype for quantized models
-            expected_dtype = base_out.dtype
 
             for adapter in self.active_adapters:
                 if adapter not in self.delora_A:
                     continue
 
-                # Cast input for quantized models
-                x_cast = cast_adapter_input(x, self.delora_A[adapter])
-                x_d = self.delora_dropout[adapter](x_cast)
+                x_d = self.delora_dropout[adapter](x)
                 
                 # 1. Down-project via A: (x * w_norm) @ A.T
                 h = F.linear(x_d * self.delora_w_norm[adapter], self.delora_A[adapter])  # [b, s, r]
@@ -254,9 +248,6 @@ class TRMDeloraLayer(DeloraLayer):
 
                 # 5. Up-project via B
                 h = F.linear(h, self.delora_B[adapter])  # [b, out]
-                
-                # Cast output for quantized models
-                h = cast_adapter_output(h, expected_dtype)
 
                 add_out += h  # [b, 1, out] broadcasts to [b, s, out], but it's only ever one token that we are processing with <latent>, so s=1
 
