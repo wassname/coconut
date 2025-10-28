@@ -15,6 +15,7 @@ from peft.tuners.hra.config import HRAConfig
 from peft.tuners._buffer_dict import BufferDict
 from peft.utils import PeftType
 
+from .bnb_utils import cast_adapter_input, cast_adapter_output
 from .trm_adapter import L_net, trm_recursion
 
 @dataclass
@@ -167,17 +168,25 @@ class TRMHraLayer(HRALayer):
 
         base_layer = self.get_base_layer()
 
+        # FIXME add persistent steering as in delora
+        
+        # Store expected dtype for quantized models
+        expected_dtype = result.dtype
+
         # Apply TRM HRA refinement delta on top of HRA output
         # HRA provides orthogonal update; TRM refines low-rank coefficients in u-basis for additive delta
         for adapter in self.active_adapters:
             if adapter not in self.hra_u:
                 continue
 
+            # Cast input for quantized models
+            x = cast_adapter_input(hidden_states, self.hra_u[adapter])
+
             # Normalize u columns as in HRA non-GS case
             opt_u = self.hra_u[adapter] / self.hra_u[adapter].norm(dim=0, keepdim=True)
 
             # Project last token hidden to low-rank r-dim using u as basis (parallel to A @ x_last)
-            context_hs = hidden_states[:, -1, :] @ opt_u  # [b, r]
+            context_hs = x[:, -1, :] @ opt_u  # [b, r]
             b = context_hs.shape[0]
 
             # Initialize or retrieve zH and zL in r_dim
@@ -199,7 +208,11 @@ class TRMHraLayer(HRALayer):
 
             # Apply LoRA-style scaling (alpha / r) to the refinement delta
             scaling = self.hra_alpha[adapter] / self.r[adapter]
-            result += delta_hidden * scaling
+            delta = delta_hidden * scaling
+            
+            # Cast output for quantized models
+            delta = cast_adapter_output(delta, expected_dtype)
+            result += delta
 
             # Update cache for next layer
             recursion_cache['zL'] = zL

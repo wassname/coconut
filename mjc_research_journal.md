@@ -2311,5 +2311,23 @@ PEFT is a huge pain, I can't subclass it as it uses unextendable enums. Its code
 I'm tempted to also simplify it by just having one adapter but it seems like subclassing, loading with PeftModel(base_model, peft_config, and saving with custom code is a sweet spot.
 
 
+We could go
+- single adapter
+- not need for buffermodule and stuff
+- could use hydra or similar to just set params in one place. my configs would be simple. or just function args!
+
+but 
+- would need to implement disable, freeze, etc. But it might be simple if I just cut out all the exceptions for unsupported adapters
+
+- [ ] use hydra not configs
+- [ ] single adapter at a time
+- [ ] custom save and load (as I have in save_load.py but simpler) we don't need to remove "default" keys as we only have one adapter
+- [ ] implement disable, freeze, etc. Probobly still use the prefix thing, but the prefix is always adapter!
+
 New problem, out of memory!
 - ideas, can I move original weights to cpu?
+
+
+# 2025-10-28 11:10:48
+
+hmm 8bit and 4bit look simple

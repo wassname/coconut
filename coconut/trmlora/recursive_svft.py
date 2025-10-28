@@ -7,7 +7,7 @@ SVFT decomposes weights via SVD: W = U @ S @ V^T
 - sd is sparse learnable delta to S (controlled by gate)
 - TRM recursively refines sd in the singular value space
 
-This is similar to DeLoRA but uses sparse singular value updates instead of low-rank deltas.
+This is similar to TRM DeLoRA but uses sparse singular value updates instead of low-rank deltas.
 """
 
 import torch
@@ -28,6 +28,7 @@ from peft.utils import (
     TRANSFORMERS_MODELS_TO_LORA_TARGET_MODULES_MAPPING,
 )
 
+from .bnb_utils import cast_adapter_input, cast_adapter_output
 from .trm_adapter import L_net, trm_recursion
 
 
@@ -154,9 +155,8 @@ class TRMSvftLayer(BaseTunerLayer):
         base_weight = self.get_base_layer().weight  # [out, in]
         device = base_weight.device
         
-        # FIXME need to do this as float
         U, S, Vh = torch.linalg.svd(base_weight.float(), full_matrices=False)  # U: [out, min], S: [min], Vh: [min, in]
-        base_weight.half().cpu()  # free up GPU memory
+        # base_weight.half().cpu()  # free up GPU memory
         
         # Determine rank
         r = S.shape[0] if svft_config.r is None else min(S.shape[0], svft_config.r)
@@ -251,6 +251,8 @@ class TRMSvftLayer(BaseTunerLayer):
         s0_indices = torch.stack([self.svft_s0_row[adapter_name], self.svft_s0_col[adapter_name]])
         s0 = torch.sparse_coo_tensor(s0_indices, self.svft_s0[adapter_name].float(), (r, r))
         
+
+        # TODO I'd like a multiplicative option, like IA3, ROAD, or VERA
         s_eff = (s0 + sd).coalesce()
         
         return s_eff
@@ -277,30 +279,40 @@ class TRMSvftLayer(BaseTunerLayer):
 
             base_out = self.base_layer(x, *args, **kwargs)
             add_out = torch.zeros_like(base_out)
+            
+            # Store expected dtype for quantized models
+            expected_dtype = base_out.dtype
 
             for adapter in self.active_adapters:
                 if adapter not in self.svft_u:
                     continue
+
+                # Cast input for quantized models
+                x_cast = cast_adapter_input(x, self.svft_v[adapter])
 
                 U = self.svft_u[adapter]
                 V = self.svft_v[adapter]
                 
                 # Check if we're in steering mode (post-latent)
                 steering_mode = recursion_cache.get('steering_mode', False)
+
+                # Project to singular value space
+                h_s = x_cast @ V.T  # [b, s, r]
                 
                 if steering_mode:
                     # Don't run TRM, just apply cached refined sd
                     zH = recursion_cache.get('zH')
+                    zL = recursion_cache.get('zL')
                     zHs = zH.unsqueeze(1)  # [b, 1, r]
+
+                    # TRM refines direction (operates on normalized space)
+                    zLs, zHs = self.trm(adapter, zL, zH, h_s, h_cycles=1)  # zH is refined 1 time
                 else:
                     # TRM recursion mode
-                    # Project to singular value space
-                    h_s = x @ V.T  # [b, s, r]
                     
                     # For diagonal SVFT, k=r, so context is full singular value projection
-                    context = h_s  # [b, s, r]
-                    b = context.shape[0]
-                    
+                    b = h_s.shape[0]
+
                     # Initialize or retrieve zH and zL in r_dim (singular value space)
                     zL = recursion_cache.get('zL', None)
                     if zL is None:
@@ -310,25 +322,23 @@ class TRMSvftLayer(BaseTunerLayer):
                         zH = self.svft_zH_init[adapter].unsqueeze(0).expand(b, -1).to(x.device)
                     
                     # TRM refines all r singular value deltas
-                    zLs, zHs = self.trm(adapter, zL, zH, context)
+                    zLs, zHs = self.trm(adapter, zL, zH, h_s)
                     
                     # Update cache for next layer
                     recursion_cache['zL'] = zLs[:, -1, :]  # [b, r]
                     recursion_cache['zH'] = zHs[:, -1, :]  # [b, r]
                     
-                # Apply refined singular values
-                sd_values = zHs * F.sigmoid(self.svft_gate[adapter])
-                s_eff = self.get_sparse_s_eff(adapter, sd_values[:, -1, :])
-
-
-                # FIXME: if sd_values [b, s, r], need to do batch sparse mm
-                # but RuntimeError: number of dimensions must be sparse_dim (2) + dense_dim (2), but got 2
-                # If I want one s_eff per seq, then do I need to change the math... or fold it into batch dim?
-                # wait it doesn't work with batch... hmm can a I not make the space have a batch dim
+                # Apply refined singular values (diagonal matrix - no sparse ops needed)
+                sd_values = zHs[:, -1, :] * F.sigmoid(self.svft_gate[adapter])  # [b, r]
+                s_eff_diag = self.svft_s0[adapter] + sd_values  # [b, r] broadcast with [r]
                 
-                # Complete transformation: x @ V.T @ s_eff @ U.T
-                # h_s is already x @ V.T from line 279
-                h = dense_sparse_mm(h_s, s_eff.t()) @ U.T
+                # Complete transformation: x @ V.T @ diag(s_eff) @ U.T
+                # h_s is already x @ V.T: [b, s, r]
+                # For diagonal matrix: h_s @ diag(s_eff) = h_s * s_eff (elementwise)
+                h = (h_s * s_eff_diag.unsqueeze(1)) @ U.T  # [b, s, r] * [b, 1, r] -> [b, s, out]
+                
+                # Cast output for quantized models
+                h = cast_adapter_output(h, expected_dtype)
                 
                 add_out += h
 
@@ -395,12 +405,7 @@ class TRMSvftModel(BaseTuner):
         if current_key is None:
             raise ValueError("Current Key shouldn't be `None`")
 
-        # Regexp matching - Find key which matches current target_name in patterns provided
-        # r_key = get_pattern_key(svft_config.rank_pattern.keys(), current_key)
-        # lambda_key = get_pattern_key(svft_config.lambda_pattern.keys(), current_key)
-        # r = svft_config.rank_pattern.get(r_key, svft_config.r)
-        # delora_lambda = svft_config.lambda_pattern.get(lambda_key, svft_config.delora_lambda)
-
+        # Regexp matching - Find key 
         kwargs = {
             # "svft_config": svft_config,
         }

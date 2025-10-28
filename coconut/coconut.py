@@ -35,6 +35,7 @@ from coconut.adapters import set_adapter
 from coconut.trmlora.recursive_lora import TRMLoraLayer
 from coconut.trmlora.recursive_delora import TRMDeloraLayer
 from coconut.trmlora.recursive_hra import TRMHraLayer
+from coconut.trmlora.recursive_svft import TRMSvftLayer
 
 
 Outputs = namedtuple(
@@ -97,7 +98,7 @@ class Coconut(nn.Module):
         # Walk down model tree and inject cache into TRM layers
         trm_layers = []
         for name, module in self.model.named_modules():
-            if isinstance(module, (TRMLoraLayer, TRMDeloraLayer, TRMHraLayer)):
+            if isinstance(module, (TRMLoraLayer, TRMDeloraLayer, TRMHraLayer, TRMSvftLayer)):
                 trm_layers.append(module)
                 if name not in cache:
                     cache[name] = {}

@@ -79,12 +79,12 @@ class TRMConfig(BaseConfig):
     num_epochs: int = 20
     epochs_per_stage: int = 8
     
-    scheduler: str = "cosine"
-    lr: float = 3e-3 # 1e-4 in paper
+    scheduler: str = "linear"
+    lr: float = 6e-4 # 1e-4 in paper
     weight_decay: float = 0.01 # 1 and 0.1 in TRM paper. 0.01 in COCONUT paper. But we are already operating in a heavily constrained space (low rank adapter space)
     
     max_size: int = 10_000
-    batch_size_training: int = 8
+    batch_size_training: int = 18
     gradient_accumulation_steps: int = 4 # 768 // 14 # paper had effective batch size of 768
 
     eval_first_epoch: bool = False

@@ -15,6 +15,7 @@ from peft.tuners.lora.model import LoraModel
 from peft.tuners.lora.config import LoraConfig
 from peft.tuners._buffer_dict import BufferDict
 
+from .bnb_utils import cast_adapter_input, cast_adapter_output
 from .trm_adapter import L_net, trm_recursion
 
 
@@ -184,6 +185,9 @@ class TRMLoraLayer(LoraLayer):
             # Run base layer: W @ x
             base_hidden = self.base_layer(hidden_states, *args, **kwargs)
             result = base_hidden
+            
+            # Store expected dtype for quantized models
+            expected_dtype = result.dtype
 
             # Apply TRM LoRA adapters
             # Standard LoRA: h = W @ x + B @ (A @ x)
@@ -192,9 +196,14 @@ class TRMLoraLayer(LoraLayer):
                 if adapter not in self.lora_B:
                     continue
 
+                # FIXME add persistent steering ad in delora
+
+                # Cast input for quantized models
+                x = cast_adapter_input(hidden_states, self.lora_A[adapter].weight)
+
                 # Project INPUT (not output) down to low-rank via lora_A
                 # Standard LoRA uses the layer input, not output
-                x_down = self.lora_A[adapter](self.lora_dropout[adapter](hidden_states))  # [b, s, r]
+                x_down = self.lora_A[adapter](self.lora_dropout[adapter](x))  # [b, s, r]
                 # NOTE lora_a never gets grad, so it 
                 
                 # For TRM, use last token's projection as context
@@ -214,6 +223,9 @@ class TRMLoraLayer(LoraLayer):
 
                 # Up-project refined state via lora_B with standard LoRA scaling
                 delta = self.lora_B[adapter](zH) * self.scaling[adapter]  # [b, out_features]
+                
+                # Cast output for quantized models
+                delta = cast_adapter_output(delta, expected_dtype)
         
                 # Add to base output (broadcast across sequence)
                 result = result + delta.unsqueeze(1)  # [b, 1, out] broadcasts to [b, s, out], but it's only ever one token that we are processing with <latent>, so s=1
