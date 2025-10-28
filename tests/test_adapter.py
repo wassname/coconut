@@ -58,6 +58,16 @@ def test_adapter(config_class, expected_model_class, adapter_name):
     # Assert it's a PEFT model
     assert is_hf_peft_model(model) or is_plain_peft_model(model)
     
+    # Test only adapter is trainable
+    trainable_names = [name for name, param in model.named_parameters() if param.requires_grad]
+    assert len(trainable_names) > 0, "No trainable parameters found with adapter enabled"
+    assert all(prefix in name for name in trainable_names), f"Non-adapter params trainable: {[n for n in trainable_names if prefix not in n]}"
+    
+    # Test with adapter disabled, nothing trainable
+    with model.disable_adapter():
+        disabled_trainable_names = [name for name, param in model.named_parameters() if param.requires_grad]
+        assert len(disabled_trainable_names) == 0, f"Trainable params with adapter disabled: {disabled_trainable_names}"
+    
     # Assert correct subclass for custom adapters
     # assert isinstance(model, PeftModel)
 
@@ -84,9 +94,13 @@ def test_adapter(config_class, expected_model_class, adapter_name):
     assert s1 != s2
 
     # test save
-    save_path = Path(f"/tmp/qwen-tiny-{adapter_name}")
+    import random
+    rnd_hash = random.randint(10000, 99999)
+    save_path = Path(f"/tmp/qwen-tiny-{adapter_name}-{rnd_hash}")
     # model.save_pretrained(save_path)
     save_model(model, tokenizer, {}, save_path)
+
+    # TODO also test that only the adapter is trainable
 
     # Test load
     # loaded_model = PeftModel.from_pretrained(AutoModelForCausalLM.from_pretrained(model_id), save_path)G
@@ -94,7 +108,7 @@ def test_adapter(config_class, expected_model_class, adapter_name):
 
     loaded_model = load_adapter(
         model_id=model_id,
-        adapter_save_path=save_path,
+        save_dir=save_path,
         PeftConfig=type(peft_config),
         adapter_name="default",
     )

@@ -144,7 +144,8 @@ def load_new_model(conf: BaseConfig, device, dtype):
     # Use TRMLoraModel directly instead of get_peft_model
     # peft_model = TRMLoraModel(base_model, peft_config, "default")
 
-    peft_model = get_peft_model(base_model, peft_config)
+    # peft_model = get_peft_model(base_model, peft_config)
+    peft_model = PeftModel(base_model, peft_config, adapter_name='default')
     logger.debug("Completed loading TRM LoRA adapter")
     peft_model.enable_input_require_grads()
 
@@ -184,53 +185,47 @@ def save_model(model, tokenizer, configs, save_dir: Path, adapter_name="default"
     logger.info(f"saving model {save_dir}")
 
     # save state dict (only TRM adapter, not frozen base model)
-    save_folder = str(save_dir / "trmlora/")
-    os.makedirs(save_folder, exist_ok=True)
+    save_folder = save_dir / "trmlora/"
+    save_folder.mkdir(parents=True, exist_ok=True)
 
     # Custom save logic for TRM adapters (bypasses PEFT's type checking)
-    from peft.mapping import PEFT_TYPE_TO_PREFIX_MAPPING
 
     config = model.model.peft_config[adapter_name]
-    state_dict = model.state_dict()
+    state_dict = model.state_dict() # FIXME is it meant to be model.model or just model?
 
     # Filter by prefix (same logic as PEFT but without type check)
-    prefix = PEFT_TYPE_TO_PREFIX_MAPPING.get(config.peft_type)
-    if prefix:
-        to_return = {k: state_dict[k] for k in state_dict if prefix in k}
+    prefix = PEFT_TYPE_TO_PREFIX_MAPPING[config.peft_type]
+    to_return = {k: state_dict[k] for k in state_dict if prefix in k}
 
-        # Remove adapter name from keys
-        # pattern = re.compile(re.escape(f".{adapter_name}") + r"$")#
-        def remove_adapter_name(key):
-            if "." not in key:
-                return key
-            if key.endswith(f".{adapter_name}"):
-                return key.removesuffix(f".{adapter_name}")
-            return key.replace(f".{adapter_name}.", ".")
-            # key, _, suffix = key.rpartition(".")
-            # key = pattern.sub("", key)
-            # return f"{key}.{suffix}"
+    # Remove adapter name from keys
+    def remove_adapter_name(key):
+        if "." not in key:
+            return key
+        if key.endswith(f".{adapter_name}"):
+            return key.removesuffix(f".{adapter_name}")
+        return key.replace(f".{adapter_name}.", ".")
 
-        to_return = {remove_adapter_name(k): v for k, v in to_return.items()}
+    to_return = {remove_adapter_name(k): v for k, v in to_return.items()}
 
-        # Save adapter weights
-        torch.save(to_return, os.path.join(save_folder, "adapter_model.bin"))
+    assert not any(adapter_name in k for k in to_return.keys()), "Adapter name still present in saved keys"
 
-        # Save adapter config
-        config.save_pretrained(save_folder)
+    # Save adapter weights
+    # torch.save(to_return, os.path.join(save_folder, "adapter_model.bin"))
+    safetensors.torch.save_file(
+        to_return,
+        save_folder/ "adapter_model.safetensors",
+    )
 
-        logger.info(f"Saved TRM adapter to {save_folder}")
-    else:
-        logger.warning(
-            f"No prefix found for {config.peft_type}, falling back to save_pretrained"
-        )
-        model.model.save_pretrained(save_folder, save_embedding_layers=False)
+    # Save adapter config
+    config.save_pretrained(save_folder)
 
+    logger.info(f"Saved TRM adapter to {save_folder}")
 
 
 def load_adapter(
     model_id: str,
     PeftConfig: PeftConfig,
-    adapter_save_path: str,
+    save_dir: Path,
     adapter_name="default",
     torch_device="cuda",
     autocast_adapter_dtype: bool = True,
@@ -252,10 +247,14 @@ def load_adapter(
 
     # model = PeftModel(base_model, peft_config, adapter_name='default')
 
-    state_dict = load_peft_weights(
-        adapter_save_path,
-        device=torch_device,
-    )
+    # state_dict = load_peft_weights(
+    #     adapter_save_path,
+    #     device=torch_device,
+    # )
+    adapter_save_path = save_dir / "trmlora/"
+    state_dict = safetensors.torch.load_file(adapter_save_path/ "adapter_model.safetensors", device=torch_device)
+
+    assert not any(adapter_name in k for k in state_dict.keys()), "Adapter name should not be present in loaded keys"
 
     parameter_prefix = PEFT_TYPE_TO_PREFIX_MAPPING[peft_config.peft_type]
     peft_model_state_dict = _insert_adapter_name_into_state_dict(
