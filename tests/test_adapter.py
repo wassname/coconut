@@ -15,7 +15,7 @@ from coconut.trmlora.recursive_delora import TRMDeloraAConfig, TRMDeloraModel
 from coconut.trmlora.recursive_hra import TRMHraAConfig, TRMHraModel
 from coconut.trmlora.recursive_svft import TRMSvftConfig, TRMSvftModel
 from coconut.gen import gen, gen_sample
-from coconut.load_model import Coconut, load_new_model, save_model
+from coconut.load_model import Coconut, load_new_model, save_model, load_adapter
 
 
 @pytest.mark.parametrize(
@@ -89,7 +89,15 @@ def test_adapter(config_class, expected_model_class, adapter_name):
     save_model(model, tokenizer, {}, save_path)
 
     # Test load
-    loaded_model = PeftModel.from_pretrained(AutoModelForCausalLM.from_pretrained(model_id), save_path)
+    # loaded_model = PeftModel.from_pretrained(AutoModelForCausalLM.from_pretrained(model_id), save_path)G
+
+
+    loaded_model = load_adapter(
+        model_id=model_id,
+        adapter_save_path=save_path,
+        PeftConfig=type(peft_config),
+        adapter_name="default",
+    )
     assert isinstance(loaded_model, PeftModel)
     s3 = gen(input_text, loaded_model, tokenizer, max_new_tokens=4, verbose=False)
     print("Generating sample with loaded adapter...", s3)
