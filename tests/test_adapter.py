@@ -14,6 +14,7 @@ from coconut.trmlora.recursive_delora import TRMDeloraAConfig, TRMDeloraModel
 from coconut.trmlora.recursive_hra import TRMHraAConfig, TRMHraModel
 from coconut.trmlora.recursive_svft import TRMSvftConfig, TRMSvftModel
 from coconut.gen import gen, gen_sample
+from coconut.load_model import Coconut, load_new_model, save_model
 
 
 @pytest.mark.parametrize(
@@ -83,7 +84,8 @@ def test_adapter(config_class, expected_model_class, adapter_name):
 
     # test save
     save_path = f"/tmp/qwen-tiny-{adapter_name}"
-    model.save_pretrained(save_path)
+    # model.save_pretrained(save_path)
+    save_model(model, tokenizer, {}, save_path)
 
     # Test load
     loaded_model = PeftModel.from_pretrained(AutoModelForCausalLM.from_pretrained(model_id), save_path)
