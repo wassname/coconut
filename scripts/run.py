@@ -1,5 +1,5 @@
-import coconut.trmlora  # MUST be first to register PEFT methods before any peft imports
 import coconut.silence
+import coconut.trmlora  # MUST be first to register PEFT methods before any peft imports
 
 from torchinfo import summary
 import os
@@ -52,6 +52,7 @@ os.environ["PYTORCH_ALLOC_CONF"] = "expandable_segments:True"
 
 
 def main():
+    import coconut.silence
     import tyro
     from coconut import configs # this will be my dataclass files
     experiments = configs.__dict__.keys()
@@ -66,4 +67,5 @@ def main():
     return train(conf)
 
 if __name__ == "__main__":
+    # import coconut.silence
     main()

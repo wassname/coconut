@@ -2300,3 +2300,16 @@ outputs/trmdelora-qwen3-0.6b_20251027-062352/checkpoint_19
 
 
 while lora got 0.01 on first epoch
+
+
+# 2025-10-28
+
+Implemented svft
+
+PEFT is a huge pain, I can't subclass it as it uses unextendable enums. Its code it typical huggingface super complex production code. And I had to make my own save and load anyway.
+
+I'm tempted to also simplify it by just having one adapter but it seems like subclassing, loading with PeftModel(base_model, peft_config, and saving with custom code is a sweet spot.
+
+
+New problem, out of memory!
+- ideas, can I move original weights to cpu?

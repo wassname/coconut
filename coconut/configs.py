@@ -6,6 +6,7 @@ from typing import Optional, List, Literal, ClassVar
 from coconut.trmlora.recursive_lora import TRMLoraAConfig
 from coconut.trmlora.recursive_delora import TRMDeloraAConfig
 from coconut.trmlora.recursive_hra import TRMHraAConfig
+from coconut.trmlora.recursive_svft import TRMSvftAConfig
 
 @dataclass(config=ConfigDict(validate_assignment=True)) 
 class BaseConfig:
@@ -83,7 +84,7 @@ class TRMConfig(BaseConfig):
     weight_decay: float = 0.01 # 1 and 0.1 in TRM paper. 0.01 in COCONUT paper. But we are already operating in a heavily constrained space (low rank adapter space)
     
     max_size: int = 10_000
-    batch_size_training: int = 16
+    batch_size_training: int = 8
     gradient_accumulation_steps: int = 4 # 768 // 14 # paper had effective batch size of 768
 
     eval_first_epoch: bool = False
@@ -147,14 +148,13 @@ class TRMHra(TRMConfig):
 @dataclass
 class TRMSvft(TRMConfig):
     """TRM SVFT mode: inline recursive SVFT adapter on frozen LLM."""
-    _adapter_class: ClassVar = TRMLoraAConfig  # placeholder
+    _adapter_class: ClassVar = TRMSvftAConfig  # placeholder
     name: str = "trmsvft-qwen3-0.6b"
     use_trm_svft: bool = True
 
-    adapter_off_diag: int = 0  # number of off-diagonals for banded pattern
-    adapter_rank: int = 8  # SVFT rank
-    adapter_pattern: str = "banded"  # SVFT pattern: banded, sparse, etc.
-    adapter_fill_orthonormal: bool = False  #Initialize singular vectors from a random orthonomal bases. Only applicable if less than full-rank.
+    adapter_r: int = 8  # SVFT rank
+    # adapter_pattern: str = "banded"  # SVFT pattern: banded, sparse, etc.
+    fill_orthonormal: bool = False  #Initialize singular vectors from a random orthonomal bases. Only applicable if less than full-rank.
 
 @dataclass
 class Debug:

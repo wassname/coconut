@@ -131,7 +131,7 @@ def load_new_model(conf: BaseConfig, device, dtype):
         # lora_dropout=conf.lora_dropout,
         # target_modules="all-linear",  # Target all linear layers
         target_modules=target_modules,
-        bias="none",
+        # bias="none",
         l_cycles=conf.trm_l_cycles,
         h_cycles=conf.trm_h_cycles,
         expansion=conf.trm_expansion,
@@ -158,7 +158,19 @@ def load_new_model(conf: BaseConfig, device, dtype):
         peft_model.base_model.model.model.embed_tokens.weight.requires_grad is False
     ), "Embedding weights should be frozen"
 
+
+
     model = Coconut(peft_model, conf)
+    # if it's svft all base weights should be cpu?
+    if isinstance(conf, trmlora.TRMSvftAConfig):
+        logger.info("Moving base model weights to CPU for SVFT")
+        for name, p in model.model.base_model.named_parameters():
+            if 'base_layer' in name:
+                p.data = p.data.to("cpu")
+        # model.model.base_model.base_model.base_model.to("cpu")
+        # example check
+        #
+    # model.model.base_model.base_model.layers[23].self_attn.q_proj.base_layer.weight
     return model, tokenizer
 
 
@@ -179,6 +191,7 @@ def resume_model(conf: BaseConfig, device="auto", dtype=torch.bfloat16):
 
 
 def save_model(model, tokenizer, configs, save_dir: Path, adapter_name="default"):
+    """Peft is to hard to subclass or monkey patch, in the end I needed by own function."""
     save_dir.mkdir(parents=True, exist_ok=True)
     with open(save_dir / "coconut_config.toml", "w") as f:
         toml.dump(configs, f)
@@ -188,10 +201,9 @@ def save_model(model, tokenizer, configs, save_dir: Path, adapter_name="default"
     save_folder = save_dir / "trmlora/"
     save_folder.mkdir(parents=True, exist_ok=True)
 
-    # Custom save logic for TRM adapters (bypasses PEFT's type checking)
 
     config = model.model.peft_config[adapter_name]
-    state_dict = model.state_dict() # FIXME is it meant to be model.model or just model?
+    state_dict = model.state_dict()
 
     # Filter by prefix (same logic as PEFT but without type check)
     prefix = PEFT_TYPE_TO_PREFIX_MAPPING[config.peft_type]
@@ -233,6 +245,7 @@ def load_adapter(
     low_cpu_mem_usage: bool = False,
     key_mapping: Optional[dict[str, str]] = None,
 ):
+    """Peft is to hard to subclass or monkey patch, in the end I needed by own function."""
     base_model = AutoModelForCausalLM.from_pretrained(model_id)
 
     peft_config = PeftConfig()
@@ -245,12 +258,6 @@ def load_adapter(
         low_cpu_mem_usage=low_cpu_mem_usage,
     )
 
-    # model = PeftModel(base_model, peft_config, adapter_name='default')
-
-    # state_dict = load_peft_weights(
-    #     adapter_save_path,
-    #     device=torch_device,
-    # )
     adapter_save_path = save_dir / "trmlora/"
     state_dict = safetensors.torch.load_file(adapter_save_path/ "adapter_model.safetensors", device=torch_device)
 

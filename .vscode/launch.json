@@ -13,7 +13,7 @@
       "program": "./scripts/run.py",
       "console": "integratedTerminal",
       "args": [
-        "TRMDeloraDebug"
+        "TRMSvftDebug"
       ],
       "justMyCode": false,
       // "autoReload": {
@@ -30,7 +30,7 @@
       "program": "./scripts/run.py",
       "console": "integratedTerminal",
       "args": [
-        "TRMDelora",
+        "TRMSvft",
         "--num-epochs=9", "--max_size=2000"
       ],
       "justMyCode": false,

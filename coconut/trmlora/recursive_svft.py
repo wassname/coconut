@@ -32,7 +32,7 @@ from .trm_adapter import L_net, trm_recursion
 
 
 @dataclass
-class TRMSvftConfig(PeftConfig):
+class TRMSvftAConfig(PeftConfig):
     """
     Configuration for TRM SVFT adapter.
 
@@ -125,7 +125,7 @@ class TRMSvftLayer(BaseTunerLayer):
         # TRM components
         self.svft_zL_init = BufferDict({})
         self.svft_zH_init = BufferDict({})
-        self.svft_configs: Dict[str, TRMSvftConfig] = {}
+        self.svft_configs: Dict[str, TRMSvftAConfig] = {}
         self.svft_l_nets = nn.ModuleDict({})
         
         # Mark the weight as unmerged
@@ -139,10 +139,12 @@ class TRMSvftLayer(BaseTunerLayer):
     def update_layer(
         self,
         adapter_name: str,
-        svft_config: TRMSvftConfig,
+        svft_config: TRMSvftAConfig,
         **kwargs
     ) -> None:
-        """Initialize SVFT adapter on this layer."""
+        """
+        Initialize SVFT adapter on this layer.
+        """
         if adapter_name in self.svft_u:
             return  # Already initialized
         
@@ -152,7 +154,9 @@ class TRMSvftLayer(BaseTunerLayer):
         base_weight = self.get_base_layer().weight  # [out, in]
         device = base_weight.device
         
-        U, S, Vh = torch.linalg.svd(base_weight, full_matrices=False)  # U: [out, min], S: [min], Vh: [min, in]
+        # FIXME need to do this as float
+        U, S, Vh = torch.linalg.svd(base_weight.float(), full_matrices=False)  # U: [out, min], S: [min], Vh: [min, in]
+        base_weight.half().cpu()  # free up GPU memory
         
         # Determine rank
         r = S.shape[0] if svft_config.r is None else min(S.shape[0], svft_config.r)
@@ -180,7 +184,8 @@ class TRMSvftLayer(BaseTunerLayer):
         self.svft_s0[adapter_name] = S.clone().detach().contiguous()
         
         # Create sparse indices for s0 (diagonal)
-        s0_indices = torch.sparse.spdiags(S, torch.LongTensor([0]), (r, r)).coalesce().indices()
+        # s0_indices = torch.sparse.spdiags(S, torch.LongTensor([0]), (r, r)).coalesce().indices()
+        s0_indices = torch.stack([torch.arange(r), torch.arange(r)])
         self.svft_s0_row[adapter_name] = s0_indices[0]
         self.svft_s0_col[adapter_name] = s0_indices[1]
         
@@ -241,10 +246,10 @@ class TRMSvftLayer(BaseTunerLayer):
         
         # Create sparse tensors using native PyTorch
         sd_indices = torch.stack([self.svft_sd_row[adapter_name], self.svft_sd_col[adapter_name]])
-        sd = torch.sparse_coo_tensor(sd_indices, sd_values[0], (r, r))
+        sd = torch.sparse_coo_tensor(sd_indices, sd_values.float(), (r, r))
         
         s0_indices = torch.stack([self.svft_s0_row[adapter_name], self.svft_s0_col[adapter_name]])
-        s0 = torch.sparse_coo_tensor(s0_indices, self.svft_s0[adapter_name], (r, r))
+        s0 = torch.sparse_coo_tensor(s0_indices, self.svft_s0[adapter_name].float(), (r, r))
         
         s_eff = (s0 + sd).coalesce()
         
@@ -314,6 +319,12 @@ class TRMSvftLayer(BaseTunerLayer):
                 # Apply refined singular values
                 sd_values = zHs * F.sigmoid(self.svft_gate[adapter])
                 s_eff = self.get_sparse_s_eff(adapter, sd_values[:, -1, :])
+
+
+                # FIXME: if sd_values [b, s, r], need to do batch sparse mm
+                # but RuntimeError: number of dimensions must be sparse_dim (2) + dense_dim (2), but got 2
+                # If I want one s_eff per seq, then do I need to change the math... or fold it into batch dim?
+                # wait it doesn't work with batch... hmm can a I not make the space have a batch dim
                 
                 # Complete transformation: x @ V.T @ s_eff @ U.T
                 # h_s is already x @ V.T from line 279
@@ -344,7 +355,7 @@ class TRMSvftLinear(nn.Module, TRMSvftLayer):
         self,
         base_layer,
         adapter_name: str,
-        svft_config: TRMSvftConfig,
+        svft_config: TRMSvftAConfig,
         **kwargs,
     ) -> None:
         super().__init__()

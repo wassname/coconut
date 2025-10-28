@@ -67,7 +67,7 @@ peft.utils.get_peft_model_state_dict = custom_get_peft_model_state_dict  # peft_
 from coconut.trmlora.recursive_lora import TRMLoraModel, TRMLoraAConfig
 from coconut.trmlora.recursive_delora import TRMDeloraModel, TRMDeloraAConfig
 from coconut.trmlora.recursive_hra import TRMHraModel, TRMHraAConfig
-from coconut.trmlora.recursive_svft import TRMSvftModel, TRMSvftConfig
+from coconut.trmlora.recursive_svft import TRMSvftModel, TRMSvftAConfig
 
 
 
@@ -87,7 +87,7 @@ except KeyError:
     pass
 
 try:
-    register_peft_method(name="trmsvft", model_cls=TRMSvftModel, config_cls=TRMSvftConfig, prefix="svft_")
+    register_peft_method(name="trmsvft", model_cls=TRMSvftModel, config_cls=TRMSvftAConfig, prefix="svft_")
 except KeyError:
     pass
 
