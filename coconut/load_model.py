@@ -83,6 +83,7 @@ def load_new_model(conf: BaseConfig, device, dtype):
     logger.info(f"Targeting LoRA layers: {target_layers} out of {num_layers} total layers")
     target_modules = [k for k,v in base_model.named_modules() if  isinstance(v, torch.nn.Linear) and any(f".{i}." in k for i in target_layers)]
     logger.debug(f"Targeting {len(target_modules)} modules for TRM LoRA adapters: {target_modules}")
+    # FIXME is it missing k_proj?
 
 
     adapter_config_args = {}

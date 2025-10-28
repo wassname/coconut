@@ -143,6 +143,19 @@ class TRMHra(TRMConfig):
 
     hra_apply_GS: bool = False  # Gram-Schmidt orthogonalization
 
+
+@dataclass
+class TRMSvft(TRMConfig):
+    """TRM SVFT mode: inline recursive SVFT adapter on frozen LLM."""
+    _adapter_class: ClassVar = TRMLoraAConfig  # placeholder
+    name: str = "trmsvft-qwen3-0.6b"
+    use_trm_svft: bool = True
+
+    adapter_off_diag: int = 0  # number of off-diagonals for banded pattern
+    adapter_rank: int = 8  # SVFT rank
+    adapter_pattern: str = "banded"  # SVFT pattern: banded, sparse, etc.
+    adapter_fill_orthonormal: bool = False  #Initialize singular vectors from a random orthonomal bases. Only applicable if less than full-rank.
+
 @dataclass
 class Debug:
     """Fast iteration TRM LoRA config with tiny model."""
@@ -177,3 +190,8 @@ class TRMHraDebug(Debug, TRMHra):
 class TRMDeloraDebug(Debug, TRMDelora):
     """Fast iteration TRM DeLoRA config with tiny model."""
     name: str = "trmdelora-debug"
+
+@dataclass
+class TRMSvftDebug(Debug, TRMSvft):
+    """Fast iteration TRM SVFT config with tiny model."""
+    name: str = "trmsvft-debug"

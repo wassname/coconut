@@ -33,6 +33,7 @@ dependencies = [
     "anycache>=2.4.0",
     "torchinfo>=1.8.0",
     "pytest-beartype>=0.2.0",
+    "setuptools>=80.9.0",
 ]
 
 [dependency-groups]
@@ -49,18 +50,22 @@ dev = [
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
-[tool.uv.sources]
-peft = { git = "https://github.com/huggingface/peft.git", rev = "a82ca6dd18f14d6791902e3e8785ecb23e4c0f28" }
+# [tool.uv]
+# no-build-isolation-package = ["torch-sparse"]
 
-# [tool.uv.sources]
+[tool.uv.sources]
 # torch = [
-#   { index = "pytorch-cu124"},
+#   { index = "pytorch-cu128"},
 # ]
 # torchvision = [
-#   { index = "pytorch-cu124"},
+#   { index = "pytorch-cu128"},
+# ]
+peft = { git = "https://github.com/huggingface/peft.git", rev = "41091ecd31abc84bda9e899c4e80ec96f3fa99b2" }
+# torch-sparse = [
+#   { index = "pytorch-cu128"},
 # ]
 
-# [[tool.uv.index]]
-# name = "pytorch-cu124"
-# url = "https://download.pytorch.org/whl/cu124"
-# explicit = true
+[[tool.uv.index]]
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true

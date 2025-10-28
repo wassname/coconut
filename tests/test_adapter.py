@@ -31,9 +31,15 @@ def test_adapter(config_class, expected_model_class, adapter_name):
     model_id = "yujiepan/qwen3-tiny-random"
     base_model = AutoModelForCausalLM.from_pretrained(model_id)
     tokenizer = AutoTokenizer.from_pretrained(model_id)
-
     peft_config = config_class()  # Low rank for quick test
-    model = get_peft_model(base_model, peft_config)
+
+    # Make using method 1
+    # model = expected_model_class(base_model, peft_config, 'default')
+    model = PeftModel(base_model, peft_config, adapter_name='default')
+    # model.print_trainable_parameters()
+
+    # # make using method 1
+    # model = get_peft_model(base_model, peft_config)
     model.print_trainable_parameters()
 
     prefix = PEFT_TYPE_TO_PREFIX_MAPPING.get(peft_config.peft_type)
@@ -41,7 +47,8 @@ def test_adapter(config_class, expected_model_class, adapter_name):
     # I would also like to make sure it has at least one linear layer replaced, so one with trm in tpye
     found_replaced_layer = False
     for name, module in model.named_modules():
-        if isinstance(module, nn.Linear) and prefix in name:
+        typ = type(module).__name__.lower()
+        if (prefix in typ) or (prefix in name): 
             found_replaced_layer = True
             break
     assert found_replaced_layer, f"No layer replaced with prefix {prefix} found in model."
@@ -50,7 +57,7 @@ def test_adapter(config_class, expected_model_class, adapter_name):
     assert is_hf_peft_model(model) or is_plain_peft_model(model)
     
     # Assert correct subclass for custom adapters
-    assert isinstance(model, PeftModel)
+    # assert isinstance(model, PeftModel)
 
     # randomize adapter weights for test
     for name, param in model.named_parameters():

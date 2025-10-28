@@ -14,22 +14,19 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch import Tensor
-from typing import Optional, Dict, Any, Literal
+from typing import Optional, Dict, Any
 from dataclasses import dataclass, field
 from jaxtyping import Float
 from einops import repeat, rearrange
-
-from peft.tuners.tuners_utils import BaseTunerLayer
+from peft.tuners.tuners_utils import BaseTunerLayer, BaseTuner
 from peft.config import PeftConfig
 from peft.tuners._buffer_dict import BufferDict
 from peft.utils import PeftType
+from peft.utils.other import get_pattern_key
 
-try:
-    from torch_sparse import SparseTensor
-    HAS_TORCH_SPARSE = True
-except ImportError:
-    HAS_TORCH_SPARSE = False
-    print("Warning: torch_sparse not available, SVFT will use dense operations (slower)")
+from peft.utils import (
+    TRANSFORMERS_MODELS_TO_LORA_TARGET_MODULES_MAPPING,
+)
 
 from .trm_adapter import L_net, trm_recursion
 
@@ -38,14 +35,13 @@ from .trm_adapter import L_net, trm_recursion
 class TRMSvftConfig(PeftConfig):
     """
     Configuration for TRM SVFT adapter.
+
+    Config from https://github.com/VijayLingam95/SVFT/blob/8303115d45868712f952e6a847735bb59b1a9f18/MetaMath/run_math.sh#L29
     """
     # SVFT-specific parameters
-    r: int = field(default=None, metadata={"help": "SVD rank (None = full rank)"})
-    off_diag: int = field(default=1, metadata={"help": "Number of off-diagonals in sparse S matrix"})
-    pattern: Literal["banded", "random", "top_k"] = field(
-        default="banded", 
-        metadata={"help": "Sparsity pattern for sd matrix"}
-    )
+    r: int = field(default=8, metadata={"help": "SVD rank (None = full rank)"})
+    # NOTE: off_diag disabled - diagonal-only (Plain SVFT) for simplicity and parameter efficiency
+    # Paper shows full-rank diagonal outperforms low-rank banded for same param count
     fill_orthonormal: bool = field(
         default=False, 
         metadata={"help": "Fill remaining rank with random orthonormal basis"}
@@ -70,9 +66,26 @@ class TRMSvftConfig(PeftConfig):
 
     def __post_init__(self):
         self.peft_type = 'TRMSVFT'
-        if self.target_modules is None:
-            self.target_modules = ["q_proj", "v_proj"]
+        # if self.target_modules is None:
+        #     self.target_modules = ["q_proj", "v_proj"]
 
+
+def dense_sparse_mm(dense, sparse_T):
+    """
+    Compute dense @ sparse where:
+    - dense: [b, s, r] or [b*s, r]
+    - sparse_T: [r, r] (already transposed)
+    
+    Returns: [b, s, r] or [b*s, r]
+    """
+    shape = dense.shape
+    dense_2d = dense.reshape(-1, dense.shape[-1])  # [b*s, r]
+    
+    # Want: dense_2d @ sparse_T
+    # Compute: (sparse_T @ dense_2d.T).T
+    result = torch.sparse.mm(sparse_T, dense_2d.t()).t()
+    
+    return result.reshape(shape)
 
 class TRMSvftLayer(BaseTunerLayer):
     """
@@ -80,15 +93,21 @@ class TRMSvftLayer(BaseTunerLayer):
     
     SVFT decomposes W = U @ S @ V^T where:
     - U, V are frozen orthonormal bases from SVD
-    - S = s0 + sd where s0 is frozen diagonal, sd is sparse learnable delta
-    - TRM recursively refines sd in singular value space
+    - S = s0 + sd where s0 is frozen diagonal, sd is diagonal learnable delta
+    - TRM recursively refines sd in r-dimensional singular value space
+    
+    NOTE: Currently diagonal-only (Plain SVFT). Off-diagonal variants disabled for simplicity.
+    Paper shows full-rank diagonal outperforms low-rank banded at same parameter count.
+
+    Code from https://github.com/VijayLingam95/SVFT/blob/8303115d45868712f952e6a847735bb59b1a9f18/svft/svft_layers.py
     """
     
-    adapter_layer_names = ("svft_u", "svft_v", "svft_s0", "svft_sd", "svft_gate", "svft_l_nets")
-    other_param_names = ("r", "off_diag", "pattern", "svft_zL_init", "svft_zH_init")
+    adapter_layer_names = ("svft_sd", "svft_gate", "svft_l_nets")
+    other_param_names = ("svft_u", "svft_v", "svft_s0", "svft_configs", "svft_zL_init", "svft_zH_init", "svft_s0_row", "svft_s0_col", "svft_sd_row", "svft_sd_col")
 
     def __init__(self, base_layer: nn.Module, **kwargs) -> None:
-        BaseTunerLayer.__init__(self, base_layer, **kwargs)
+        self.base_layer = base_layer
+        # BaseTunerLayer.__init__(self, base_layer)
         
         # SVFT components (per adapter)
         self.svft_u = nn.ParameterDict({})
@@ -109,6 +128,9 @@ class TRMSvftLayer(BaseTunerLayer):
         self.svft_configs: Dict[str, TRMSvftConfig] = {}
         self.svft_l_nets = nn.ModuleDict({})
         
+        # Mark the weight as unmerged
+        self._disable_adapters = False
+
         # Marker for Coconut to find TRM layers
         self._recursion_cache = None
         
@@ -162,40 +184,10 @@ class TRMSvftLayer(BaseTunerLayer):
         self.svft_s0_row[adapter_name] = s0_indices[0]
         self.svft_s0_col[adapter_name] = s0_indices[1]
         
-        # Create sparse pattern for sd
-        pattern = svft_config.pattern
-        off_diag = svft_config.off_diag
-        
-        if pattern == "random":
-            k = r * (2 * off_diag + 1) - off_diag * (off_diag + 1)
-            rows = torch.randint(0, r, (k,), device=device)
-            cols = torch.randint(0, r, (k,), device=device)
-            sd_indices = torch.stack([rows, cols])
-        elif pattern == "banded":
-            diags = 2 * off_diag + 1
-            offsets_positive = torch.arange(0, off_diag + 1)
-            offsets_negative = torch.arange(-1, -off_diag - 1, -1)
-            offsets = torch.cat([offsets_positive, offsets_negative])
-            sd_indices = torch.sparse.spdiags(
-                torch.randn([diags, r]), offsets, (r, r)
-            ).coalesce().indices()
-            k = sd_indices.shape[1]
-        elif pattern == "top_k":
-            if U.shape == Vh.shape:
-                coeffs = U @ Vh.T
-            else:
-                coeffs = U if U.shape[0] == U.shape[1] else Vh
-            
-            k = r * (2 * off_diag + 1) - off_diag * (off_diag + 1)
-            flattened = coeffs.contiguous().view(-1)
-            _, top_indices_flat = torch.topk(flattened.abs(), k)
-            num_rows, num_cols = coeffs.size()
-            rows = top_indices_flat // num_cols
-            cols = top_indices_flat % num_cols
-            sd_indices = torch.stack([rows, cols])
-        else:
-            raise ValueError(f"Unknown pattern: {pattern}")
-        
+        # Create diagonal pattern for sd (Plain SVFT)
+        # k = r for diagonal-only, simplifies TRM to operate in r-dimensional space
+        k = r
+        sd_indices = torch.stack([torch.arange(r, device=device), torch.arange(r, device=device)])
         self.svft_sd_row[adapter_name] = sd_indices[0]
         self.svft_sd_col[adapter_name] = sd_indices[1]
         
@@ -207,15 +199,15 @@ class TRMSvftLayer(BaseTunerLayer):
         
         # Initialize TRM components
         self.svft_l_nets[adapter_name] = L_net(
-            r,
+            k,
             svft_config.l_layers,
             svft_config.num_heads,
             svft_config.expansion,
         )
         
         # Initialize TRM recursion states in r_dim
-        zH = torch.empty(r, device=device)
-        zL = torch.empty(r, device=device)
+        zH = torch.empty(k, device=device)
+        zL = torch.empty(k, device=device)
         torch.nn.init.trunc_normal_(zH, std=1.0)
         torch.nn.init.trunc_normal_(zL, std=1.0)
         self.svft_zL_init[adapter_name] = zL
@@ -236,35 +228,25 @@ class TRMSvftLayer(BaseTunerLayer):
             h_cycles=h_cycles,
         )
 
-    def get_sparse_s_eff(self, adapter_name: str, sd_values: Optional[Tensor] = None) -> Tensor:
+    
+    def get_sparse_s_eff(self, adapter_name: str, sd_values = None) -> torch.sparse_coo_tensor:
         """
         Compute effective singular value matrix: s_eff = s0 + sd
-        Returns sparse or dense tensor depending on torch_sparse availability.
+        Returns PyTorch sparse COO tensor.
         """
         if sd_values is None:
             sd_values = self.svft_sd[adapter_name] * F.sigmoid(self.svft_gate[adapter_name])
         
         r = self.svft_s0[adapter_name].shape[0]
-        device = self.svft_s0[adapter_name].device
         
-        if HAS_TORCH_SPARSE:
-            sd = SparseTensor(
-                row=self.svft_sd_row[adapter_name],
-                col=self.svft_sd_col[adapter_name],
-                value=sd_values
-            )
-            s0 = SparseTensor(
-                row=self.svft_s0_row[adapter_name],
-                col=self.svft_s0_col[adapter_name],
-                value=self.svft_s0[adapter_name]
-            )
-            s_eff = s0 + sd
-        else:
-            # Fallback to dense (slower)
-            s0_dense = torch.diag(self.svft_s0[adapter_name])
-            sd_dense = torch.zeros(r, r, device=device)
-            sd_dense[self.svft_sd_row[adapter_name], self.svft_sd_col[adapter_name]] = sd_values
-            s_eff = s0_dense + sd_dense
+        # Create sparse tensors using native PyTorch
+        sd_indices = torch.stack([self.svft_sd_row[adapter_name], self.svft_sd_col[adapter_name]])
+        sd = torch.sparse_coo_tensor(sd_indices, sd_values[0], (r, r))
+        
+        s0_indices = torch.stack([self.svft_s0_row[adapter_name], self.svft_s0_col[adapter_name]])
+        s0 = torch.sparse_coo_tensor(s0_indices, self.svft_s0[adapter_name], (r, r))
+        
+        s_eff = (s0 + sd).coalesce()
         
         return s_eff
 
@@ -304,30 +286,17 @@ class TRMSvftLayer(BaseTunerLayer):
                 if steering_mode:
                     # Don't run TRM, just apply cached refined sd
                     zH = recursion_cache.get('zH')
-                    if zH is not None:
-                        # zH represents refined singular value deltas
-                        sd_values = zH * F.sigmoid(self.svft_gate[adapter])
-                        s_eff = self.get_sparse_s_eff(adapter, sd_values.detach())
-                        
-                        # Apply: x @ V^T @ s_eff @ U^T
-                        if self.training:
-                            h = (x @ V.T) @ s_eff.T @ U.T
-                        else:
-                            # Materialize full weight for inference
-                            W = (s_eff @ V).T @ U.T
-                            h = x @ W
-                        
-                        add_out += h
+                    zHs = zH.unsqueeze(1)  # [b, 1, r]
                 else:
                     # TRM recursion mode
                     # Project to singular value space
                     h = x @ V.T  # [b, s, r]
                     
-                    # TRM recursion on last token
-                    context = h[:, -1:, :]  # [b, 1, r]
+                    # For diagonal SVFT, k=r, so context is full singular value projection
+                    context = h  # [b, s, r]
                     b = context.shape[0]
                     
-                    # Initialize or retrieve zH and zL in r_dim
+                    # Initialize or retrieve zH and zL in r_dim (singular value space)
                     zL = recursion_cache.get('zL', None)
                     if zL is None:
                         zL = self.svft_zL_init[adapter].unsqueeze(0).expand(b, -1).to(h.device)
@@ -335,25 +304,22 @@ class TRMSvftLayer(BaseTunerLayer):
                     if zH is None:
                         zH = self.svft_zH_init[adapter].unsqueeze(0).expand(b, -1).to(h.device)
                     
-                    # TRM refines singular value deltas
+                    # TRM refines all r singular value deltas
                     zLs, zHs = self.trm(adapter, zL, zH, context)
                     
                     # Update cache for next layer
                     recursion_cache['zL'] = zLs[:, -1, :]  # [b, r]
                     recursion_cache['zH'] = zHs[:, -1, :]  # [b, r]
                     
-                    # Apply refined singular values
-                    sd_values = zHs * F.sigmoid(self.svft_gate[adapter])
-                    s_eff = self.get_sparse_s_eff(adapter, sd_values[:, -1, :])
-                    
-                    # Complete transformation: h @ s_eff @ U^T
-                    if self.training:
-                        h = h @ s_eff.T @ U.T
-                    else:
-                        W = (s_eff @ V).T @ U.T
-                        h = x @ W
-                    
-                    add_out += h
+                # Apply refined singular values
+                sd_values = zHs * F.sigmoid(self.svft_gate[adapter])
+                s_eff = self.get_sparse_s_eff(adapter, sd_values[:, -1, :])
+                
+                # Complete transformation: h @ V @ s_eff @ U^T
+                # h = (h @ V.T) @ s_eff.T @ U.T
+                h = dense_sparse_mm((h @ V.T), s_eff.t()) @ U.T
+                
+                add_out += h
 
             result = base_out + add_out.to(base_out.dtype)
 
@@ -395,11 +361,47 @@ class TRMSvftLinear(nn.Module, TRMSvftLayer):
         return "trmsvft." + rep
 
 
-class TRMSvftModel:
+class TRMSvftModel(BaseTuner):
     """
     TRM SVFT Model - handles adapter injection into base model.
-    Follows PEFT patterns but simplified since SVFT isn't in PEFT core.
+    Inherits from BaseTuner to integrate with PEFT infrastructure.
     """
+    prefix: str = "svft_"
+    tuner_layer_cls = TRMSvftLayer
+    target_module_mapping = TRANSFORMERS_MODELS_TO_LORA_TARGET_MODULES_MAPPING
+
+
+    def _create_and_replace(
+        self,
+        svft_config,
+        adapter_name,
+        target,
+        target_name,
+        parent,
+        current_key,
+        **optional_kwargs,
+    ):
+        if current_key is None:
+            raise ValueError("Current Key shouldn't be `None`")
+
+        # Regexp matching - Find key which matches current target_name in patterns provided
+        # r_key = get_pattern_key(svft_config.rank_pattern.keys(), current_key)
+        # lambda_key = get_pattern_key(svft_config.lambda_pattern.keys(), current_key)
+        # r = svft_config.rank_pattern.get(r_key, svft_config.r)
+        # delora_lambda = svft_config.lambda_pattern.get(lambda_key, svft_config.delora_lambda)
+
+        kwargs = {
+            # "svft_config": svft_config,
+        }
+
+        if isinstance(target, TRMSvftLinear):
+            target.update_layer(adapter_name, **kwargs)
+        else:
+            new_module = self._create_new_module(svft_config, adapter_name, target, **kwargs)
+            if adapter_name != self.active_adapter:
+                # adding an additional adapter: it is not automatically trainable
+                new_module.requires_grad_(False)
+            self._replace_module(parent, target_name, new_module, target)
     
     @staticmethod
     def _create_new_module(svft_config, adapter_name, target, **kwargs):

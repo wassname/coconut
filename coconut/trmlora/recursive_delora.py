@@ -221,7 +221,7 @@ class TRMDeloraLayer(DeloraLayer):
 
 
                     # 3. TRM recursion on normalized directions (last token)
-                    context = h_normalized[:, -1:, :]  # [b, 1, r] - normalized direction
+                    context = h_normalized#[:, -1:, :]  # [b, 1, r] - normalized direction
                     b = context.shape[0]
 
                     # Initialize or retrieve zH and zL in r_dim

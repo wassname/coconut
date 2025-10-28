@@ -72,7 +72,7 @@ class SVFTLayer(nn.Module):
         u,
         s,
         v,
-        off_diag,
+        off_diag=0,
         pattern: Literal["banded", "random", "top_k"] = "banded",
         r=None,
         fill_orthonormal=False,
