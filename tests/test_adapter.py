@@ -4,6 +4,7 @@ import torch
 import torch.nn as nn
 import warnings
 import pytest
+from pathlib import Path
 from peft import get_peft_model, LoraConfig
 from peft import PeftModel
 from peft.mapping import PEFT_TYPE_TO_PREFIX_MAPPING
@@ -63,7 +64,7 @@ def test_adapter(config_class, expected_model_class, adapter_name):
     # randomize adapter weights for test
     for name, param in model.named_parameters():
         if prefix in name:
-            print(f"Randomizing {name}")
+            # print(f"Randomizing {name}")
             torch.nn.init.normal_(param, mean=1.1, std=0.5)
 
     # Test forward pass with dummy input
@@ -83,7 +84,7 @@ def test_adapter(config_class, expected_model_class, adapter_name):
     assert s1 != s2
 
     # test save
-    save_path = f"/tmp/qwen-tiny-{adapter_name}"
+    save_path = Path(f"/tmp/qwen-tiny-{adapter_name}")
     # model.save_pretrained(save_path)
     save_model(model, tokenizer, {}, save_path)
 

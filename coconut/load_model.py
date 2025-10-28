@@ -8,6 +8,7 @@ from coconut.configs import BaseConfig
 from loguru import logger
 from pathlib import Path
 import os
+import re
 import torch
 import safetensors.torch
 import toml
@@ -149,7 +150,7 @@ def resume_model(conf: BaseConfig, device="auto", dtype=torch.bfloat16):
     return model, tokenizer
 
 
-def save_model(model, tokenizer, configs, save_dir: Path):
+def save_model(model, tokenizer, configs, save_dir: Path, adapter_name = "default"):
     save_dir.mkdir(parents=True, exist_ok=True)
     with open(save_dir / "coconut_config.toml", "w") as f:
         toml.dump(configs, f)
@@ -160,10 +161,8 @@ def save_model(model, tokenizer, configs, save_dir: Path):
     os.makedirs(save_folder, exist_ok=True)
     
     # Custom save logic for TRM adapters (bypasses PEFT's type checking)
-    from peft.mapping import PEFT_TYPE_TO_PREFIX_MAPPING
-    import re
+    from peft.mapping import PEFT_TYPE_TO_PREFIX_MAPPING    
     
-    adapter_name = "default"
     config = model.model.peft_config[adapter_name]
     state_dict = model.model.state_dict()
     
@@ -173,15 +172,16 @@ def save_model(model, tokenizer, configs, save_dir: Path):
         to_return = {k: state_dict[k] for k in state_dict if prefix in k}
         
         # Remove adapter name from keys
-        pattern = re.compile(re.escape(f".{adapter_name}") + r"$")
+        # pattern = re.compile(re.escape(f".{adapter_name}") + r"$")
         def remove_adapter_name(key):
             if "." not in key:
                 return key
             if key.endswith(f".{adapter_name}"):
                 return key.removesuffix(f".{adapter_name}")
-            key, _, suffix = key.rpartition(".")
-            key = pattern.sub("", key)
-            return f"{key}.{suffix}"
+            return key.replace(f".{adapter_name}.", ".")
+            # key, _, suffix = key.rpartition(".")
+            # key = pattern.sub("", key)
+            # return f"{key}.{suffix}"
         
         to_return = {remove_adapter_name(k): v for k, v in to_return.items()}
         
