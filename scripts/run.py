@@ -63,7 +63,7 @@ def main():
 
     # logger.debug(f"Command line arguments: {os.sys.argv}")
     ConfigCls = getattr(configs, os.sys.argv[1])
-    conf = tyro.cli(ConfigCls, args=os.sys.argv[2:])
+    conf = tyro.cli(ConfigCls, args=os.sys.argv[2:], use_underscores=True)
     return train(conf)
 
 if __name__ == "__main__":

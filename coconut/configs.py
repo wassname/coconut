@@ -40,7 +40,7 @@ class BaseConfig:
     
     lr: float = 1e-4  # 1e-4 in coconut, 1e-6 in verl
     weight_decay: float = 0.1  # 0.01 in coconut, 0 in verl, 0.1-1 in TRM paper
-    grad_clip: float = 1.0
+    grad_clip: float = 10.0
     scheduler: str = "cosine"  # "constant" or "cosine" or "linear"
     
     debug: bool = False
@@ -76,16 +76,16 @@ class TRMConfig(BaseConfig):
     resume_epochs: int = 2
     cot_epochs: int = 0
     skip_stage_zero: bool = True  # skip stage 0 : <start_latent><end_latent> training with 0 latent tokens
-    num_epochs: int = 20
+    num_epochs: int = 6
     epochs_per_stage: int = 8
     
     scheduler: str = "linear"
-    lr: float = 6e-4 # 1e-4 in paper
-    weight_decay: float = 0.01 # 1 and 0.1 in TRM paper. 0.01 in COCONUT paper. But we are already operating in a heavily constrained space (low rank adapter space)
+    lr: float = 5e-4 # 1e-4 in paper
+    weight_decay: float = 0.01 # 1 and 0.1 in TRM paper. 0.01 in COCONUT paper. 
     
-    max_size: int = 10_000
-    batch_size_training: int = 18
-    gradient_accumulation_steps: int = 4 # 768 // 14 # paper had effective batch size of 768
+    max_size: int = 5_000
+    batch_size_training: int = 12
+    gradient_accumulation_steps: int = 3 # 768 // 14 # paper had effective batch size of 768
 
     eval_first_epoch: bool = False
     loss_nll_ratio_margin: bool = False
@@ -93,14 +93,16 @@ class TRMConfig(BaseConfig):
     trm_h_cycles: int = 3  # high level recursive cycles (T=3 in repo)
     trm_l_cycles: int = 6  # low level recursive cycles (n=6 in repo)
     trm_l_layers: int = 2  # layers for L_net, 2 best in paper/repo
-    trm_num_heads: int = 8  # number of attention heads in TRM, 8 in repo
-    trm_expansion: float = 8  # MLP expansion factor in TRM, 4 in repo, meaning it expands to 4*512=2048. But we are expanding from a lower rank so might want hs/rank=2048/18=114
+    trm_num_heads: int = 4  # number of attention heads in TRM, 8 in repo
+    trm_expansion: float = 2  # MLP expansion factor in TRM, 4 in repo, meaning it expands to 4*512=2048. But we are expanding from a lower rank so might want hs/rank=2048/18=114
 
     trm_persistent_steering: bool = True  # persistent steering vector across recursions
 
     layers_spacing_adapter: int = 5  # number of spaced out layers to apply adapter to, larger number means all
-    layers_start_adapter: float = 0.35  # start layer fraction to apply adapter
-    layers_end_adapter: float = 0.85  # end layer fraction to apply adapter
+    layers_start_adapter: float = 0.3  # start layer fraction to apply adapter
+    layers_end_adapter: float = 0.95  # end layer fraction to apply adapter
+
+    target_modules_pattern: Optional[str] = '.+\.(gate_proj).*$'   # regex pattern to match target module names, best performance for '.+\.(gate_proj).*$' 
 
 
 @dataclass
@@ -142,19 +144,25 @@ class TRMHra(TRMConfig):
     adapter_hra_alpha: int = 16  # Scaling for TRM refinement delta
     # adapter_dropout: float = 0.0
 
-    hra_apply_GS: bool = False  # Gram-Schmidt orthogonalization
+    adapter_hra_apply_GS: bool = False  # Gram-Schmidt orthogonalization
 
 
 @dataclass
 class TRMSvft(TRMConfig):
-    """TRM SVFT mode: inline recursive SVFT adapter on frozen LLM."""
-    _adapter_class: ClassVar = TRMSvftAConfig  # placeholder
+    """TRM SVFT mode: inline recursive SVFT adapter on frozen LLM.
+    
+    Hybrid SVD: principal_rank for top SVD (base variance) + tail_rank for low-rank approx of remaining vectors (subtle info).
+    Hypothesis: Merges tail without full-rank memory; principal leverages pretrain, tail recovers truncation loss—better than pure top-k or random LoRA.
+    """
+    _adapter_class: ClassVar = TRMSvftAConfig
     name: str = "trmsvft-qwen3-0.6b"
     use_trm_svft: bool = True
 
-    adapter_r: int = 8  # SVFT rank
-    # adapter_pattern: str = "banded"  # SVFT pattern: banded, sparse, etc.
-    fill_orthonormal: bool = False  #Initialize singular vectors from a random orthonomal bases. Only applicable if less than full-rank.
+    # adapter_r: int = 20  # Total rank (principal + tail; low for memory)
+    adapter_fill_orthonormal: bool = False  # Disable for hybrid (principal + tail covers)
+    adapter_principal_rank: int = 64  # Top SVD for principal directions
+    adapter_tail_rank: int = 32  # Low-rank approx for tail merging
+    adapter_svft_mode: Literal["replace_add", "replace_mul", "adapter_add", "adapter_mult"] = "adapter_add"
 
 @dataclass
 class Debug:

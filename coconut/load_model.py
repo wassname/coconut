@@ -2,22 +2,20 @@ from transformers import (
     AutoModelForCausalLM,
     AutoTokenizer,
     AutoConfig,
-    get_constant_schedule_with_warmup,
 )
 from coconut.coconut import Coconut
 from coconut.configs import BaseConfig
 from loguru import logger
 from pathlib import Path
-import os
-import re
+
 import torch
 import safetensors.torch
 import toml
 from typing import Optional
 from transformers import BitsAndBytesConfig
 from coconut.trmlora import PEFT_TYPE_TO_PREFIX_MAPPING
-from peft.utils.save_and_load import load_peft_weights, _insert_adapter_name_into_state_dict
-from peft import PeftModel, get_peft_model, PeftConfig
+from peft.utils.save_and_load import _insert_adapter_name_into_state_dict
+from peft import PeftModel, PeftConfig
 from coconut import trmlora  # ensure trmlora is imported to register peft types
 
 
@@ -104,6 +102,13 @@ def load_new_model(conf: BaseConfig, device, dtype):
         for k, v in base_model.named_modules()
         if isinstance(v, torch.nn.Linear) and any(f".{i}." in k for i in target_layers)
     ]
+
+    if conf.target_modules_pattern:
+        import re
+        print('target_modules', target_modules[:10], '...')
+        target_modules = [m for m in target_modules if re.search(conf.target_modules_pattern, m)]
+        logger.info(f"Filtering target modules with pattern '{conf.target_modules_pattern}': {target_modules}")
+        assert len(target_modules) > 0, "No target modules matched the given pattern!"
     logger.debug(
         f"Targeting {len(target_modules)} modules for TRM LoRA adapters: {target_modules}"
     )

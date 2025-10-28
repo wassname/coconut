@@ -5,16 +5,18 @@ SVFT decomposes weights via SVD: W = U @ S @ V^T
 - U, V are frozen singular vectors (orthonormal bases)
 - S is diagonal singular values (frozen as s0)
 - sd is sparse learnable delta to S (controlled by gate)
-- TRM recursively refines sd in the singular value space
+- TRM recursively refines sd in r-dimensional singular value space
 
 This is similar to TRM DeLoRA but uses sparse singular value updates instead of low-rank deltas.
+
+Hybrid SVD merging: Approximate full SVD cheaply. Principal (top-principal_rank SVD) captures base variance. Tail (low-rank random ortho basis to principal V, zero S init) merges tail info without full compute. Hypothesis: Principal leverages pretrain; tail recovers subtle patterns > pure top-k or random LoRA. Concat bases; single TRM on r=principal+tail (principal strong init, tail explores).
 """
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch import Tensor
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Literal
 from dataclasses import dataclass, field
 from jaxtyping import Float
 from einops import repeat, rearrange
@@ -24,6 +26,7 @@ from peft.tuners._buffer_dict import BufferDict
 from peft.utils import PeftType
 from peft.utils.other import get_pattern_key
 import bitsandbytes as bnb
+from bitsandbytes.nn import Params4bit, Int8Params
 
 from peft.utils import (
     TRANSFORMERS_MODELS_TO_LORA_TARGET_MODULES_MAPPING,
@@ -38,14 +41,27 @@ class TRMSvftAConfig(PeftConfig):
     Configuration for TRM SVFT adapter.
 
     Config from https://github.com/VijayLingam95/SVFT/blob/8303115d45868712f952e6a847735bb59b1a9f18/MetaMath/run_math.sh#L29
+    
+    Hybrid SVD merging: Approximate full SVD cheaply. Principal (top-principal_rank SVD) captures base variance. Tail (low-rank random ortho basis to principal V, zero S init) merges tail info without full compute. Hypothesis: Principal leverages pretrain; tail recovers subtle patterns > pure top-k or random LoRA. Concat bases; single TRM on r=principal+tail (principal strong init, tail explores).
     """
     # SVFT-specific parameters
-    r: int = field(default=8, metadata={"help": "SVD rank (None = full rank)"})
+    principal_rank: int = field(default=16, metadata={"help": "Top-k SVD rank for principal directions (base variance)"})
+    tail_rank: int = field(default=4, metadata={"help": "Low-rank approx rank for tail merging (ortho random basis; subtle info)"})
     # NOTE: off_diag disabled - diagonal-only (Plain SVFT) for simplicity and parameter efficiency
     # Paper shows full-rank diagonal outperforms low-rank banded for same param count
     fill_orthonormal: bool = field(
         default=False, 
-        metadata={"help": "Fill remaining rank with random orthonormal basis"}
+        metadata={"help": "Fill beyond r with random orthonormal (disabled; tail replaces it)"}
+    )
+    learnable_u: bool = field(
+        default=True,
+        metadata={"help": "Make U (output projection) learnable while keeping V frozen. Asymmetric adaptation."}
+    )
+    svft_mode: Literal["replace_add", "replace_mul", "adapter_add", "adapter_mult"] = field(
+        default="adapter_add",
+        metadata={
+            "help": "SVFT mode: replace_add (s0+sd, replace base), replace_mul (s0*(1+sd), replace base), adapter_add (sd only, add to base), adapter_mult (sd*s0 only, add to base)"
+        }
     )
     
     # TRM-specific parameters
@@ -67,8 +83,9 @@ class TRMSvftAConfig(PeftConfig):
 
     def __post_init__(self):
         self.peft_type = 'TRMSVFT'
-        # if self.target_modules is None:
-        #     self.target_modules = ["q_proj", "v_proj"]
+        self.r = self.principal_rank + self.tail_rank  # Total rank
+        if self.target_modules is None:
+            self.target_modules = ["q_proj", "v_proj"]
 
 
 def dense_sparse_mm(dense, sparse_T):
@@ -103,29 +120,23 @@ class TRMSvftLayer(BaseTunerLayer):
     Code from https://github.com/VijayLingam95/SVFT/blob/8303115d45868712f952e6a847735bb59b1a9f18/svft/svft_layers.py
     """
     
-    adapter_layer_names = ("svft_sd", "svft_gate", "svft_l_nets")
-    other_param_names = ("svft_u", "svft_v", "svft_s0", "svft_configs", "svft_zL_init", "svft_zH_init", "svft_s0_row", "svft_s0_col", "svft_sd_row", "svft_sd_col")
+    adapter_layer_names = ("svft_lambda", "svft_l_nets", "svft_zL_init", "svft_zH_init", "svft_u_delta")
+    other_param_names = ("svft_u_init", "svft_v", "svft_s0", "svft_configs")
 
     def __init__(self, base_layer: nn.Module, **kwargs) -> None:
         self.base_layer = base_layer
         # BaseTunerLayer.__init__(self, base_layer)
         
         # SVFT components (per adapter)
-        self.svft_u = nn.ParameterDict({})
+        self.svft_u_init = BufferDict({})  # Frozen SVD U (init)
+        self.svft_u_delta = nn.ParameterDict({})  # Learnable delta: U_eff = U_init + U_delta
         self.svft_v = nn.ParameterDict({})
         self.svft_s0 = BufferDict({})
-        self.svft_sd = nn.ParameterDict({})
-        self.svft_gate = nn.ParameterDict({})
+        self.svft_lambda = nn.ParameterDict({})
         
-        # Sparse indices (buffers)
-        self.svft_s0_row = BufferDict({})
-        self.svft_s0_col = BufferDict({})
-        self.svft_sd_row = BufferDict({})
-        self.svft_sd_col = BufferDict({})
-        
-        # TRM components
-        self.svft_zL_init = BufferDict({})
-        self.svft_zH_init = BufferDict({})
+        # TRM components (single for combined r)
+        self.svft_zL_init = nn.ParameterDict({})
+        self.svft_zH_init = nn.ParameterDict({})
         self.svft_configs: Dict[str, TRMSvftAConfig] = {}
         self.svft_l_nets = nn.ModuleDict({})
         
@@ -144,70 +155,104 @@ class TRMSvftLayer(BaseTunerLayer):
         **kwargs
     ) -> None:
         """
-        Initialize SVFT adapter on this layer.
+        Initialize SVFT adapter on this layer with hybrid SVD merging (concat principal + tail bases).
         """
-        if adapter_name in self.svft_u:
+        if adapter_name in self.svft_u_init:
             return  # Already initialized
         
         self.svft_configs[adapter_name] = svft_config
         
         # Compute SVD of base weight
         base_weight = self.get_base_layer().weight
-        # if isinstance(base_weight, 'Params4bit'):
-        #     bnb.functional.dequantize_4bit(base_weight.data, base_weight.quant_state)
-        # elif isinstance(base_weight, 'Params8bit'):
-        #     bnb.functional.dequantize_8bit(base_weight.data, base_weight.quant_state)
+        
+        # Dequantize if needed for full-precision SVD
+        if isinstance(base_weight, Params4bit):
+            base_weight = bnb.functional.dequantize_4bit(base_weight.data, base_weight.quant_state)
+        elif isinstance(base_weight, Int8Params):
+            base_weight = bnb.functional.dequantize_8bit(base_weight.data, base_weight.quant_state)
+        
         base_weight = base_weight.float()  # [out, in]
         device = base_weight.device
         
-        U, S, Vh = torch.linalg.svd(base_weight, full_matrices=False)  # U: [out, min], S: [min], Vh: [min, in]
-        # base_weight.half().cpu()  # free up GPU memory
+        principal_r = svft_config.principal_rank
+        tail_r = svft_config.tail_rank
+        r = principal_r + tail_r
         
-        # Determine rank
-        r = S.shape[0] if svft_config.r is None else min(S.shape[0], svft_config.r)
+        # Principal: top-principal_rank SVD
+        U_p, S_p, Vh_p = torch.linalg.svd(base_weight, full_matrices=False)
+        U_p = U_p[:, :principal_r]
+        Vh_p = Vh_p[:principal_r, :]
+        S_p = S_p[:principal_r]
         
-        # Optionally fill with orthonormal basis
-        if svft_config.fill_orthonormal and r < S.shape[0]:
-            diff_rank = S.shape[0] - r
-            Q_u = torch.randn(U.shape[0], diff_rank, device=device)
-            nn.init.orthogonal_(Q_u)
-            Q_v = torch.randn(diff_rank, Vh.shape[1], device=device)
-            nn.init.orthogonal_(Q_v)
+        # Tail approx: random low-rank basis ortho to principal V_p
+        if tail_r > 0:
+            # Random init for tail V basis [tail_r, in]
+            random_v_tail = torch.randn(tail_r, base_weight.shape[1], device=device)
+            # Orthogonalize to principal V_p span (project out principal component)
+            inner_proj = Vh_p @ random_v_tail.T  # [principal_r, in] @ [in, tail_r] -> [principal_r, tail_r]
+            proj_principal = Vh_p.T @ inner_proj  # [in, principal_r] @ [principal_r, tail_r] -> [in, tail_r]
+            ortho_v_tail = random_v_tail.T - proj_principal  # Subtract projection [in, tail_r]
+            Q_v_tail, _ = torch.linalg.qr(ortho_v_tail)  # Ortho basis [in, tail_r]
+            Vh_tail = Q_v_tail.T  # [tail_r, in]
             
-            U = torch.cat([U[:, :r], Q_u], dim=1)
-            Vh = torch.cat([Vh[:r, :], Q_v], dim=0)
-            S = torch.cat([S[:r], torch.zeros(diff_rank, device=device)], dim=0)
-            r = S.shape[0]
+            # Random ortho U_tail [out, tail_r]
+            U_tail = torch.randn(base_weight.shape[0], tail_r, device=device)
+            nn.init.orthogonal_(U_tail)
+            # Initialize S_tail with Gaussian around 1% of principal mean
+            # Breaks symmetry, preserves variance structure like real singular values
+            S_tail_mean = S_p.mean() * 0.01
+            S_tail = torch.randn(tail_r, device=device) * (S_tail_mean * 0.3) + S_tail_mean
         else:
-            U = U[:, :r]
-            Vh = Vh[:r, :]
-            S = S[:r]
+            Vh_tail = None
+            U_tail = None
+            S_tail = None
         
-        # Store frozen U, V, s0
-        self.svft_u[adapter_name] = nn.Parameter(U.clone().detach().contiguous(), requires_grad=False)
+        # Concat principal + tail for combined basis
+        U = torch.cat([U_p, U_tail], dim=1) if tail_r > 0 else U_p
+        Vh = torch.cat([Vh_p, Vh_tail], dim=0) if tail_r > 0 else Vh_p
+        S = torch.cat([S_p, S_tail]) if tail_r > 0 else S_p
+        
+        # Optionally fill remaining with orthonormal (if r < full)
+        full_min = min(base_weight.shape)
+        if svft_config.fill_orthonormal and r < full_min:
+            diff_rank = full_min - r
+            U_fill = torch.randn(base_weight.shape[0], diff_rank, device=device)
+            nn.init.orthogonal_(U_fill)
+            Vh_fill = torch.randn(diff_rank, base_weight.shape[1], device=device)
+            nn.init.orthogonal_(Vh_fill)
+            U = torch.cat([U, U_fill], dim=1)
+            Vh = torch.cat([Vh, Vh_fill], dim=0)
+            S = torch.cat([S, torch.zeros(diff_rank, device=device)])
+            r = S.shape[0]
+        
+        # Store combined U, Vh, S
+        # U_init is frozen (SVD basis), U_delta is learnable (task adaptation)
+        # Effective U = U_init + U_delta
+        # Standard weight decay on U_delta pulls it to 0 → U_eff → U_init (no custom logic needed!)
+        self.svft_u_init[adapter_name] = U.clone().detach().contiguous()  # Frozen
+        self.svft_u_delta[adapter_name] = nn.Parameter(
+            torch.zeros_like(U), 
+            requires_grad=svft_config.learnable_u
+        )
         self.svft_v[adapter_name] = nn.Parameter(Vh.clone().detach().contiguous(), requires_grad=False)
         self.svft_s0[adapter_name] = S.clone().detach().contiguous()
         
-        # Create sparse indices for s0 (diagonal)
-        # s0_indices = torch.sparse.spdiags(S, torch.LongTensor([0]), (r, r)).coalesce().indices()
-        s0_indices = torch.stack([torch.arange(r), torch.arange(r)])
-        self.svft_s0_row[adapter_name] = s0_indices[0]
-        self.svft_s0_col[adapter_name] = s0_indices[1]
+        # Initialize learnable parameters based on mode
+        mode = svft_config.svft_mode
         
-        # Create diagonal pattern for sd (Plain SVFT)
-        # k = r for diagonal-only, simplifies TRM to operate in r-dimensional space
+        if mode.startswith("adapter_"):
+            lambda_init = 1e-2  # DeLoRA-style init for adapters
+        elif mode == "replace_add":
+            lambda_init = 0.0  # Start close to base
+        elif mode == "replace_mul":
+            lambda_init = -2.0  # Small relative change
+        else:
+            lambda_init = 1e-2
+        
+        self.svft_lambda[adapter_name] = nn.Parameter(torch.tensor([lambda_init], device=device), requires_grad=True)
+        
+        # Initialize TRM components: single L_net on combined r
         k = r
-        sd_indices = torch.stack([torch.arange(r, device=device), torch.arange(r, device=device)])
-        self.svft_sd_row[adapter_name] = sd_indices[0]
-        self.svft_sd_col[adapter_name] = sd_indices[1]
-        
-        # Initialize learnable parameters
-        sd = torch.zeros(k, device=device)
-        nn.init.kaiming_normal_(sd[None, :])
-        self.svft_sd[adapter_name] = nn.Parameter(sd, requires_grad=True)
-        self.svft_gate[adapter_name] = nn.Parameter(torch.tensor([0.0], device=device), requires_grad=True)
-        
-        # Initialize TRM components
         self.svft_l_nets[adapter_name] = L_net(
             k,
             svft_config.l_layers,
@@ -215,13 +260,13 @@ class TRMSvftLayer(BaseTunerLayer):
             svft_config.expansion,
         )
         
-        # Initialize TRM recursion states in r_dim
+        # Initialize TRM recursion states in total r_dim
         zH = torch.empty(k, device=device)
         zL = torch.empty(k, device=device)
         torch.nn.init.trunc_normal_(zH, std=1.0)
         torch.nn.init.trunc_normal_(zL, std=1.0)
-        self.svft_zL_init[adapter_name] = zL
-        self.svft_zH_init[adapter_name] = zH
+        self.svft_zL_init[adapter_name] = nn.Parameter(zL, requires_grad=True)
+        self.svft_zH_init[adapter_name] = nn.Parameter(zH, requires_grad=True)
 
     def trm(self, adapter_name: str, zL, zH, context_hs, h_cycles=None):
         """Wrapper around trm_recursion with adapter-specific config."""
@@ -238,60 +283,41 @@ class TRMSvftLayer(BaseTunerLayer):
             h_cycles=h_cycles,
         )
 
-    
-    def get_sparse_s_eff(self, adapter_name: str, sd_values = None) -> torch.sparse_coo_tensor:
-        """
-        Compute effective singular value matrix: s_eff = s0 + sd
-        Returns PyTorch sparse COO tensor.
-        """
-        if sd_values is None:
-            sd_values = self.svft_sd[adapter_name] * F.sigmoid(self.svft_gate[adapter_name])
-        
-        r = self.svft_s0[adapter_name].shape[0]
-        
-        # Create sparse tensors using native PyTorch
-        sd_indices = torch.stack([self.svft_sd_row[adapter_name], self.svft_sd_col[adapter_name]])
-        sd = torch.sparse_coo_tensor(sd_indices, sd_values.float(), (r, r))
-        
-        s0_indices = torch.stack([self.svft_s0_row[adapter_name], self.svft_s0_col[adapter_name]])
-        s0 = torch.sparse_coo_tensor(s0_indices, self.svft_s0[adapter_name].float(), (r, r))
-        
-
-        # TODO I'd like a multiplicative option, like IA3, ROAD, or VERA
-        s_eff = (s0 + sd).coalesce()
-        
-        return s_eff
-    
-
     def get_delta(self, x, adapter: str) -> torch.Tensor:
-
+        """
+        Compute adapter delta with ΔU parameterization.
+        U_effective = U_init + U_delta (weight decay on U_delta naturally pulls U → U_init)
+        """
         if self._recursion_cache is None:
             recursion_cache = {}
         else:
             recursion_cache = self._recursion_cache
 
-        U = self.svft_u[adapter]
+        # Effective U = U_init (frozen SVD) + U_delta (learnable adaptation)
+        U = self.svft_u_init[adapter] + self.svft_u_delta[adapter]
         V = self.svft_v[adapter]
+        S0 = self.svft_s0[adapter]  # [r] - base singular values
         
         # Check if we're in steering mode (post-latent)
         steering_mode = recursion_cache.get('steering_mode', False)
 
-        # Project to singular value space
-        h_s = x @ V.T  # [b, s, r]
+        # 1. Project input x into right singular vector space (V space)
+        x_v = x @ V.T  # [b, s, r] - x projected onto V's rows
+        
+        # 2. Normalize by S0 (DeLoRA-style: remove magnitude, get unit directions)
+        # Add epsilon (not clamp) to preserve relative magnitudes of singular values
+        x_v_normalized = x_v / (S0.unsqueeze(0).unsqueeze(0) + 1e-6)  # [b, s, r] - unit norm per component
         
         if steering_mode:
-            # Don't run TRM, just apply cached refined sd
+            # Don't run TRM, just apply cached refined directions
             zH = recursion_cache.get('zH')
             zL = recursion_cache.get('zL')
-            zHs = zH.unsqueeze(1)  # [b, 1, r]
 
             # TRM refines direction (operates on normalized space)
-            zLs, zHs = self.trm(adapter, zL, zH, h_s, h_cycles=1)  # zH is refined 1 time
+            zLs, zHs = self.trm(adapter, zL, zH, x_v_normalized, h_cycles=1)  # zH is refined 1 time
         else:
             # TRM recursion mode
-            
-            # For diagonal SVFT, k=r, so context is full singular value projection
-            b = h_s.shape[0]
+            b = x_v.shape[0]
 
             # Initialize or retrieve zH and zL in r_dim (singular value space)
             zL = recursion_cache.get('zL', None)
@@ -301,25 +327,48 @@ class TRMSvftLayer(BaseTunerLayer):
             if zH is None:
                 zH = self.svft_zH_init[adapter].unsqueeze(0).expand(b, -1).to(x.device)
             
-            # TRM refines all r singular value deltas
-            zLs, zHs = self.trm(adapter, zL, zH, h_s)
+            # 3. TRM refines normalized directions (like DeLoRA's h_normalized)
+            zLs, zHs = self.trm(adapter, zL, zH, x_v_normalized[:, -1:])
             
             # Update cache for next layer
             recursion_cache['zL'] = zLs[:, -1, :]  # [b, r]
             recursion_cache['zH'] = zHs[:, -1, :]  # [b, r]
             
-        # Apply refined singular values (diagonal matrix - no sparse ops needed)
-        sd_values = zHs[:, -1, :] * F.sigmoid(self.svft_gate[adapter])  # [b, r]
-        s_eff_diag = self.svft_s0[adapter] + sd_values  # [b, r] broadcast with [r]
+        # 4. Apply magnitude control (DeLoRA-style: lambda/r, compensate for S0)
+        # Use per-component S0 (like DeLoRA's per-column ||A||)
+        # Add epsilon (not clamp) to preserve relative magnitudes
+        r = S0.shape[0]
         
-        # Complete transformation: x @ V.T @ diag(s_eff) @ U.T
-        # h_s is already x @ V.T: [b, s, r]
-        # For diagonal matrix: h_s @ diag(s_eff) = h_s * s_eff (elementwise)
-        h = (h_s * s_eff_diag.unsqueeze(1)) @ U.T  # [b, s, r] * [b, 1, r] -> [b, s, out]
+        # Learned lambda controls overall magnitude directly
+        lambda_val = self.svft_lambda[adapter]
+        scaling = (lambda_val / r) / (S0 + 1e-6)  # [r] - per-component scaling (like DeLoRA)
+        sd_values = zHs * scaling.unsqueeze(0).unsqueeze(0)  # [b, s, r] - refined direction * controlled magnitude
+        
+        # 5. Apply mode-specific transformation
+        mode = self.svft_configs[adapter].svft_mode
+        if mode == "adapter_add":
+            # Pure delta for addition to base (like DeLoRA)
+            s_eff_diag = sd_values  # [b, s, r]
+        elif mode == "adapter_mult":
+            # Multiplicative over s0: sd * s0 (delta scales base singular values)
+            s_eff_diag = sd_values * S0.unsqueeze(0).unsqueeze(0)  # [b, s, r] * [1, 1, r]
+        elif mode == "replace_add":
+            # Additive: s0 + sd (replace base weight)
+            s_eff_diag = S0.unsqueeze(0).unsqueeze(0) + sd_values  # [1, 1, r] + [b, s, r]
+        elif mode == "replace_mul":
+            # Multiplicative: s0 * (1 + sd) (replace base weight)
+            s_eff_diag = S0.unsqueeze(0).unsqueeze(0) * (1.0 + sd_values)  # [1, 1, r] * [b, s, r]
+        else:
+            raise ValueError(f"Unknown svft_mode: {mode}")
+        
+        # 6. Complete transformation: x @ V.T @ diag(s_eff) @ U.T
+        # x_v is already x @ V.T: [b, s, r]
+        # For diagonal matrix: x_v @ diag(s_eff) = x_v * s_eff (elementwise)
+        h = (x_v * s_eff_diag) @ U.T  # [b, s, r] * [b, s, r] -> [b, s, out]
 
         return h
 
-    def forward(self, x: Float[Tensor, 'b s h'], *args: Any, **kwargs: Any) -> Float[Tensor, 'b s h']:
+    def forward(self, x: Float[Tensor, '...'], *args: Any, **kwargs: Any) -> Float[Tensor, '...']:
         previous_dtype = x.dtype
         
         # Use injected cache from Coconut.recursion_context() if available
@@ -335,18 +384,40 @@ class TRMSvftLayer(BaseTunerLayer):
             if not self.active_adapters:
                 return self.base_layer(x, *args, **kwargs).to(previous_dtype)
 
-            base_out = self.base_layer(x, *args, **kwargs)
-            add_out = torch.zeros_like(base_out)
+            # Check mode from first active adapter
+            adapter = self.active_adapters[0]
+            mode = self.svft_configs[adapter].svft_mode if adapter in self.svft_configs else "replace_add"
+            
+            if mode.startswith("replace_"):
+                # Replacement mode - compute x @ (U @ S_eff @ V.T).T directly
+                # This replaces the base layer output entirely (like original SVFT)
+                result = None
+                for adapter in self.active_adapters:
+                    if adapter not in self.svft_u_init:
+                        continue
 
-            for adapter in self.active_adapters:
-                if adapter not in self.svft_u:
-                    continue
-
-                h = self.get_delta(x, adapter)
+                    h = self.get_delta(x, adapter)
+                    
+                    if result is None:
+                        result = h
+                    else:
+                        result += h  # Multiple adapters (unlikely)
                 
-                add_out += h
+                if result is None:
+                    result = self.base_layer(x, *args, **kwargs)
+            else:
+                # Adapter mode - add delta to base layer output
+                base_out = self.base_layer(x, *args, **kwargs)
+                add_out = torch.zeros_like(base_out)
 
-            result = base_out + add_out.to(base_out.dtype)
+                for adapter in self.active_adapters:
+                    if adapter not in self.svft_u_init:
+                        continue
+
+                    h = self.get_delta(x, adapter)
+                    add_out += h
+
+                result = base_out + add_out.to(base_out.dtype)
 
         result = result.to(previous_dtype)
         return result
@@ -377,7 +448,7 @@ class TRMSvftLinear(nn.Module, TRMSvftLayer):
         self._active_adapter = adapter_name
         self.update_layer(adapter_name, svft_config=svft_config, **kwargs)
 
-    def forward(self, hidden_states: Float[Tensor, 'b s h'], *args: Any, **kwargs: Any) -> Float[Tensor, 'b s h']:
+    def forward(self, hidden_states: Float[Tensor, '...'], *args: Any, **kwargs: Any) -> Float[Tensor, '...']:
         """Forward pass - delegates to TRMSvftLayer.forward"""
         return TRMSvftLayer.forward(self, hidden_states, *args, **kwargs)
 

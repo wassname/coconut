@@ -186,7 +186,8 @@ class SVFTLayer(nn.Module):
 
         # TODO also add a multiplicative mode
         # TODO consider a delora style lambda regularization https://github.com/ExplainableML/DeLoRA http://r.jina.ai/https://arxiv.org/pdf/2503.18225
-        s_eff = s0 + sd
+        # Here we diverse from SVFT paper, which replaces the output hidden states and weights. We additively adjust the singular values instead.
+        s_eff = s0 * sd
         return s_eff
 
     def get_weights(self):

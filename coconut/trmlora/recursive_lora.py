@@ -198,7 +198,7 @@ class TRMLoraLayer(LoraLayer):
 
                 # Project INPUT (not output) down to low-rank via lora_A
                 # Standard LoRA uses the layer input, not output
-                x_down = self.lora_A[adapter](self.lora_dropout[adapter](x))  # [b, s, r]
+                x_down = self.lora_A[adapter](self.lora_dropout[adapter](hidden_states))  # [b, s, r]
                 # NOTE lora_a never gets grad, so it 
                 
                 # For TRM, use last token's projection as context

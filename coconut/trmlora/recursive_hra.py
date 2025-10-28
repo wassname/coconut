@@ -35,6 +35,7 @@ class TRMHraAConfig(HRAConfig):
     update_mode: str = field(default="hra", metadata={"help": "Update mode: 'hra'"})
     transcoder_layers: int = field(default=2, metadata={"help": "Number of transcoder layers"})
     cycles: int = field(default=1, metadata={"help": "Additional refinement cycles"})
+    apply_GS: bool = field(default=False, metadata={"help": "Whether to apply Gram-Schmidt orthogonalization"})
 
     def __post_init__(self):
         super().__post_init__()
