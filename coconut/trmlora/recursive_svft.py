@@ -290,19 +290,19 @@ class TRMSvftLayer(BaseTunerLayer):
                 else:
                     # TRM recursion mode
                     # Project to singular value space
-                    h = x @ V.T  # [b, s, r]
+                    h_s = x @ V.T  # [b, s, r]
                     
                     # For diagonal SVFT, k=r, so context is full singular value projection
-                    context = h  # [b, s, r]
+                    context = h_s  # [b, s, r]
                     b = context.shape[0]
                     
                     # Initialize or retrieve zH and zL in r_dim (singular value space)
                     zL = recursion_cache.get('zL', None)
                     if zL is None:
-                        zL = self.svft_zL_init[adapter].unsqueeze(0).expand(b, -1).to(h.device)
+                        zL = self.svft_zL_init[adapter].unsqueeze(0).expand(b, -1).to(x.device)
                     zH = recursion_cache.get('zH', None)
                     if zH is None:
-                        zH = self.svft_zH_init[adapter].unsqueeze(0).expand(b, -1).to(h.device)
+                        zH = self.svft_zH_init[adapter].unsqueeze(0).expand(b, -1).to(x.device)
                     
                     # TRM refines all r singular value deltas
                     zLs, zHs = self.trm(adapter, zL, zH, context)
@@ -315,9 +315,9 @@ class TRMSvftLayer(BaseTunerLayer):
                 sd_values = zHs * F.sigmoid(self.svft_gate[adapter])
                 s_eff = self.get_sparse_s_eff(adapter, sd_values[:, -1, :])
                 
-                # Complete transformation: h @ V @ s_eff @ U^T
-                # h = (h @ V.T) @ s_eff.T @ U.T
-                h = dense_sparse_mm((h @ V.T), s_eff.t()) @ U.T
+                # Complete transformation: x @ V.T @ s_eff @ U.T
+                # h_s is already x @ V.T from line 279
+                h = dense_sparse_mm(h_s, s_eff.t()) @ U.T
                 
                 add_out += h
 
