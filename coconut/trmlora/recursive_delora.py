@@ -175,7 +175,7 @@ class TRMDeloraLayer(DeloraLayer):
                 # 1. Down-project via A: (x * w_norm) @ A.T
                 h = F.linear(x_d * self.delora_w_norm[adapter], self.delora_A[adapter])  # [b, s, r]
 
-                # 2. Normalize by A (remove A's magnitude, get unit directions)
+                # 2. Normalize by A (remove A's magnitude, get unit directions, per row)
                 An = torch.clamp(self.delora_A[adapter].norm(dim=1), min=1e-4)  # [r]
                 h_normalized = h / An.unsqueeze(0).unsqueeze(0)  # [b, s, r] - unit norm per component
                     
@@ -241,7 +241,7 @@ class TRMDeloraLayer(DeloraLayer):
 
                     # zH = zH.unsqueeze(1)  # [b, 1, r]
 
-                # 4. Apply magnitude control (lambda/r, compensate for B)
+                # 4. Apply magnitude control (lambda/r, compensate for B, columnwise)
                 Bn = torch.clamp(self.delora_B[adapter].norm(dim=0), min=1e-4)  # [r]
                 scaling = (self.delora_lambda[adapter] / self.r[adapter]) / Bn  # [r]
                 h = zHs * scaling  # [b, 1, r] - refined direction * controlled magnitude

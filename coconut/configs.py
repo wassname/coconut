@@ -80,8 +80,8 @@ class TRMConfig(BaseConfig):
     epochs_per_stage: int = 8
     
     scheduler: str = "linear"
-    lr: float = 5e-4 # 1e-4 in paper
-    weight_decay: float = 0.01 # 1 and 0.1 in TRM paper. 0.01 in COCONUT paper. 
+    lr: float = 6e-4 # 1e-4 in paper
+    weight_decay: float = 0.03 # 1 and 0.1 in TRM paper. 0.01 in COCONUT paper. 
     
     max_size: int = 5_000
     batch_size_training: int = 12

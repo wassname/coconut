@@ -43,7 +43,7 @@ def trunc_normal_init_(tensor: torch.Tensor, std: float = 1.0, lower: float = -2
     return tensor
 
 
-def rms_norm(hidden_states: torch.Tensor, variance_epsilon: float) -> torch.Tensor:
+def rms_norm(hidden_states: torch.Tensor, variance_epsilon: float = 1e-5) -> torch.Tensor:
     input_dtype = hidden_states.dtype
     hidden_states = hidden_states.to(torch.float32)
 

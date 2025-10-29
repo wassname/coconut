@@ -53,6 +53,10 @@ class TRMSvftAConfig(PeftConfig):
         default=False, 
         metadata={"help": "Fill beyond r with random orthonormal (disabled; tail replaces it)"}
     )
+    learnable_u: bool = field(
+        default=True,
+        metadata={"help": "Make U learnable via delta parameterization (U_eff = U_init + U_delta). Weight decay pulls U_delta→0."}
+    )
     svft_mode: Literal["replace_add", "replace_mul", "adapter_add", "adapter_mult"] = field(
         default="adapter_add",
         metadata={
@@ -116,18 +120,18 @@ class TRMSvftLayer(BaseTunerLayer):
     Code from https://github.com/VijayLingam95/SVFT/blob/8303115d45868712f952e6a847735bb59b1a9f18/svft/svft_layers.py
     """
     
-    adapter_layer_names = ("svft_lambda", "svft_l_nets", "svft_zL_init", "svft_zH_init", )
-    other_param_names = ("svft_u", "svft_v", "svft_s0", "svft_configs")
+    adapter_layer_names = ("svft_lambda", "svft_l_nets", "svft_zL_init", "svft_zH_init", "svft_u_delta")
+    other_param_names = ("svft_u_init", "svft_v", "svft_s0", "svft_configs")
 
     def __init__(self, base_layer: nn.Module, **kwargs) -> None:
         self.base_layer = base_layer
         # BaseTunerLayer.__init__(self, base_layer)
         
         # SVFT components (per adapter)
-        self.svft_u = nn.ParameterDict({})
+        self.svft_u_init = BufferDict({})  # Frozen SVD U (init)
+        self.svft_u_delta = nn.ParameterDict({})  # Learnable delta: U_eff = U_init + U_delta
         self.svft_v = nn.ParameterDict({})
         self.svft_s0 = BufferDict({})
-        # self.svft_sd = nn.ParameterDict({})
         self.svft_lambda = nn.ParameterDict({})
         
         # TRM components (single for combined r)
@@ -153,7 +157,7 @@ class TRMSvftLayer(BaseTunerLayer):
         """
         Initialize SVFT adapter on this layer with hybrid SVD merging (concat principal + tail bases).
         """
-        if adapter_name in self.svft_u:
+        if adapter_name in self.svft_u_init:
             return  # Already initialized
         
         self.svft_configs[adapter_name] = svft_config
@@ -222,7 +226,14 @@ class TRMSvftLayer(BaseTunerLayer):
             r = S.shape[0]
         
         # Store combined U, Vh, S
-        self.svft_u[adapter_name] = nn.Parameter(U.clone().detach().contiguous(), requires_grad=True) # Learnable U, but not V
+        # U_init is frozen (SVD basis), U_delta is learnable (task adaptation)
+        # Effective U = U_init + U_delta
+        # Standard weight decay on U_delta pulls it to 0 → U_eff → U_init (no custom logic needed!)
+        self.svft_u_init[adapter_name] = U.clone().detach().contiguous()  # Frozen
+        self.svft_u_delta[adapter_name] = nn.Parameter(
+            torch.zeros_like(U), 
+            requires_grad=svft_config.learnable_u
+        )
         self.svft_v[adapter_name] = nn.Parameter(Vh.clone().detach().contiguous(), requires_grad=False)
         self.svft_s0[adapter_name] = S.clone().detach().contiguous()
         
@@ -273,35 +284,41 @@ class TRMSvftLayer(BaseTunerLayer):
         )
 
     def get_delta(self, x, adapter: str) -> torch.Tensor:
+        """
+        Compute adapter delta with ΔU parameterization.
+        U_effective = U_init + U_delta (weight decay on U_delta naturally pulls U → U_init)
+        """
 
         if self._recursion_cache is None:
             recursion_cache = {}
         else:
             recursion_cache = self._recursion_cache
 
-        U = self.svft_u[adapter]
+        # Effective U = U_init (frozen SVD) + U_delta (learnable adaptation)
+        U = self.svft_u_init[adapter] + self.svft_u_delta[adapter]
         V = self.svft_v[adapter]
+        
+        # DeLoRA pattern: Normalize INPUT by down-projection matrix norm
+        # Down-project to singular value space
+        x_v = x @ V.T  # [b, s, r]
+        
+        # Normalize by V's magnitude (like DeLoRA's A norm)
+        Vn = torch.clamp(V.norm(dim=1), min=1e-6)  # [r] - norm of each row of V
+        x_v_normalized = x_v / Vn.unsqueeze(0).unsqueeze(0)  # [b, s, r] - unit norm per component
         
         # Check if we're in steering mode (post-latent)
         steering_mode = recursion_cache.get('steering_mode', False)
-
-        # Project input x into right singular vector space (V space)
-        x_v = x @ V.T  # [b, s, r] - x projected onto V's rows
         
         if steering_mode:
             # Don't run TRM, just apply cached refined sd
             zH = recursion_cache.get('zH')
             zL = recursion_cache.get('zL')
-
-            # TRM refines direction (operates on normalized space)
-            zLs, zHs = self.trm(adapter, zL, zH, x_v, h_cycles=1)  # zH is refined 1 time
+            zLs, zHs = self.trm(adapter, zL, zH, x_v_normalized, h_cycles=1)
         else:
             # TRM recursion mode
-            
-            # For diagonal SVFT, k=r, so context is full singular value projection
-            b = x_v.shape[0]
+            b = x_v_normalized.shape[0]
 
-            # Initialize or retrieve zH and zL in r_dim (singular value space)
+            # Initialize or retrieve zH and zL in r_dim
             zL = recursion_cache.get('zL', None)
             if zL is None:
                 zL = self.svft_zL_init[adapter].unsqueeze(0).expand(b, -1).to(x.device)
@@ -309,43 +326,58 @@ class TRMSvftLayer(BaseTunerLayer):
             if zH is None:
                 zH = self.svft_zH_init[adapter].unsqueeze(0).expand(b, -1).to(x.device)
             
-            # TRM refines all r singular value deltas (principal + tail combined)
-            zLs, zHs = self.trm(adapter, zL, zH, x_v[:, -1:])
+            # TRM refines in normalized space (like DeLoRA)
+            zLs, zHs = self.trm(adapter, zL, zH, x_v_normalized[:, -1:])
             
             # Update cache for next layer
             recursion_cache['zL'] = zLs[:, -1, :]  # [b, r]
             recursion_cache['zH'] = zHs[:, -1, :]  # [b, r]
             
-        # Apply refined singular values (diagonal matrix - no sparse ops needed)
-        # Normalize zHs for decoupling (DeLoRA-style): direction separate from magnitude
-        zHs_norm = zHs.norm(dim=-1, keepdim=True) + 1e-6
-        zHs_normalized = zHs / zHs_norm  # Unit norm directions [b , r, r]
-        
-        # DeLoRA-style scaling: use lambda for strength control
-        base_scale = self.svft_s0[adapter].mean()  # Layer-specific magnitude
-        r = self.svft_s0[adapter].shape[0]  # Rank (for /r normalization)
-        
-        # Learned lambda controls overall magnitude directly
+        # DeLoRA pattern: Scale OUTPUT by lambda and compensate for up-projection matrix norm
+        # Don't normalize zHs - it contains learned per-component magnitudes!
+        S0 = self.svft_s0[adapter]  # [r] - base singular values
         lambda_val = self.svft_lambda[adapter]
-        scaling = (lambda_val / r) * base_scale  # DeLoRA-inspired: lambda/r * layer scale
-        # TODO consider s_eff = s0 * torch.exp(alpha * sd)
-        sd_values = torch.exp(zHs_normalized * scaling)  # [b, s, r] - pure direction * controlled magnitude
+        r = V.shape[0]
         
+        # Compensate for U's magnitude (like DeLoRA's B norm)
+        Un = torch.clamp(U.norm(dim=0), min=1e-6)  # [r] - norm of each column of U
+        scaling = (lambda_val / r) / Un  # [r] - per-component
+        
+        # Apply mode-specific transformation
         mode = self.svft_configs[adapter].svft_mode
+        S0_expanded = S0.unsqueeze(0).unsqueeze(0)  # [1, 1, r]
+        scaling_expanded = scaling.unsqueeze(0).unsqueeze(0)  # [1, 1, r]
+        
         if mode == "adapter_add":
-            # Pure delta for addition to base
-            s_eff_diag = sd_values  # [b, s, r]
+            # Additive delta: exp for per-component expressiveness
+            sd = torch.exp(zHs * scaling_expanded)  # [b, s, r]
+            s_eff = sd * S0_expanded  # Scale by base magnitude
+            
         elif mode == "adapter_mult":
-            # Multiplicative over s0: sd * s0 (delta scales base singular values)
-            s_eff_diag = sd_values * self.svft_s0[adapter].unsqueeze(0).unsqueeze(0)  # [b, s, r] * [1, 1, r]
+            # Multiplicative delta: softplus for smooth positive scaling
+            sd = F.softplus(zHs * scaling_expanded)
+            s_eff = sd * S0_expanded
+            
         elif mode == "replace_add":
-            # Additive: s0 + sd
-            s_eff_diag = self.svft_s0[adapter].unsqueeze(0).unsqueeze(0) + sd_values  # [1, 1, r] + [b, s, r]
+            # Replace via addition: softplus for positive values
+            sd = F.softplus(zHs * scaling_expanded)
+            s_eff = S0_expanded + sd
+            
         elif mode == "replace_mul":
-            # Multiplicative: s0 * (1 + sd)
-            s_eff_diag = self.svft_s0[adapter].unsqueeze(0).unsqueeze(0) * (1.0 + sd_values)  # [1, 1, r] * [b, s, r]
+            # Replace via multiplication: softplus for positive scaling factor
+            sd = F.softplus(zHs * scaling_expanded)
+            s_eff = S0_expanded * (1.0 + sd)
+            
         else:
             raise ValueError(f"Unknown svft_mode: {mode}")
+        
+        # Final safety clamp
+        if mode.startswith("replace_"):
+            s_eff_diag = torch.clamp(s_eff, min=1e-6)  # Ensure positive for valid SVD
+        else:
+            # Adapter modes: bound magnitude to prevent instability
+            max_magnitude = 10.0 * S0_expanded
+            s_eff_diag = torch.clamp(s_eff, min=-max_magnitude, max=max_magnitude)
         
         # Complete transformation: x @ V.T @ diag(s_eff) @ U.T
         # x_v is already x @ V.T: [b, s, r]
@@ -379,7 +411,7 @@ class TRMSvftLayer(BaseTunerLayer):
                 # This replaces the base layer output entirely (like original SVFT)
                 result = None
                 for adapter in self.active_adapters:
-                    if adapter not in self.svft_u:
+                    if adapter not in self.svft_u_init:
                         continue
 
                     h = self.get_delta(x, adapter)
@@ -397,7 +429,7 @@ class TRMSvftLayer(BaseTunerLayer):
                 add_out = torch.zeros_like(base_out)
 
                 for adapter in self.active_adapters:
-                    if adapter not in self.svft_u:
+                    if adapter not in self.svft_u_init:
                         continue
 
                     h = self.get_delta(x, adapter)

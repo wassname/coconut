@@ -117,6 +117,10 @@ def trm_recursion(
     zHs = repeat(zH, 'b r -> (b s) 1 r', s=s)
     context_flat = rearrange(context, 'b s r -> (b s) 1 r')
 
+    # Normalize context to mean≈0, std=1 to match TRM's initialized state (trunc_normal with std=1)
+    # TRM inits at mean=0; SwiGLU creates positive bias during forward passes
+    context_flat = rms_norm(context_flat, variance_epsilon=1e-5)
+
     def latent_recursion(hs, zH, zL, n=1):
         for _ in range(n):  # latent reasoning with context
             zL = l_net(zL, hs + zH)
