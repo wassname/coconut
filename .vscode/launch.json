@@ -40,6 +40,17 @@
       "env": {
         // "DEBUG": "true",
       }
+    },
+    {
+      "name": "pytest",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "pytest",
+      "args": [
+        
+      ],
+      "console": "integratedTerminal",
+      "justMyCode": false
     }
   ]
 }

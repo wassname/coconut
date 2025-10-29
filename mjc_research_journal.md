@@ -2631,3 +2631,27 @@ Ah... I had a really good version half way through from exp(sd) and learnable U
 ah! once again adapter_add really wants exp! it learns really poorly initially without it, how strange. Like perhaps the model just really wants to be able to express very large S value to make a steering diff
 
 or are the other simpler ways to make tiny recursive latent zH more expressive for the output steering step I guess? learn a linear transform as I removed the output head in trm? Or something else, idk
+
+ok I just added an output layer since zH is by nature small, but the output may need to be bug
+
+
+# Results: trmsvft-qwen3-0.6b_20251029-091437
+
+
+best run yet in terms of loss !!
+
+{'project': 'coconut', 'save_path': 'outputs/', 'name': 'trmsvft-qwen3-0.6b', 'model_id': 'suayptalha/Qwen3-0.6B-Math-Expert', 'only_eval': False, 'load_model_path': '', 'resume_epochs': 2, 'use_position_ids': True, 'bf16': True, 'bf16_weight': False, 'opt_8b': False, 'load_in_4bit': False, 'load_in_8bit': False, 'cot_epochs': 0, 'epochs_per_stage': 8, 'max_latent_stage': 3, 'num_epochs': 6, 'batch_size_training': 12, 'gradient_accumulation_steps': 3, 'lr': 0.001, 'weight_decay': 0.03, 'grad_clip': 10.0, 'scheduler': 'linear', 'debug': False, 'seed': 42, 'reset_optimizer': False, 'loss_seq_vcr': False, 'collect_hs': False, 'max_size': 5000, 'c_thought': 1, 'pad_latent_to_max': True, 'uniform_prob': 0.0, 'train_path': 'data/gsm_train.json', 'val_path': 'data/gsm_valid.json', 'system_prompt': '', 'latent_token_id': None, 'bot_token_id': None, 'eot_token_id': None, 'eos_token_id': None, 'skip_stage_zero': True, 'eval_first_epoch': False, 'loss_nll_ratio_margin': False, 'trm_h_cycles': 3, 'trm_l_cycles': 6, 'trm_l_layers': 2, 'trm_num_heads': 4, 'trm_expansion': 2.0, 'trm_persistent_steering': True, 'layers_spacing_adapter': 5, 'layers_start_adapter': 0.3, 'layers_end_adapter': 0.95, 'target_modules_pattern': '.+\\.(gate_proj).*$', 'use_trm_svft': True, 'adapter_fill_orthonormal': False, 'adapter_principal_rank': 64, 'adapter_tail_rank': 32, 'adapter_svft_mode': 'adapter_add'}
+|    |   eval/acc |   eval/cot_em |   eval/ratios |   epoch |   stage |   train/minutes |   train/loss |   eval/loss |
+|---:|-----------:|--------------:|--------------:|--------:|--------:|----------------:|-------------:|------------:|
+|  0 |     0      |             0 |        0.8497 |       2 |       1 |          5.9709 |     0.274186 |      0.4745 |
+|  1 |     0      |             0 |        0.8814 |       3 |       1 |          5.9252 |     0.389702 |      0.4206 |
+|  2 |     0      |             0 |        0.886  |       4 |       1 |          5.8507 |     0.350984 |      0.4017 |
+|  3 |     0.0059 |             0 |        0.909  |       5 |       1 |          5.8807 |     0.197725 |      0.3944 |
+
+# 2025-10-29 recap
+
+Ok overall
+- output head after TRM is important for adapter_add
+- with svft learning U was important
+- and having some way to include the tail seems important otherwise we are throwing away valid and important directions
+- it seemed important to have persistent but dynamic steering, but I need to ablate this

@@ -76,7 +76,7 @@ class TRMConfig(BaseConfig):
     resume_epochs: int = 2
     cot_epochs: int = 0
     skip_stage_zero: bool = True  # skip stage 0 : <start_latent><end_latent> training with 0 latent tokens
-    num_epochs: int = 6
+    num_epochs: int = 8
     epochs_per_stage: int = 8
     
     scheduler: str = "linear"

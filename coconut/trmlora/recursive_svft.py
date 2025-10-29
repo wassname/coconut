@@ -425,7 +425,7 @@ class TRMSvftLayer(BaseTunerLayer):
                     if result is None:
                         result = h
                     else:
-                        result += h  # Multiple adapters (unlikely)
+                        result += h  # Multiple oadapters (unlikely)
                 
                 if result is None:
                     result = self.base_layer(x, *args, **kwargs)

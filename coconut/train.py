@@ -123,7 +123,8 @@ def create_optimizer(model, configs, warmup_fraction=0.1, opt_steps=None, cycles
 
 def train(conf: BaseConfig):
     config_dict = asdict(conf)
-    logger.info(f"Config: {config_dict}")
+    config_dict['__type__'] = str(type(conf))
+    logger.info(f"Config: {type(conf)} {config_dict}")
 
     timestamp = pd.Timestamp.now().strftime("%Y%m%d-%H%M%S")
     run_name = f"{conf.name}_{timestamp}"
@@ -497,6 +498,7 @@ def train(conf: BaseConfig):
     except KeyboardInterrupt:
         logger.warning("Training interrupted by user")
 
+    # TODO also print cli
     print(f"\n# Results: {run_name}")
     print(config_dict)
     df_res = pd.DataFrame(res)

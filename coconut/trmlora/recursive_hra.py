@@ -62,11 +62,12 @@ class TRMHraLayer(HRALayer):
         "hra_output_head",
     )
     # All names of other parameters that may contain adapter-related parameters
+    # Use HRA-prefixed names to match HRALayer storage (hra_r, hra_apply_GS, etc.)
     other_param_names = (
-        "r",
-        "apply_GS",
-        "zL_init",
-        "zH_init",
+        "hra_r",
+        "hra_apply_GS",
+        "hra_zL_init",
+        "hra_zH_init",
         "hra_alpha",
     )
 
@@ -163,12 +164,21 @@ class TRMHraLayer(HRALayer):
     ) -> Float[Tensor, 'b s h']:
         previous_dtype = hidden_states.dtype
 
-        # Compute standard HRA output (handles disable_adapters and merged)
-        result = super().forward(hidden_states, *args, **kwargs)
+        # Follow the same pattern as other adapter layers: call base layer and
+        # handle merged/disabled states. HRALayer does not implement a forward
+        # method we can call via super(), so call the base layer directly.
+        if self.disable_adapters:
+            if self.merged:
+                self.unmerge()
+            result = self.get_base_layer()(hidden_states, *args, **kwargs)
+        elif self.merged:
+            result = self.get_base_layer()(hidden_states, *args, **kwargs)
+        else:
+            if not self.active_adapters:
+                return self.get_base_layer()(hidden_states, *args, **kwargs).to(previous_dtype)
 
-        if self.disable_adapters or not self.active_adapters:
-            result = result.to(previous_dtype)
-            return result
+            # Run base layer to get initial output
+            result = self.get_base_layer()(hidden_states, *args, **kwargs)
 
         # Use injected cache from Coconut.recursion_context() if available
         if self._recursion_cache is None:
@@ -210,10 +220,12 @@ class TRMHraLayer(HRALayer):
             input_delta = (opt_u @ zH.T).T  # [b, in_features]
 
             # Project through base weight to output delta, broadcast across sequence
-            delta_hidden = base_layer.weight @ input_delta.unsqueeze(1)  # [b, 1, out_features]
+            # base_layer.weight is [out, in], input_delta.unsqueeze(1) is [b, 1, in]
+            # compute (b,1,out) via (b,1,in) @ (in, out)
+            delta_hidden = input_delta.unsqueeze(1) @ base_layer.weight.T  # [b, 1, out_features]
 
-            # Apply LoRA-style scaling (alpha / r) to the refinement delta
-            scaling = self.hra_alpha[adapter] / self.r[adapter]
+            # Apply HRA-style scaling (alpha / r) to the refinement delta
+            scaling = self.hra_alpha[adapter] / self.hra_r[adapter]
             delta = delta_hidden * scaling
             
             result += delta
