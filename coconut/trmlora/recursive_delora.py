@@ -59,6 +59,7 @@ class TRMDeloraLayer(DeloraLayer):
         "delora_B",
         "delora_lambda",
         "delora_l_nets",
+        "delora_output_head",
     )
     # All names of other parameters that may contain adapter-related parameters
     other_param_names = (
@@ -76,6 +77,8 @@ class TRMDeloraLayer(DeloraLayer):
         self.delora_zH_init = BufferDict({})
         self.delora_configs: Dict[str, TRMDeloraAConfig] = {}
         self.delora_l_nets = nn.ModuleDict({})
+        # Per-adapter output heads for mixing zH
+        self.delora_output_head = nn.ModuleDict({})
         
         # Marker for Coconut to find TRM layers
         self._recursion_cache = None  # Injected by Coconut.recursion_context()
@@ -127,13 +130,17 @@ class TRMDeloraLayer(DeloraLayer):
         self.delora_zL_init[adapter_name] = zL
         self.delora_zH_init[adapter_name] = zH
 
+        # Initialize output head for zH
+        self.delora_output_head[adapter_name] = nn.Linear(r, r, bias=False)
+        nn.init.trunc_normal_(self.delora_output_head[adapter_name].weight, std=0.02)
+
     def trm(self, adapter_name: str, zL, zH, context_hs, h_cycles=None):
         """Wrapper around trm_recursion with adapter-specific config."""
         trm_config = self.delora_configs[adapter_name]
         if h_cycles is None:
             h_cycles = trm_config.h_cycles
         
-        return trm_recursion(
+        zLs, zHs = trm_recursion(
             l_net=self.delora_l_nets[adapter_name],
             zL=zL,
             zH=zH,
@@ -141,6 +148,8 @@ class TRMDeloraLayer(DeloraLayer):
             l_cycles=trm_config.l_cycles,
             h_cycles=h_cycles,
         )
+        zHs = self.delora_output_head[adapter_name](zHs)
+        return zLs, zHs
 
 
     def forward(self, x: Float[Tensor, 'b s h'], *args: Any, **kwargs: Any) -> Float[Tensor, 'b s h']:

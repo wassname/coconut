@@ -120,7 +120,7 @@ class TRMSvftLayer(BaseTunerLayer):
     Code from https://github.com/VijayLingam95/SVFT/blob/8303115d45868712f952e6a847735bb59b1a9f18/svft/svft_layers.py
     """
     
-    adapter_layer_names = ("svft_lambda", "svft_l_nets", "svft_zL_init", "svft_zH_init", "svft_u_delta")
+    adapter_layer_names = ("svft_lambda", "svft_l_nets", "svft_zL_init", "svft_zH_init", "svft_u_delta", "svft_output_head")
     other_param_names = ("svft_u_init", "svft_v", "svft_s0", "svft_configs")
 
     def __init__(self, base_layer: nn.Module, **kwargs) -> None:
@@ -133,7 +133,9 @@ class TRMSvftLayer(BaseTunerLayer):
         self.svft_v = nn.ParameterDict({})
         self.svft_s0 = BufferDict({})
         self.svft_lambda = nn.ParameterDict({})
-        
+        # Per-adapter output heads (modules) for mixing zH
+        self.svft_output_head = nn.ModuleDict({})
+
         # TRM components (single for combined r)
         self.svft_zL_init = nn.ParameterDict({})
         self.svft_zH_init = nn.ParameterDict({})
@@ -226,9 +228,6 @@ class TRMSvftLayer(BaseTunerLayer):
             r = S.shape[0]
         
         # Store combined U, Vh, S
-        # U_init is frozen (SVD basis), U_delta is learnable (task adaptation)
-        # Effective U = U_init + U_delta
-        # Standard weight decay on U_delta pulls it to 0 → U_eff → U_init (no custom logic needed!)
         self.svft_u_init[adapter_name] = U.clone().detach().contiguous()  # Frozen
         self.svft_u_delta[adapter_name] = nn.Parameter(
             torch.zeros_like(U), 
@@ -267,6 +266,10 @@ class TRMSvftLayer(BaseTunerLayer):
         torch.nn.init.trunc_normal_(zL, std=1.0)
         self.svft_zL_init[adapter_name] = nn.Parameter(zL, requires_grad=True)
         self.svft_zH_init[adapter_name] = nn.Parameter(zH, requires_grad=True)
+
+        # Initialize output head for zH
+        self.svft_output_head[adapter_name] = nn.Linear(k, k, bias=False)
+        nn.init.trunc_normal_(self.svft_output_head[adapter_name].weight, std=0.02)
 
     def trm(self, adapter_name: str, zL, zH, context_hs, h_cycles=None):
         """Wrapper around trm_recursion with adapter-specific config."""
@@ -314,6 +317,7 @@ class TRMSvftLayer(BaseTunerLayer):
             zH = recursion_cache.get('zH')
             zL = recursion_cache.get('zL')
             zLs, zHs = self.trm(adapter, zL, zH, x_v_normalized, h_cycles=1)
+            zHs = self.svft_output_head[adapter](zHs)  # Apply head in steering
         else:
             # TRM recursion mode
             b = x_v_normalized.shape[0]
@@ -328,6 +332,7 @@ class TRMSvftLayer(BaseTunerLayer):
             
             # TRM refines in normalized space (like DeLoRA)
             zLs, zHs = self.trm(adapter, zL, zH, x_v_normalized[:, -1:])
+            zHs = self.svft_output_head[adapter](zHs)  # Apply head after TRM
             
             # Update cache for next layer
             recursion_cache['zL'] = zLs[:, -1, :]  # [b, r]
@@ -351,6 +356,7 @@ class TRMSvftLayer(BaseTunerLayer):
         if mode == "adapter_add":
             # Additive delta: exp for per-component expressiveness
             sd = torch.exp(zHs * scaling_expanded)  # [b, s, r]
+            # sd = (zHs * scaling_expanded)  # [b, s, r]
             s_eff = sd * S0_expanded  # Scale by base magnitude
             
         elif mode == "adapter_mult":

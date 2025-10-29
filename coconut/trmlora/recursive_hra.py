@@ -36,6 +36,8 @@ class TRMHraAConfig(HRAConfig):
     transcoder_layers: int = field(default=2, metadata={"help": "Number of transcoder layers"})
     cycles: int = field(default=1, metadata={"help": "Additional refinement cycles"})
     apply_GS: bool = field(default=False, metadata={"help": "Whether to apply Gram-Schmidt orthogonalization"})
+    # alias when adapter config args are built from conf keys like 'hra_apply_GS'
+    hra_apply_GS: Optional[bool] = field(default=None, metadata={"help": "Alias for apply_GS when passed from config"})
 
     def __post_init__(self):
         super().__post_init__()
@@ -56,7 +58,8 @@ class TRMHraLayer(HRALayer):
     # All names of layers that may contain (trainable) adapter weights
     adapter_layer_names = (
         "hra_u",
-        "l_nets",
+        "hra_l_nets",
+        "hra_output_head",
     )
     # All names of other parameters that may contain adapter-related parameters
     other_param_names = (
@@ -73,9 +76,13 @@ class TRMHraLayer(HRALayer):
         self.hra_zL_init = BufferDict({})
         self.hra_zH_init = BufferDict({})
         self.hra_configs: Dict[str, TRMHraAConfig] = {}
+        # store under both names so PEFT's adapter discovery finds it ('hra_l_nets' legacy and 'l_nets' new)
         self.hra_l_nets = nn.ModuleDict({})
+        self.l_nets = self.hra_l_nets
+        # Per-adapter output heads for mixing zH
+        self.hra_output_head = nn.ModuleDict({})
         self.hra_alpha: Dict[str, float] = {}
-        
+
         # Marker for Coconut to find TRM layers
         self._recursion_cache = None  # Injected by Coconut.recursion_context()
     
@@ -109,7 +116,7 @@ class TRMHraLayer(HRALayer):
 
         device = self.get_base_layer().weight.device
         
-        self.hra_l_nets[adapter_name] = L_net(
+        self.l_nets[adapter_name] = L_net(
             r,
             hra_config.l_layers,
             hra_config.num_heads,
@@ -124,6 +131,10 @@ class TRMHraLayer(HRALayer):
         self.hra_zL_init[adapter_name] = zL
         self.hra_zH_init[adapter_name] = zH
 
+        # Initialize output head
+        self.hra_output_head[adapter_name] = nn.Linear(r, r, bias=False)
+        nn.init.trunc_normal_(self.hra_output_head[adapter_name].weight, std=0.02)
+
     def trm(self, adapter_name: str, zL: Float[Tensor, 'b h'], zH: Float[Tensor, 'b h'], context_hs: Float[Tensor, 'b h'], h_cycles=None) -> tuple[Float[Tensor, 'b h'], Float[Tensor, 'b h']]:
         """Wrapper around trm_recursion with adapter-specific config."""
         hra_config = self.hra_configs[adapter_name]
@@ -134,15 +145,14 @@ class TRMHraLayer(HRALayer):
         context = context_hs.unsqueeze(1)  # [b, 1, r]
         
         zLs, zHs = trm_recursion(
-            l_net=self.hra_l_nets[adapter_name],
+            l_net=self.l_nets[adapter_name],
             zL=zL,
             zH=zH,
             context=context,
             l_cycles=hra_config.l_cycles,
             h_cycles=h_cycles,
         )
-        
-        # Return last token: [b, s, r] -> [b, r]
+        zHs = self.hra_output_head[adapter_name](zHs)
         return zLs[:, -1, :], zHs[:, -1, :]
 
     def forward(
@@ -181,7 +191,7 @@ class TRMHraLayer(HRALayer):
             opt_u = self.hra_u[adapter] / self.hra_u[adapter].norm(dim=0, keepdim=True)
 
             # Project last token hidden to low-rank r-dim using u as basis (parallel to A @ x_last)
-            context_hs = x[:, -1, :] @ opt_u  # [b, r]
+            context_hs = hidden_states[:, -1, :] @ opt_u  # [b, r]
             b = context_hs.shape[0]
 
             # Initialize or retrieve zH and zL in r_dim
@@ -194,6 +204,7 @@ class TRMHraLayer(HRALayer):
 
             # Run TRM recursion: trm(context_hs, zL, zH) -> refined zL, zH
             zL, zH = self.trm(adapter, zL, zH, context_hs)
+            zH = self.hra_output_head[adapter](zH)  # Apply head
 
             # Reconstruct input delta in span of u: u @ zH^T .T -> [b, in_features]
             input_delta = (opt_u @ zH.T).T  # [b, in_features]
@@ -280,17 +291,18 @@ class TRMHraModel(HRAModel):
             target_base_layer = target
 
         if isinstance(target_base_layer, torch.nn.Linear):
-            r = hra_config.r
-            apply_GS = hra_config.apply_GS
-            init_weights = hra_config.init_weights
+            # pop potential duplicates from kwargs to avoid multiple values for same arg
+            r = kwargs.pop('r', hra_config.r)
+            apply_GS = kwargs.pop('apply_GS', hra_config.apply_GS)
+            init_weights = kwargs.pop('init_weights', hra_config.init_weights)
             new_module = TRMHraLinear(
-                target, 
-                adapter_name, 
+                target,
+                adapter_name,
                 hra_config=hra_config,
                 r=r,
                 apply_GS=apply_GS,
                 init_weights=init_weights,
-                **kwargs
+                **kwargs,
             )
         else:
             raise ValueError(

@@ -75,6 +75,7 @@ class TRMLoraLayer(LoraLayer):
         "lora_l_nets",
         "lora_zL_init",
         "lora_zH_init",
+        "lora_output_head",
     )
     # All names of other parameters that may contain adapter-related parameters
     other_param_names = (
@@ -91,6 +92,8 @@ class TRMLoraLayer(LoraLayer):
         self.lora_zL_init = BufferDict({})
         self.lora_zH_init = BufferDict({})
         self.lora_l_nets = nn.ModuleDict({})
+        # Per-adapter output heads for mixing zH
+        self.lora_output_head = nn.ModuleDict({})
         self.lora_configs: Dict[str, TRMLoraAConfig] = {}
         
         # Marker for Coconut to find TRM layers
@@ -136,6 +139,10 @@ class TRMLoraLayer(LoraLayer):
         self.lora_zL_init[adapter_name] = zL
         self.lora_zH_init[adapter_name] = zH
 
+        # Initialize output head for zH mixing
+        self.lora_output_head[adapter_name] = nn.Linear(r, r, bias=False)
+        nn.init.trunc_normal_(self.lora_output_head[adapter_name].weight, std=0.02)
+
     def trm(self, adapter_name: str, zL: Float[Tensor, 'b h'], zH: Float[Tensor, 'b h'], context_hs: Float[Tensor, 'b h'], h_cycles=None) -> tuple[Float[Tensor, 'b h'], Float[Tensor, 'b h']]:
         """Wrapper around trm_recursion with adapter-specific config."""
         trm_config = self.lora_configs[adapter_name]
@@ -153,6 +160,9 @@ class TRMLoraLayer(LoraLayer):
             l_cycles=trm_config.l_cycles,
             h_cycles=h_cycles,
         )
+        
+        # Apply output head to mix zHs
+        zHs = self.lora_output_head[adapter_name](zHs)
         
         # Return last token: [b, s, r] -> [b, r]
         return zLs[:, -1, :], zHs[:, -1, :]
@@ -193,11 +203,7 @@ class TRMLoraLayer(LoraLayer):
                 if adapter not in self.lora_B:
                     continue
 
-                # FIXME add persistent steering ad in delora
-                # FIXME move to get_delta
-
                 # Project INPUT (not output) down to low-rank via lora_A
-                # Standard LoRA uses the layer input, not output
                 x_down = self.lora_A[adapter](self.lora_dropout[adapter](hidden_states))  # [b, s, r]
                 # NOTE lora_a never gets grad, so it 
                 
@@ -213,18 +219,36 @@ class TRMLoraLayer(LoraLayer):
                 if zH is None:
                     zH = self.lora_zH_init[adapter].unsqueeze(0).expand(b, -1).to(base_hidden.device)
 
-                # Run TRM recursion: trm(A @ x, zL, zH)
-                zL, zH = self.trm(adapter, zL, zH, context_hs)
+                # Check if we're in steering mode (post-latent)
+                steering_mode = recursion_cache.get('steering_mode', False)
+                if steering_mode:
+                    # Don't run TRM, just apply cached zH and output head
+                    zH = recursion_cache.get('zH')
+                    zL = recursion_cache.get('zL')
+                    zH = self.lora_output_head[adapter](zH)  # Apply head
 
-                # Up-project refined state via lora_B with standard LoRA scaling
-                delta = self.lora_B[adapter](zH) * self.scaling[adapter]  # [b, out_features]
-        
-                # Add to base output (broadcast across sequence)
-                result = result + delta.unsqueeze(1)  # [b, 1, out] broadcasts to [b, s, out], but it's only ever one token that we are processing with <latent>, so s=1
+                    # Up-project refined state via lora_B with standard LoRA scaling
+                    delta = self.lora_B[adapter](zH) * self.scaling[adapter]  # [b, out_features]
+            
+                    # Add to base output (broadcast across sequence)
+                    result = result + delta.unsqueeze(1)  # [b, 1, out], broadcasts to [b, s, out], but it's only ever one token that we are processing with <latent>, so s=1
 
-                # Update cache for next layer
-                recursion_cache['zL'] = zL
-                recursion_cache['zH'] = zH
+                    # Update cache for next layer
+                    recursion_cache['zL'] = zL
+                    recursion_cache['zH'] = zH
+                else:
+                    # Run TRM recursion: trm(A @ x, zL, zH)
+                    zL, zH = self.trm(adapter, zL, zH, context_hs)
+
+                    # Up-project refined state via lora_B with standard LoRA scaling
+                    delta = self.lora_B[adapter](zH) * self.scaling[adapter]  # [b, out_features]
+            
+                    # Add to base output (broadcast across sequence)
+                    result = result + delta.unsqueeze(1)  # [b, 1, out], broadcasts to [b, s, out], but it's only ever one token that we are processing with <latent>, so s=1
+
+                    # Update cache for next layer
+                    recursion_cache['zL'] = zL
+                    recursion_cache['zH'] = zH
 
         result = result.to(previous_dtype)
         return result

@@ -2525,59 +2525,7 @@ Your orthogonal tail: Random basis orthogonal to principal V → spans the compl
 - Implemented **delta parameterization** for the U matrix in TRM SVFT. Instead of learning `U` directly, we learn `ΔU` (delta from SVD initialization). The delta means that weight decay pulls U back toward its SVD initialisation rather than zero.
 - Initialised tail S at a small non zero value
 
-
 Ah... I had a really good version half way through from exp(sd) and learnable U
- 
- https://github.com/wassname/coconut/compare/adapter_recurse2_persist...adapter_recurse3_persist?diff=unified&w
-
-    Looking at this diff, I can see several key differences between the working version (0 diff, current state) and the broken version (+):
-
-    ## Critical Differences
-
-    ### 1. **Normalization Strategy** (BIGGEST DIFFERENCE)
-    - ❌ **Broken (+)**: Normalized `x_v` by `S0` before TRM → `x_v_normalized = x_v / (S0 + 1e-6)`
-    - ✅ **Working (0)**: No normalization of `x_v`, TRM operates directly on singular value projections
-
-    ### 2. **Scaling Approach**
-    - ❌ **Broken (+)**: Per-component scaling `scaling = (lambda_val / r) / (S0 + 1e-6)` then `sd_values = zHs * scaling`
-    - ✅ **Working (0)**: Global scaling `scaling = (lambda_val / r) * base_scale` then `sd_values = torch.exp(zHs_normalized * scaling)`
-
-    ### 3. **Exponential vs Linear**
-    - ❌ **Broken (+)**: Linear delta `sd_values = zHs * scaling`
-    - ✅ **Working (0)**: Exponential delta `sd_values = torch.exp(zHs_normalized * scaling)`
-
-    ### 4. **U Parameterization**
-    - ❌ **Broken (+)**: Delta parameterization `U = U_init + U_delta` with separate frozen/learnable parts
-    - ✅ **Working (0)**: Direct learnable `U` with `requires_grad=True`
-
-    ### 5. **S_tail Initialization**
-    - ❌ **Broken (+)**: Gaussian around 1% of principal mean: `S_tail = randn * (S_tail_mean * 0.3) + S_tail_mean`
-    - ✅ **Working (0)**: Uniform small values: `uniform_(S_tail, a=1e-5, b=1e-4)`
-
-    ## Why the Broken Version Failed
-
-    The **normalization by S0** is likely the killer. Here's why:
-
-    1. **Information Loss**: Dividing by `S0` removes the magnitude information that tells TRM which singular directions are important. The principal components have large `S0` values for a reason - they capture the most variance!
-
-    2. **Gradient Flow**: The per-component division by `S0` creates very different gradient scales across components. Principal components (large `S0`) get tiny gradients, tail components (small `S0`) get huge gradients → unstable training.
-
-    3. **Semantic Mismatch**: In DeLoRA, you normalize by `||A||` because A is a *learned* random projection. In SVFT, `S0` comes from SVD and encodes *pretrained importance*. Normalizing it away defeats the purpose of using SVD!
-
-    4. **Exponential Scaling**: The working version uses `exp(zHs_normalized * scaling)` which gives multiplicative updates that preserve the relative importance of singular values. The broken version's linear scaling doesn't have this property.
-
-    ## The Key Insight
-
-    **SVFT is fundamentally different from DeLoRA**:
-    - DeLoRA: Random basis → normalize to decouple direction/magnitude
-    - SVFT: SVD basis → **preserve** singular value magnitudes because they encode pretrained importance
-
-    The working version respects this by:
-    1. Not normalizing by `S0` (keeps importance info)
-    2. Using exponential scaling (multiplicative updates)
-    3. Normalizing `zHs` itself (for stability) but not the input
-
-    This is why SVFT wasn't learning - you were throwing away the very information that makes SVD valuable! 🎯
 
 
 # Results: trmsvft-qwen3-0.6b_20251029-071158
@@ -2593,107 +2541,93 @@ Ah... I had a really good version half way through from exp(sd) and learnable U
 
 # 2025-10-29 07:38:41
 
-**Excellent catch!** This is a fundamental issue with how TRM context is being used in the SVFT adapter.
 
-## The Problem
+# 2025-10-29 (later)
 
-In the original TRM paper, the context and latent states live in the **same semantic space** (embedding space), so adding them makes sense:
+    **Fixed critical SVFT scaling bugs by properly applying DeLoRA pattern to SVD basis:**
 
-```python
-# Original TRM (from paper)
-zL = zL + context  # Both in embedding space, similar magnitudes
-```
+    Key insights:
+    1. **DeLoRA normalization pattern for SVFT**: Normalize INPUT context by down-projection matrix norm (V), scale OUTPUT by up-projection matrix norm (U). Do NOT normalize zHs - it contains learned per-component magnitudes from TRM.
+    - Context: `x_v_normalized = (x @ V.T) / V.norm(dim=1)` - removes V's magnitude contribution
+    - Output: `sd = zHs * (lambda/r) / U.norm(dim=0)` - compensates for U's magnitude
+    - This matches DeLoRA's `h_normalized = h / A.norm()` and `scaling = (lambda/r) / B.norm()`
 
-But in your SVFT implementation:
+    2. **TRM initialization is mean=0, not mean=1**: Fixed context normalization in `trm_adapter.py` to remove the `+1` offset. TRM inits with `trunc_normal_(std=1)` which gives mean≈0, std≈1. SwiGLU creates positive bias during forward passes, but init is zero-centered.
 
-```python
-# Your SVFT
-x_v = x @ V.T  # Singular value projections - magnitude ~ S0 (can be 100s)
-zH = self.svft_zH_init[adapter]  # Init ~ N(0,1), magnitude ~ 1
+    3. **Exp vs linear scaling**: For `adapter_add` mode, linear scaling `sd = zHs * scaling` works better than `exp(zHs * scaling)` because:
+    - Linear preserves lambda's interpretability (doubling lambda doubles effect)
+    - Exp creates non-linear relationship (doubling lambda squares effect)
+    - DeLoRA uses linear scaling, not exp
+    - Exp was helping earlier because it masked the broken normalization (normalizing by S0 instead of V/U norms)
 
-# Then in TRM:
-zL = zL + context  # Adding ~1 to ~100 → context dominates!
-```
+    4. **Why earlier exp() helped**: The exponential wasn't masking "broken TRM" - it was providing adaptive per-component gradient scaling that partially compensated for normalizing by the wrong thing (S0 instead of V/U). Once we fixed the normalization to use V and U norms (like DeLoRA), linear scaling works correctly.
 
-## The Magnitude Mismatch
+    5. **S0 vs V/U norms**: The critical mistake was normalizing by S0 (singular values) instead of V/U (basis vectors). S0 encodes pretrained importance - normalizing by it throws away the very information that makes SVD valuable! V and U norms control the projection magnitudes, which is what we need to compensate for (like DeLoRA does with A and B).
 
-1. **Principal components**: `x_v[:, 0]` has magnitude ~ `S0[0]` (e.g., 500 for top singular value)
-2. **Tail components**: `x_v[:, -1]` has magnitude ~ `S0[-1]` (e.g., 0.01 for tail)
-3. **TRM states**: `zH`, `zL` init ~ N(0,1), magnitude ~ 1
+    Current working formula for `adapter_add`:
+    ```python
+    x_v_normalized = (x @ V.T) / V.norm(dim=1)  # Normalize input
+    zHs = trm(zL, zH, x_v_normalized)  # TRM refines (no normalization of zHs!)
+    sd = zHs * (lambda/r) / U.norm(dim=0)  # Scale output, compensate for U
+    s_eff = sd * S0  # Final delta (preserves S0 importance structure)
+    output = (x_v * s_eff) @ U.T
+    ```
 
-When you add them: `zL = zL + x_v`, the context **completely swamps** the latent state for principal components, but is **comparable** for tail components. This breaks the recursive refinement!
+    This is now structurally identical to DeLoRA, just using SVD bases instead of random projections.
+    
+    https://github.com/wassname/coconut/compare/adapter_recurse2_persist...adapter_recurse3_persist?diff=unified&w
 
-## Why Exp Helped
+        Looking at this diff, I can see several key differences between the working version (0 diff, current state) and the broken version (+):
 
-The exponential scaling `sd_values = torch.exp(zHs_normalized * scaling)` partially masks this because:
-- It operates on the *normalized* `zHs` (magnitude ~ 1)
-- The exp output is always positive and bounded by the scaling factor
-- So even if TRM refinement is broken, you still get reasonable singular value updates
+        ## Critical Differences
 
-But you're right - the context integration is fundamentally broken.
+        ### 1. **Normalization Strategy** (BIGGEST DIFFERENCE)
+        - ❌ **Broken (+)**: Normalized `x_v` by `S0` before TRM → `x_v_normalized = x_v / (S0 + 1e-6)`
+        - ✅ **Working (0)**: No normalization of `x_v`, TRM operates directly on singular value projections
 
-## Solutions
+        ### 2. **Scaling Approach**
+        - ❌ **Broken (+)**: Per-component scaling `scaling = (lambda_val / r) / (S0 + 1e-6)` then `sd_values = zHs * scaling`
+        - ✅ **Working (0)**: Global scaling `scaling = (lambda_val / r) * base_scale` then `sd_values = torch.exp(zHs_normalized * scaling)`
 
-### Option 1: Normalize Context to Match TRM State Range
-```python
-# In get_delta, before TRM
-x_v = x @ V.T  # [b, s, r]
+        ### 3. **Exponential vs Linear**
+        - ❌ **Broken (+)**: Linear delta `sd_values = zHs * scaling`
+        - ✅ **Working (0)**: Exponential delta `sd_values = torch.exp(zHs_normalized * scaling)`
 
-# Normalize each component by its expected magnitude (S0)
-x_v_normalized = x_v / (S0.unsqueeze(0).unsqueeze(0) + 1e-6)  # Now ~ O(1)
+        ### 4. **U Parameterization**
+        - ❌ **Broken (+)**: Delta parameterization `U = U_init + U_delta` with separate frozen/learnable parts
+        - ✅ **Working (0)**: Direct learnable `U` with `requires_grad=True`
 
-# TRM operates on normalized space
-zLs, zHs = self.trm(adapter, zL, zH, x_v_normalized[:, -1:])
+        ### 5. **S_tail Initialization**
+        - ❌ **Broken (+)**: Gaussian around 1% of principal mean: `S_tail = randn * (S_tail_mean * 0.3) + S_tail_mean`
+        - ✅ **Working (0)**: Uniform small values: `uniform_(S_tail, a=1e-5, b=1e-4)`
 
-# After TRM, scale back up
-# (This is what the broken version tried, but it applied scaling wrong)
-```
+        ## Why the Broken Version Failed
 
-### Option 2: Initialize TRM States in Singular Value Space
-```python
-# In update_layer
-# Initialize zH, zL to match the scale of singular value projections
-# Use S0 statistics to set appropriate init scale
-zH_scale = S0.mean()  # Or S0.std()
-zH = torch.randn(k, device=device) * zH_scale  # Now ~ same magnitude as x_v
-zL = torch.randn(k, device=device) * zH_scale
-```
+        The **normalization by S0** is likely the killer. Here's why:
 
-### Option 3: Learnable Context Projection (Cleanest)
-```python
-# Add a learned projection to map context into TRM's latent space
-self.svft_context_proj = nn.ModuleDict({})
+        1. **Information Loss**: Dividing by `S0` removes the magnitude information that tells TRM which singular directions are important. The principal components have large `S0` values for a reason - they capture the most variance!
 
-# In update_layer
-self.svft_context_proj[adapter_name] = nn.Linear(r, r, bias=False)
-# Init to small scale
-nn.init.normal_(self.svft_context_proj[adapter_name].weight, std=0.01)
+        2. **Gradient Flow**: The per-component division by `S0` creates very different gradient scales across components. Principal components (large `S0`) get tiny gradients, tail components (small `S0`) get huge gradients → unstable training.
 
-# In get_delta
-x_v = x @ V.T
-context_projected = self.svft_context_proj[adapter](x_v[:, -1:])  # Learn the mapping
-zLs, zHs = self.trm(adapter, zL, zH, context_projected)
-```
+        3. **Semantic Mismatch**: In DeLoRA, you normalize by `||A||` because A is a *learned* random projection. In SVFT, `S0` comes from SVD and encodes *pretrained importance*. Normalizing it away defeats the purpose of using SVD!
 
-## Quick Test
+        4. **Exponential Scaling**: The working version uses `exp(zHs_normalized * scaling)` which gives multiplicative updates that preserve the relative importance of singular values. The broken version's linear scaling doesn't have this property.
 
-Add this debug print to see the magnitude mismatch:
+        ## The Key Insight
 
-```python
-# In get_delta, right before TRM call
-print(f"x_v range: [{x_v.min():.2f}, {x_v.max():.2f}], std: {x_v.std():.2f}")
-print(f"zH range: [{zH.min():.2f}, {zH.max():.2f}], std: {zH.std():.2f}")
-print(f"S0 range: [{S0.min():.2f}, {S0.max():.2f}], mean: {S0.mean():.2f}")
-```
+        **SVFT is fundamentally different from DeLoRA**:
+        - DeLoRA: Random basis → normalize to decouple direction/magnitude
+        - SVFT: SVD basis → **preserve** singular value magnitudes because they encode pretrained importance
 
-I bet you'll see `x_v` has 10-100x larger magnitude than `zH`.
+        The working version respects this by:
+        1. Not normalizing by `S0` (keeps importance info)
+        2. Using exponential scaling (multiplicative updates)
+        3. Normalizing `zHs` itself (for stability) but not the input
 
-## Recommendation
+        This is why SVFT wasn't learning - you were throwing away the very information that makes SVD valuable! 🎯
 
-Try **Option 2** first (simplest, no new params):
-- Scale `zH_init` and `zL_init` by `S0.mean()` or `S0.std()`
-- This puts them in the same ballpark as the context
+# 2025-10-29 08:44:05
 
-If that doesn't work, go to **Option 1** (normalize context), but be careful with the scaling - you need to preserve the relative importance of principal vs tail components.
+ah! once again adapter_add really wants exp! it learns really poorly initially without it, how strange. Like perhaps the model just really wants to be able to express very large S value to make a steering diff
 
-Want me to implement Option 2?
+or are the other simpler ways to make tiny recursive latent zH more expressive for the output steering step I guess? learn a linear transform as I removed the output head in trm? Or something else, idk
