@@ -27,7 +27,7 @@ run:
   python scripts/run.py TRMLoRA
   python scripts/run.py TRMDelora --loss-nll-ratio-margin
   python scripts/run.py TRMHra
-  uv run scripts/run.py TRMSvft --adapter-svft-mode='adapter_add'  --gradient-accumulation-steps=1 --layers-spacing-adapter=2 --r=2048 --lr=1e-3 --scheduler=cosine --weight-decay=0 --trm-expansion=4 --loss-nll-ratio-margin
+  uv run scripts/run.py TRMSvft --adapter-svft-mode='adapter_add'  --gradient-accumulation-steps=1 --layers-spacing-adapter=2 --adapter-r=2048 --lr=1e-3 --scheduler=cosine --weight-decay=0 --trm-expansion=4 --loss-nll-ratio-margin
   uv run scripts/run.py TRMSvft --adapter-svft-mode='adapter_mult'
   uv run scripts/run.py TRMSvft --adapter-svft-mode='replace_mul'
   uv run scripts/run.py TRMSvft --adapter-svft-mode='replace_add'
