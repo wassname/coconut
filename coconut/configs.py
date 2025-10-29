@@ -17,6 +17,7 @@ class BaseConfig:
     name: str = "qwen3-i-4b-2507"
     # model_id: str = "suayptalha/Qwen3-0.6B-Math-Expert"
     model_id: str = "Qwen/Qwen3-4B-Instruct-2507"
+
     
     only_eval: bool = False
     
@@ -82,12 +83,12 @@ class TRMConfig(BaseConfig):
     epochs_per_stage: int = 4
     
     scheduler: str = "linear"
-    lr: float = 3e-4 # 1e-4 in paper
-    weight_decay: float = 0.04 # 1 and 0.1 in TRM paper. 0.01 in COCONUT paper. 
+    lr: float = 6e-4 # 1e-4 in paper
+    weight_decay: float = 0.001 # 1 and 0.1 in TRM paper. 0.01 in COCONUT paper. 
     
-    max_size: int = 20_000
+    max_size: int = 10_000
     batch_size_training: int = 32
-    gradient_accumulation_steps: int = 768 // 32 # paper had effective batch size of 768
+    gradient_accumulation_steps: int = 192 // 32 # paper had effective batch size of 768
 
     eval_first_epoch: bool = False
     loss_nll_ratio_margin: bool = False
@@ -100,7 +101,7 @@ class TRMConfig(BaseConfig):
 
     trm_persistent_steering: bool = True  # persistent steering vector across recursions
 
-    layers_spacing_adapter: int = 3  # number of spaced out layers to apply adapter to, larger number means all
+    layers_spacing_adapter: int = 3 # number of spaced out layers to apply adapter to, larger number means all
     layers_start_adapter: float = 0.3  # start layer fraction to apply adapter
     layers_end_adapter: float = 0.95  # end layer fraction to apply adapter
 
@@ -157,7 +158,7 @@ class TRMSvft(TRMConfig):
     Hypothesis: Merges tail without full-rank memory; principal leverages pretrain, tail recovers truncation loss—better than pure top-k or random LoRA.
     """
     _adapter_class: ClassVar = TRMSvftAConfig
-    name: str = "trmsvft-qwen3-0.6b"
+    # name: str = "trmsvft-qwen3-0.6b"
     use_trm_svft: bool = True
 
     # adapter_r: int = 20  # Total rank (principal + tail; low for memory)
