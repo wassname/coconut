@@ -15,28 +15,29 @@ from coconut.trmlora.recursive_delora import TRMDeloraAConfig, TRMDeloraModel
 from coconut.trmlora.recursive_hra import TRMHraAConfig, TRMHraModel
 from coconut.trmlora.recursive_svft import TRMSvftAConfig, TRMSvftModel
 from coconut.gen import gen, gen_sample
-from coconut.load_model import Coconut, load_new_model, save_model, load_adapter
+from coconut.load_model import Coconut, load_new_model, save_model, load_adapter, coconut_to_adapter_config_converter
+from coconut.configs import BaseConfig, TRMLoRA, TRMDelora, TRMHra, TRMSvft
 
 
 @pytest.mark.parametrize(
-    "config_class, expected_model_class, adapter_name",
+    "config_class, adapter_name",
     [
-        (LoraConfig, PeftModel, "lora"),
-        (TRMLoraAConfig, TRMLoraModel, "trmlora"),
-        (TRMDeloraAConfig, TRMDeloraModel, "trmdelora"),
-        (TRMHraAConfig, TRMHraModel, "trmhra"),
-        (TRMSvftAConfig, TRMSvftModel, "trmsvft"),
+        (TRMLoRA, "trmlora"),
+        (TRMDelora, "trmdelora"),
+        (TRMHra, "trmhra"),
+        (TRMSvft, "trmsvft"),
     ],
 )
-def test_adapter(config_class, expected_model_class, adapter_name):
+def test_adapter(config_class, adapter_name):
     # load a tiny model 
     model_id = "yujiepan/qwen3-tiny-random"
     base_model = AutoModelForCausalLM.from_pretrained(model_id)
     tokenizer = AutoTokenizer.from_pretrained(model_id)
-    peft_config = config_class()  # Low rank for quick test
+    config = config_class()
+    peft_config = coconut_to_adapter_config_converter(config)
+    # peft_config = config_class()  # Low rank for quick test
 
     # Make using method 1
-    # model = expected_model_class(base_model, peft_config, 'default')
     model = PeftModel(base_model, peft_config, adapter_name='default')
     # model.print_trainable_parameters()
 
@@ -98,7 +99,7 @@ def test_adapter(config_class, expected_model_class, adapter_name):
     rnd_hash = random.randint(10000, 99999)
     save_path = Path(f"/tmp/qwen-tiny-{adapter_name}-{rnd_hash}")
     # model.save_pretrained(save_path)
-    save_model(model, tokenizer, {}, save_path)
+    save_model(model, tokenizer, config, save_path)
 
     # TODO also test that only the adapter is trainable
 
@@ -106,10 +107,10 @@ def test_adapter(config_class, expected_model_class, adapter_name):
     # loaded_model = PeftModel.from_pretrained(AutoModelForCausalLM.from_pretrained(model_id), save_path)G
 
 
-    loaded_model = load_adapter(
+    _, loaded_model = load_adapter(
         model_id=model_id,
         save_dir=save_path,
-        PeftConfig=type(peft_config),
+        Config=type(config),
         adapter_name="default",
     )
     assert isinstance(loaded_model, PeftModel)

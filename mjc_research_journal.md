@@ -2655,3 +2655,111 @@ Ok overall
 - with svft learning U was important
 - and having some way to include the tail seems important otherwise we are throwing away valid and important directions
 - it seemed important to have persistent but dynamic steering, but I need to ablate this
+
+
+# Results: trmsvft-qwen3-0.6b_20251029-105142
+{'project': 'coconut', 'save_path': 'outputs/', 'name': 'trmsvft-qwen3-0.6b', 'model_id': 'suayptalha/Qwen3-0.6B-Math-Expert', 'only_eval': False, 'load_model_path': '', 'resume_epochs': 2, 'use_position_ids': True, 'bf16': True, 'bf16_weight': False, 'opt_8b': False, 'load_in_4bit': False, 'load_in_8bit': False, 'cot_epochs': 0, 'epochs_per_stage': 8, 'max_latent_stage': 3, 'num_epochs': 8, 'batch_size_training': 12, 'gradient_accumulation_steps': 3, 'lr': 0.0006, 'weight_decay': 0.03, 'grad_clip': 10.0, 'scheduler': 'linear', 'debug': False, 'seed': 42, 'reset_optimizer': False, 'loss_seq_vcr': False, 'collect_hs': False, 'max_size': 5000, 'c_thought': 1, 'pad_latent_to_max': True, 'uniform_prob': 0.0, 'train_path': 'data/gsm_train.json', 'val_path': 'data/gsm_valid.json', 'system_prompt': '', 'latent_token_id': None, 'bot_token_id': None, 'eot_token_id': None, 'eos_token_id': None, 'skip_stage_zero': True, 'eval_first_epoch': False, 'loss_nll_ratio_margin': False, 'trm_h_cycles': 3, 'trm_l_cycles': 6, 'trm_l_layers': 2, 'trm_num_heads': 4, 'trm_expansion': 2.0, 'trm_persistent_steering': True, 'layers_spacing_adapter': 5, 'layers_start_adapter': 0.3, 'layers_end_adapter': 0.95, 'target_modules_pattern': '.+\\.(gate_proj).*$', 'use_trm_svft': True, 'adapter_fill_orthonormal': False, 'adapter_principal_rank': 64, 'adapter_tail_rank': 32, 'adapter_svft_mode': 'adapter_add', '__type__': "<class 'coconut.configs.TRMSvft'>"}
+|    |   eval/acc |   eval/cot_em |   eval/ratios |   epoch |   stage |   train/minutes |   train/loss |   eval/loss |
+|---:|-----------:|--------------:|--------------:|--------:|--------:|----------------:|-------------:|------------:|
+|  0 |     0      |        0.0059 |        0.8845 |       2 |       1 |          5.8497 |     0.376499 |      0.5552 |
+|  1 |     0.0059 |        0.0059 |        0.8601 |       3 |       1 |          5.9031 |     0.484361 |      0.4631 |
+|  2 |     0      |        0      |        0.8595 |       4 |       1 |          6.0392 |     0.412533 |      0.433  |
+|  3 |     0      |        0      |        0.8738 |       5 |       1 |          6.0384 |     0.24296  |      0.4189 |
+|  4 |     0      |        0      |        0.8855 |       6 |       1 |          5.9849 |     0.164054 |      0.4073 |
+|  5 |     0.0059 |        0      |        0.8905 |       7 |       1 |          6.0326 |     0.306875 |      0.404  |
+
+# 2025-10-30 13:23:12
+
+I need to fix load so I can experiment
+
+TODO 
+- [ ] TODO target_modules need to be saved hrmm
+- [ ] eval needs best of 4
+- [ ] eval needs to be better, perhaps even distinguish between wrong and warn at no match
+
+# 2025-10-30 13:23:27 brainstorm
+
+I need to get a SFT and LoRA baseline with my eval harness
+
+if the eval is low compared to the published results then my harness is broken
+
+Then I can compare TRM LoRA, DeLoRA, SVFT properly
+
+```sh
+# Random experiments
+#- Question will it work with a super high lr?
+uv run scripts/run.py TRMLoRA --lr=1e-1 --gradient-accumulation-steps=1 --scheduler=cosine
+#- What about full on 1 layers
+#- vs low rank on many
+# TODO minimal experiments
+# - baslines
+#   - SFT
+#   - LoRA
+# - SVFT
+# - DeLoRA with TRM
+# - HRA with TRM
+# - ablations
+#   - SVFT with no TRM
+#   - SVFT with no tail
+#   - SVFT with frozen U
+#   - SVFT with no persistent steering
+```
+
+```mermaid
+graph TD
+    A[Input x] --> B[Base Layer W0 @ x]
+    A --> C[Down Proj V.T @ x]
+    C --> D[Normalize / V norms]
+    D --> E[TRM Recursion on zL/zH]
+    E --> F[Mode Transform sd * S0 etc]
+    F --> G["Up Proj U @ (x_v * s_eff)"]
+    B --> H[Add/Replace Mode]
+    G --> H
+    H[Output h]
+```
+
+
+A note about baselines
+the Qwen models' report GSM8K score is found here https://arxiv.org/pdf/2505.09388
+this is apparently baseline with some harness?
+4B=87.79%
+0.5B=59.59%
+this is 4 shot!
+
+Math & Text Reasoning: For evaluating mathematical and logical reasoning skills, we employ
+high-level math benchmarks including MATH-500 (Lightman et al., 2023), AIME’24 and AIME’25
+(AIME, 2025), and text reasoning tasks including ZebraLogic (Lin et al., 2025) and AutoLogi
+(Zhu et al., 2025). For AIME problems, each year’s questions include Part I and Part II, totaling
+30 questions. For each question, we sample 64 times and take the average accuracy as the final
+score.
+
+So ideally my final eval should be 4 shot. I can validate my hardness by getting this on the instruction tuned model. I should have a train and test set.
+
+
+# 2025-10-30 16:55:13
+
+high lr?
+
+# Results: trmlora-qwen3-0.6b_20251030-133923
+{'project': 'coconut', 'save_path': 'outputs/', 'name': 'trmlora-qwen3-0.6b', 'model_id': 'suayptalha/Qwen3-0.6B-Math-Expert', 'only_eval': False, 'load_model_path': '', 'resume_epochs': 2, 'use_position_ids': True, 'bf16': True, 'bf16_weight': False, 'opt_8b': False, 'load_in_4bit': False, 'load_in_8bit': False, 'cot_epochs': 0, 'epochs_per_stage': 8, 'max_latent_stage': 3, 'num_epochs': 10, 'batch_size_training': 12, 'gradient_accumulation_steps': 1, 'lr': 0.1, 'weight_decay': 0.001, 'grad_clip': 10.0, 'scheduler': 'cosine', 'debug': False, 'seed': 42, 'reset_optimizer': False, 'loss_seq_vcr': False, 'collect_hs': False, 'max_size': 10000, 'c_thought': 1, 'pad_latent_to_max': True, 'uniform_prob': 0.0, 'train_path': 'data/gsm_train.json', 'val_path': 'data/gsm_valid.json', 'system_prompt': '', 'latent_token_id': None, 'bot_token_id': None, 'eot_token_id': None, 'eos_token_id': None, 'skip_stage_zero': True, 'eval_first_epoch': False, 'loss_nll_ratio_margin': False, 'trm_h_cycles': 3, 'trm_l_cycles': 6, 'trm_l_layers': 2, 'trm_num_heads': 4, 'trm_expansion': 2.0, 'trm_persistent_steering': True, 'layers_spacing_adapter': 5, 'layers_start_adapter': 0.3, 'layers_end_adapter': 0.95, 'target_modules_pattern': None, 'use_trm_lora': True, 'adapter_r': 8, 'adapter_lora_alpha': 32, '__type__': 'TRMLoRA'}
+CLI args: scripts/run.py TRMLoRA --lr=1e-1 --gradient-accumulation-steps=1 --scheduler=cosine
+|    |   eval/acc |   eval/cot_em |   eval/ratios |   epoch |   stage |   train/minutes |   train/loss |   eval/loss |
+|---:|-----------:|--------------:|--------------:|--------:|--------:|----------------:|-------------:|------------:|
+|  0 |          0 |        0.0089 |        0.8921 |       2 |       1 |         42.6976 |     0.346306 |      0.3964 |
+|  1 |          0 |        0.0089 |        0.9008 |       3 |       1 |         41.5283 |     0.200828 |      0.3909 |
+|  2 |          0 |        0.0089 |        0.9191 |       4 |       1 |         41.5675 |     0.469559 |      0.3708 |
+|  3 |          0 |        0.0089 |        0.9188 |       5 |       1 |         41.5633 |     0.19656  |      0.3889 |
+****
+
+
+
+
+TODO 
+- [ ] TODO target_modules need to be saved hrmm
+- [ ] eval needs best of 4
+- [ ] eval needs to be better, perhaps even distinguish between wrong and warn at no match
+- [ ] need baselines SFT and LoRA which match paper results
+- [ ] SVFT starts with poor eval, bad init?
+
+
+uv run scripts/run.py TRMSvft --lr=1e-1 --gradient-accumulation-steps=1 --weight_decay=10 --num_epochs=1 --max_size=1000 --adapter_principal_rank=96

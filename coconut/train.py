@@ -1,5 +1,6 @@
 import coconut.trmlora  # MUST be first to register PEFT methods before any peft imports
 import argparse
+import sys
 
 import warnings
 # which can be emitted when generating schemas for dataclasses used by tyro.
@@ -123,8 +124,10 @@ def create_optimizer(model, configs, warmup_fraction=0.1, opt_steps=None, cycles
 
 def train(conf: BaseConfig):
     config_dict = asdict(conf)
-    config_dict['__type__'] = str(type(conf))
-    logger.info(f"Config: {type(conf)} {config_dict}")
+    config_dict['__type__'] = type(conf).__name__
+    # logger.info(f"Config: {type(conf)} {config_dict}")
+    logger.info(f"{conf}")
+
 
     timestamp = pd.Timestamp.now().strftime("%Y%m%d-%H%M%S")
     run_name = f"{conf.name}_{timestamp}"
@@ -498,10 +501,12 @@ def train(conf: BaseConfig):
     except KeyboardInterrupt:
         logger.warning("Training interrupted by user")
 
-    # TODO also print cli
+
+
     print(f"\n# Results: {run_name}")
     print(config_dict)
     df_res = pd.DataFrame(res)
     df_res.to_csv(save_dir / "results.csv")
+    print("CLI args:", " ".join(sys.argv))
     print(df_res.round(4).to_markdown())
 
