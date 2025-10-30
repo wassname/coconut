@@ -7,15 +7,15 @@ from coconut.trmlora.recursive_lora import TRMLoraAConfig
 from coconut.trmlora.recursive_delora import TRMDeloraAConfig
 from coconut.trmlora.recursive_hra import TRMHraAConfig
 from coconut.trmlora.recursive_svft import TRMSvftAConfig
-
+import re
 @dataclass(config=ConfigDict(validate_assignment=True)) 
 class BaseConfig:
     """Base COCONUT config: full model training with latent reasoning."""
     project: str = "coconut"
     save_path: str = "outputs/"
-    # name: str = "qwen3-0.6b"
-    name: str = "qwen3-i-4b-2507"
-    # model_id: str = "suayptalha/Qwen3-0.6B-Math-Expert"
+    # name is now optional and set dynamically after initialization if not provided
+    name: Optional[str] = None
+    # model id (used to derive name if name is not set)
     model_id: str = "Qwen/Qwen3-4B-Instruct-2507"
 
     
@@ -69,6 +69,24 @@ class BaseConfig:
     bot_token_id: Optional[int] = None  # beginning of thought token id
     eot_token_id: Optional[int] = None  # end of thought token id
     eos_token_id: Optional[int] = None  # for generate pad/eos
+
+    def _set_default_name(self) -> None:
+        # Only set if not provided or empty.
+        if self.name:
+            return
+        model_part = self.model_id.split("/")[-1] if isinstance(self.model_id, str) else str(self.model_id)
+        # sanitize model part to safe token (replace non-alnum with '-')
+        model_part = re.sub(r"[^0-9A-Za-z]+", "-", model_part).strip("-").lower()
+        # class name + sanitized model id
+        self.name = f"{self.__class__.__name__.lower()}-{model_part}"
+
+    # pydantic dataclasses call __post_init_post_parse__ after validation/parsing
+    def __post_init_post_parse__(self):
+        self._set_default_name()
+
+    # also provide a vanilla dataclass hook fallback
+    def __post_init__(self):
+        self._set_default_name()
 
 
 @dataclass

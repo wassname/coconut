@@ -27,7 +27,7 @@ run:
   python scripts/run.py TRMLoRA
   python scripts/run.py TRMDelora --loss-nll-ratio-margin
   python scripts/run.py TRMHra
-  uv run scripts/run.py TRMSvft --adapter-svft-mode='adapter_add' --gradient-accumulation-steps=1 --layers-spacing-adapter=2 --adapter_principal_rank=2048 --lr=8e-4 --scheduler=cosine --weight-decay=0 --trm-expansion=4 --loss-nll-ratio-margin
+  uv run scripts/run.py TRMSvft --adapter-svft-mode='adapter_add' --gradient-accumulation-steps=1 --layers-spacing-adapter=2 --adapter_principal_rank=1040 --lr=8e-4 --scheduler=cosine --weight-decay=0 --trm-expansion=2 --loss-nll-ratio-margin
   uv run scripts/run.py TRMSvft --adapter-svft-mode='adapter_mult'
   uv run scripts/run.py TRMSvft --adapter-svft-mode='replace_mul'
   uv run scripts/run.py TRMSvft --adapter-svft-mode='replace_add'
@@ -35,8 +35,8 @@ run:
   uv run scripts/run.py TRMSvft --target-modules-pattern='.+\.(v_proj|k_proj).*$' --adapter-svft-mode='adapter_add'
   uv run scripts/run.py TRMSvft --target-modules-pattern='.+\.(gate_proj).*$' --adapter-svft-mode='adapter_add' --layers_spacing_adapter=6
   uv run scripts/run.py TRMSvft --target-modules-pattern='.+$' --adapter-svft-mode='adapter_add'  --layers-spacing-adapter=2
-  # ALSO add one with a larger model
-  uv run scripts/run.py TRMSvft --model_id=openai/gpt-oss-20b --batch_size=8
+  # this works to, it weirdly has the loss go up in later epochs
+  uv run scripts/run.py TRMSvft --model_id=openai/gpt-oss-20b --batch_size_training=8
   # ALSO add one with 0 TRM cycles (normal adapter)
   uv run scripts/run.py TRMSvft --trm_h_cycles=0 --trm_l_cycles=0 --layers_spacing_adapter=10
 

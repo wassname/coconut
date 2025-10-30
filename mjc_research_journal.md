@@ -1593,16 +1593,16 @@ OK it looks like my CoT model is kind of dumb, it can only say number in any cir
 # Results: trm-qwen3-0.6b_20251021-163009
 a quick run with 'model_id': 'Qwen/Qwen3-0.6B', yes it learns but slowly
 {'project': 'coconut', 'save_path': 'outputs/', 'name': 'trm-qwen3-0.6b', 'model_id': 'Qwen/Qwen3-0.6B', 'only_eval': False, 'load_model_path': '', 'resume_epochs': 8, 'replacement_method': 'supressed[0.75:]', 'use_position_ids': True, 'bf16': True, 'bf16_weight': False, 'opt_8b': False, 'cot_epochs': 0, 'epochs_per_stage': 8, 'max_latent_stage': 3, 'num_epochs': 16, 'batch_size_training': 16, 'gradient_accumulation_steps': 8, 'lr': 0.0001, 'weight_decay': 0.1, 'grad_clip': 1.0, 'scheduler': 'cosine', 'debug': False, 'seed': 42, 'reset_optimizer': False, 'loss_seq_vcr': False, 'n_detached_recursions': 2, 'use_trm': True, 'load_in_4bit': True, 'load_in_8bit': False, 'max_size': 8000, 'c_thought': 1, 'pad_latent_to_max': True, 'uniform_prob': 0.0, 'train_path': 'data/gsm_train.json', 'val_path': 'data/gsm_valid.json', 'system_prompt': '', 'latent_token_id': None, 'bot_token_id': None, 'eot_token_id': None, 'eval_first_epoch': False, 'trm_h_cycles': 3, 'trm_l_cycles': 6, 'trm_l_layers': 2, 'trm_hidden_size': None, 'trm_num_heads': 8, 'trm_expansion': 2.67, 'trm_transcoder_layers': 1, 'trm_svd_init': False, 'trm_persistent_steering': True, 'loss_reg_ie_diff': True, 'loss_nll_ratio_margin': True}
-|    |   eval/acc |   eval/cot_em |   eval/ratios |   epoch |   stage |   train/minutes |   train/loss |   eval/loss |
-|---:|-----------:|--------------:|--------------:|--------:|--------:|----------------:|-------------:|------------:|
-|  0 |     0      |        0.0037 |        1.0259 |       8 |       1 |          7.7263 |     1.39182  |      1.3682 |
-|  1 |     0      |        0.0074 |        0.9961 |       9 |       1 |          7.57   |     1.25364  |      1.2822 |
-|  2 |     0.0037 |        0.0037 |        0.9509 |      10 |       1 |          7.6084 |     0.923961 |      1.0719 |
-|  3 |     0.0074 |        0.0037 |        0.9411 |      11 |       1 |          7.6153 |     0.718184 |      1.0312 |
-|  4 |     0.026  |        0.0037 |        0.934  |      12 |       1 |          7.6228 |     0.660434 |      1.0301 |
-|  5 |     0.026  |        0.0037 |        0.9283 |      13 |       1 |          7.6169 |     0.796399 |      0.9819 |
-|  6 |     0.0223 |        0.0037 |        0.9245 |      14 |       1 |          7.6245 |     0.734089 |      0.9404 |
-|  7 |     0.026  |        0.0074 |        0.9238 |      15 |       1 |          7.6248 |     0.678436 |      0.9401 |
+|      | eval/acc | eval/cot_em | eval/ratios | epoch | stage | train/minutes | train/loss | eval/loss |
+| ---: | -------: | ----------: | ----------: | ----: | ----: | ------------: | ---------: | --------: |
+|    0 |        0 |      0.0037 |      1.0259 |     8 |     1 |        7.7263 |    1.39182 |    1.3682 |
+|    1 |        0 |      0.0074 |      0.9961 |     9 |     1 |          7.57 |    1.25364 |    1.2822 |
+|    2 |   0.0037 |      0.0037 |      0.9509 |    10 |     1 |        7.6084 |   0.923961 |    1.0719 |
+|    3 |   0.0074 |      0.0037 |      0.9411 |    11 |     1 |        7.6153 |   0.718184 |    1.0312 |
+|    4 |    0.026 |      0.0037 |       0.934 |    12 |     1 |        7.6228 |   0.660434 |    1.0301 |
+|    5 |    0.026 |      0.0037 |      0.9283 |    13 |     1 |        7.6169 |   0.796399 |    0.9819 |
+|    6 |   0.0223 |      0.0037 |      0.9245 |    14 |     1 |        7.6245 |   0.734089 |    0.9404 |
+|    7 |    0.026 |      0.0074 |      0.9238 |    15 |     1 |        7.6248 |   0.678436 |    0.9401 |
 
 outputs/trm-qwen3-0.6b_20251021-163009/checkpoint_14/pytorch_model.safetensors  
 
@@ -1610,25 +1610,25 @@ now try qwen math expect
 
 # Results: trm-qwen3-0.6b_20251022-065910
 {'project': 'coconut', 'save_path': 'outputs/', 'name': 'trm-qwen3-0.6b', 'model_id': 'suayptalha/Qwen3-0.6B-Math-Expert', 'only_eval': False, 'load_model_path': '', 'resume_epochs': 8, 'replacement_method': 'supressed[0.75:]', 'use_position_ids': True, 'bf16': True, 'bf16_weight': False, 'opt_8b': False, 'cot_epochs': 0, 'epochs_per_stage': 8, 'max_latent_stage': 3, 'num_epochs': 25, 'batch_size_training': 12, 'gradient_accumulation_steps': 64, 'lr': 0.0001, 'weight_decay': 0.1, 'grad_clip': 1.0, 'scheduler': 'cosine', 'debug': False, 'seed': 42, 'reset_optimizer': False, 'loss_seq_vcr': False, 'n_detached_recursions': 2, 'use_trm': True, 'load_in_4bit': True, 'load_in_8bit': False, 'max_size': 20000, 'c_thought': 1, 'pad_latent_to_max': True, 'uniform_prob': 0.0, 'train_path': 'data/gsm_train.json', 'val_path': 'data/gsm_valid.json', 'system_prompt': '', 'latent_token_id': None, 'bot_token_id': None, 'eot_token_id': None, 'eval_first_epoch': False, 'trm_h_cycles': 3, 'trm_l_cycles': 6, 'trm_l_layers': 2, 'trm_hidden_size': None, 'trm_num_heads': 8, 'trm_expansion': 2.67, 'trm_transcoder_layers': 1, 'trm_svd_init': False, 'trm_persistent_steering': True, 'loss_reg_ie_diff': True, 'loss_nll_ratio_margin': True}
-|    |   eval/acc |   eval/cot_em |   eval/ratios |   epoch |   stage |   train/minutes |   train/loss |   eval/loss |
-|---:|-----------:|--------------:|--------------:|--------:|--------:|----------------:|-------------:|------------:|
-|  0 |      0     |         0.01  |        1.1093 |       8 |       1 |         21.735  |     2.27437  |      1.8033 |
-|  1 |      0     |         0.008 |        1.1001 |       9 |       1 |         21.5661 |     1.23052  |      1.3986 |
-|  2 |      0     |         0.01  |        0.9413 |      10 |       1 |         21.2588 |     0.892843 |      1.0658 |
-|  3 |      0.004 |         0.01  |        0.9322 |      11 |       1 |         21.8659 |     0.757459 |      0.9168 |
-|  4 |      0.016 |         0.008 |        0.9345 |      12 |       1 |         21.217  |     0.95061  |      0.8511 |
-|  5 |      0.018 |         0.008 |        0.9335 |      13 |       1 |         21.2007 |     0.570552 |      0.8358 |
-|  6 |      0.018 |         0.008 |        0.9222 |      14 |       1 |         21.1668 |     0.750841 |      0.8163 |
-|  7 |      0.004 |         0.01  |        0.909  |      15 |       1 |         21.5885 |     0.599921 |      0.797  |
-|  8 |      0.01  |         0     |        0.7947 |      16 |       2 |         29.3567 |     0.723631 |      1.1441 |
-|  9 |      0.026 |         0.002 |        0.7844 |      17 |       2 |         28.6735 |     1.11895  |      0.9167 |
-| 10 |      0.022 |         0.004 |        0.7843 |      18 |       2 |         28.5355 |     0.834086 |      0.8495 |
-| 11 |      0.032 |         0     |        0.7826 |      19 |       2 |         28.6384 |     0.796355 |      0.8192 |
-| 12 |      0.032 |         0     |        0.7761 |      20 |       2 |         28.9458 |     0.97043  |      0.8096 |
-| 13 |      0.024 |         0.002 |        0.7747 |      21 |       2 |         29.1303 |     0.839079 |      0.8    |
-| 14 |      0.03  |         0     |        0.7643 |      22 |       2 |         28.8209 |     0.742273 |      0.7971 |
-| 15 |      0.04  |         0     |        0.7764 |      23 |       2 |         28.7768 |     0.717094 |      0.8006 |
-| 16 |      0.036 |         0.004 |        0.7196 |      24 |       3 |         25.3695 |     1.02793  |      0.8752 |ok 
+|      | eval/acc | eval/cot_em | eval/ratios | epoch | stage | train/minutes | train/loss | eval/loss |
+| ---: | -------: | ----------: | ----------: | ----: | ----: | ------------: | ---------: | --------: |
+|    0 |        0 |        0.01 |      1.1093 |     8 |     1 |        21.735 |    2.27437 |    1.8033 |
+|    1 |        0 |       0.008 |      1.1001 |     9 |     1 |       21.5661 |    1.23052 |    1.3986 |
+|    2 |        0 |        0.01 |      0.9413 |    10 |     1 |       21.2588 |   0.892843 |    1.0658 |
+|    3 |    0.004 |        0.01 |      0.9322 |    11 |     1 |       21.8659 |   0.757459 |    0.9168 |
+|    4 |    0.016 |       0.008 |      0.9345 |    12 |     1 |        21.217 |    0.95061 |    0.8511 |
+|    5 |    0.018 |       0.008 |      0.9335 |    13 |     1 |       21.2007 |   0.570552 |    0.8358 |
+|    6 |    0.018 |       0.008 |      0.9222 |    14 |     1 |       21.1668 |   0.750841 |    0.8163 |
+|    7 |    0.004 |        0.01 |       0.909 |    15 |     1 |       21.5885 |   0.599921 |     0.797 |
+|    8 |     0.01 |           0 |      0.7947 |    16 |     2 |       29.3567 |   0.723631 |    1.1441 |
+|    9 |    0.026 |       0.002 |      0.7844 |    17 |     2 |       28.6735 |    1.11895 |    0.9167 |
+|   10 |    0.022 |       0.004 |      0.7843 |    18 |     2 |       28.5355 |   0.834086 |    0.8495 |
+|   11 |    0.032 |           0 |      0.7826 |    19 |     2 |       28.6384 |   0.796355 |    0.8192 |
+|   12 |    0.032 |           0 |      0.7761 |    20 |     2 |       28.9458 |    0.97043 |    0.8096 |
+|   13 |    0.024 |       0.002 |      0.7747 |    21 |     2 |       29.1303 |   0.839079 |       0.8 |
+|   14 |     0.03 |           0 |      0.7643 |    22 |     2 |       28.8209 |   0.742273 |    0.7971 |
+|   15 |     0.04 |           0 |      0.7764 |    23 |     2 |       28.7768 |   0.717094 |    0.8006 |
+|   16 |    0.036 |       0.004 |      0.7196 |    24 |     3 |       25.3695 |    1.02793 |    0.8752 | ok |
 
 
 Ah when loading the model is seem that it's mainly just trained it to output <<
@@ -1981,25 +1981,25 @@ trmlora-qwen3-0.6b_20251024-120842 at:
 {'project': 'coconut', 'save_path': 'outputs/', 'name': 'trmlora-qwen3-0.6b', 'model_id': 'suayptalha/Qwen3-0.6B-Math-Expert', 'only_eval': False, 'load_model_path': '', 'resume_epochs': 8, 'replacement_method': 'supressed[0.75:]', 'use_position_ids': True, 'bf16': True, 'bf16_weight': False, 'opt_8b': False, 'cot_epochs': 0, 'epochs_per_stage': 3, 'max_latent_stage': 3, 'num_epochs': 25, 'batch_size_training': 12, 'gradient_accumulation_steps': 62, 'lr': 0.001, 'weight_decay': 0.0, 'grad_clip': 1.0, 'scheduler': 'linear', 'debug': False, 'seed': 42, 'reset_optimizer': False, 'loss_seq_vcr': False, 'n_detached_recursions': 2, 'use_trm': False, 'load_in_4bit': False, 'load_in_8bit': False, 'max_size': 20000, 'c_thought': 1, 'pad_latent_to_max': True, 'uniform_prob': 0.0, 'train_path': 'data/gsm_train.json', 'val_path': 'data/gsm_valid.json', 'system_prompt': '', 'latent_token_id': None, 'bot_token_id': None, 'eot_token_id': None, 'eos_token_id': None, 'trm_h_cycles': 2, 'trm_l_cycles': 2, 'trm_l_layers': 2, 'trm_hidden_size': None, 'trm_num_heads': 2, 'trm_expansion': 2.67, 'trm_transcoder_layers': 1, 'loss_reg_ie_diff': True, 'loss_nll_ratio_margin': True, 'use_trm_lora': True, 'lora_r': 6, 'lora_alpha': 24, 'lora_dropout': 0.0, 'lora_layers': 4, 'eval_first_epoch': False}
 
 
-|    |   eval/acc |   eval/cot_em |   eval/ratios |   epoch |   stage |   train/minutes |   train/loss |   eval/loss |
-|---:|-----------:|--------------:|--------------:|--------:|--------:|----------------:|-------------:|------------:|
-|  0 |      0     |         0     |        1.6659 |       8 |       2 |         17.4696 |     2.66459  |      2.6949 |
-|  1 |      0.016 |         0.012 |        1.1923 |       9 |       3 |         13.2363 |     1.28317  |      1.6603 |
-|  2 |      0.014 |         0.01  |        0.8066 |      10 |       3 |         13.1872 |     0.722466 |      0.9618 |
-|  3 |      0.02  |         0.004 |        0.7097 |      11 |       3 |         13.1233 |     0.871823 |      0.8276 |
-|  4 |      0.018 |         0.01  |        0.622  |      12 |       3 |         13.1052 |     0.368736 |      0.7651 |
-|  5 |      0.042 |         0.008 |        0.6099 |      13 |       3 |         13.4539 |     0.677675 |      0.6829 |
-|  6 |      0.05  |         0.002 |        0.6114 |      14 |       3 |         13.4293 |     0.73012  |      0.6815 |
-|  7 |      0.048 |         0.01  |        0.6105 |      15 |       3 |         13.3284 |     0.427084 |      0.6729 |
-|  8 |      0.068 |         0.012 |        0.5911 |      16 |       3 |         13.3443 |     0.665704 |      0.6467 |
-|  9 |      0.074 |         0.012 |        0.5857 |      17 |       3 |         13.3683 |     0.498367 |      0.6384 |
-| 10 |      0.07  |         0.004 |        0.5983 |      18 |       3 |         13.2492 |     0.529428 |      0.6453 |
-| 11 |      0.058 |         0.006 |        0.5817 |      19 |       3 |         13.3312 |     0.254119 |      0.6265 |
-| 12 |      0.048 |         0     |        0.5991 |      20 |       3 |         13.4181 |     0.554868 |      0.6345 |
-| 13 |      0.062 |         0.006 |        0.5909 |      21 |       3 |         13.2062 |     0.396092 |      0.613  |
-| 14 |      0.074 |         0.004 |        0.5682 |      22 |       3 |         13.4612 |     0.56913  |      0.6223 |
-| 15 |      0.066 |         0.004 |        0.606  |      23 |       3 |         13.1587 |     0.465228 |      0.6097 |
-| 16 |      0.066 |         0     |        0.5856 |      24 |       3 |         13.1066 |     0.656774 |      0.6041 |
+|      | eval/acc | eval/cot_em | eval/ratios | epoch | stage | train/minutes | train/loss | eval/loss |
+| ---: | -------: | ----------: | ----------: | ----: | ----: | ------------: | ---------: | --------: |
+|    0 |        0 |           0 |      1.6659 |     8 |     2 |       17.4696 |    2.66459 |    2.6949 |
+|    1 |    0.016 |       0.012 |      1.1923 |     9 |     3 |       13.2363 |    1.28317 |    1.6603 |
+|    2 |    0.014 |        0.01 |      0.8066 |    10 |     3 |       13.1872 |   0.722466 |    0.9618 |
+|    3 |     0.02 |       0.004 |      0.7097 |    11 |     3 |       13.1233 |   0.871823 |    0.8276 |
+|    4 |    0.018 |        0.01 |       0.622 |    12 |     3 |       13.1052 |   0.368736 |    0.7651 |
+|    5 |    0.042 |       0.008 |      0.6099 |    13 |     3 |       13.4539 |   0.677675 |    0.6829 |
+|    6 |     0.05 |       0.002 |      0.6114 |    14 |     3 |       13.4293 |    0.73012 |    0.6815 |
+|    7 |    0.048 |        0.01 |      0.6105 |    15 |     3 |       13.3284 |   0.427084 |    0.6729 |
+|    8 |    0.068 |       0.012 |      0.5911 |    16 |     3 |       13.3443 |   0.665704 |    0.6467 |
+|    9 |    0.074 |       0.012 |      0.5857 |    17 |     3 |       13.3683 |   0.498367 |    0.6384 |
+|   10 |     0.07 |       0.004 |      0.5983 |    18 |     3 |       13.2492 |   0.529428 |    0.6453 |
+|   11 |    0.058 |       0.006 |      0.5817 |    19 |     3 |       13.3312 |   0.254119 |    0.6265 |
+|   12 |    0.048 |           0 |      0.5991 |    20 |     3 |       13.4181 |   0.554868 |    0.6345 |
+|   13 |    0.062 |       0.006 |      0.5909 |    21 |     3 |       13.2062 |   0.396092 |     0.613 |
+|   14 |    0.074 |       0.004 |      0.5682 |    22 |     3 |       13.4612 |    0.56913 |    0.6223 |
+|   15 |    0.066 |       0.004 |       0.606 |    23 |     3 |       13.1587 |   0.465228 |    0.6097 |
+|   16 |    0.066 |           0 |      0.5856 |    24 |     3 |       13.1066 |   0.656774 |    0.6041 |
 
 Hey it actually learned! 
 
@@ -2007,25 +2007,25 @@ Hey it actually learned!
 
 # Results: trmlora-qwen3-0.6b_20251024-164034
 {'project': 'coconut', 'save_path': 'outputs/', 'name': 'trmlora-qwen3-0.6b', 'model_id': 'suayptalha/Qwen3-0.6B-Math-Expert', 'only_eval': False, 'load_model_path': '', 'resume_epochs': 8, 'replacement_method': 'supressed[0.75:]', 'use_position_ids': True, 'bf16': True, 'bf16_weight': False, 'opt_8b': False, 'cot_epochs': 0, 'epochs_per_stage': 6, 'max_latent_stage': 3, 'num_epochs': 25, 'batch_size_training': 16, 'gradient_accumulation_steps': 6, 'lr': 0.004, 'weight_decay': 0.0, 'grad_clip': 1.0, 'scheduler': 'linear', 'debug': False, 'seed': 42, 'reset_optimizer': False, 'loss_seq_vcr': False, 'n_detached_recursions': 2, 'load_in_4bit': False, 'load_in_8bit': False, 'collect_hs': False, 'max_size': 20000, 'c_thought': 1, 'pad_latent_to_max': True, 'uniform_prob': 0.0, 'train_path': 'data/gsm_train.json', 'val_path': 'data/gsm_valid.json', 'system_prompt': '', 'latent_token_id': None, 'bot_token_id': None, 'eot_token_id': None, 'eos_token_id': None, 'eval_first_epoch': False, 'use_trm_lora': True, 'loss_nll_ratio_margin': False, 'lora_r': 12, 'lora_alpha': 32, 'lora_dropout': 0.0, 'lora_layers': 4, 'trm_h_cycles': 2, 'trm_l_cycles': 2, 'trm_l_layers': 2, 'trm_hidden_size': None, 'trm_num_heads': 2, 'trm_expansion': 2.67, 'trm_transcoder_layers': 1}
-|    |   eval/acc |   eval/cot_em |   eval/ratios |   epoch |   stage |   train/minutes |   train/loss |   eval/loss |
-|---:|-----------:|--------------:|--------------:|--------:|--------:|----------------:|-------------:|------------:|
-|  0 |      0     |         0     |        1.6675 |       8 |       1 |         10.5042 |     3.59427  |      3.1139 |
-|  1 |      0     |         0     |        1.6675 |       9 |       1 |         10.4793 |     3.47333  |      3.1139 |
-|  2 |      0     |         0     |        1.6675 |      10 |       1 |         10.5077 |     3.39904  |      3.1139 |
-|  3 |      0     |         0     |        1.6675 |      11 |       1 |         10.4776 |     3.5408   |      3.1139 |
-|  4 |      0.068 |         0.006 |        0.683  |      12 |       2 |         14.0911 |     0.497209 |      0.5878 |
-|  5 |      0.058 |         0.006 |        0.6959 |      13 |       2 |         13.9862 |     0.404999 |      0.527  |
-|  6 |      0.044 |         0.016 |        0.6556 |      14 |       2 |         14.4071 |     0.341695 |      0.5125 |
-|  7 |      0.044 |         0.012 |        0.6818 |      15 |       2 |         14.2392 |     0.409725 |      0.5175 |
-|  8 |      0.028 |         0.012 |        0.6805 |      16 |       2 |         14.1803 |     0.465991 |      0.5015 |
-|  9 |      0.022 |         0.012 |        0.6972 |      17 |       2 |         14.154  |     0.424355 |      0.5045 |
-| 10 |      0.046 |         0.004 |        0.5411 |      18 |       3 |          9.0189 |     0.478736 |      0.5904 |
-| 11 |      0.042 |         0.002 |        0.5505 |      19 |       3 |          9.0078 |     0.388377 |      0.5655 |
-| 12 |      0.06  |         0.008 |        0.565  |      20 |       3 |          8.9927 |     0.509848 |      0.5877 |
-| 13 |      0.028 |         0.002 |        0.5283 |      21 |       3 |          8.8673 |     0.445213 |      0.5689 |
-| 14 |      0.046 |         0.004 |        0.5475 |      22 |       3 |          8.9089 |     0.463148 |      0.5672 |
-| 15 |      0.054 |         0.002 |        0.5384 |      23 |       3 |          8.9982 |     0.503659 |      0.5623 |
-| 16 |      0.05  |         0.01  |        0.5511 |      24 |       3 |          8.9604 |     0.410862 |      0.5599 |
+|      | eval/acc | eval/cot_em | eval/ratios | epoch | stage | train/minutes | train/loss | eval/loss |
+| ---: | -------: | ----------: | ----------: | ----: | ----: | ------------: | ---------: | --------: |
+|    0 |        0 |           0 |      1.6675 |     8 |     1 |       10.5042 |    3.59427 |    3.1139 |
+|    1 |        0 |           0 |      1.6675 |     9 |     1 |       10.4793 |    3.47333 |    3.1139 |
+|    2 |        0 |           0 |      1.6675 |    10 |     1 |       10.5077 |    3.39904 |    3.1139 |
+|    3 |        0 |           0 |      1.6675 |    11 |     1 |       10.4776 |     3.5408 |    3.1139 |
+|    4 |    0.068 |       0.006 |       0.683 |    12 |     2 |       14.0911 |   0.497209 |    0.5878 |
+|    5 |    0.058 |       0.006 |      0.6959 |    13 |     2 |       13.9862 |   0.404999 |     0.527 |
+|    6 |    0.044 |       0.016 |      0.6556 |    14 |     2 |       14.4071 |   0.341695 |    0.5125 |
+|    7 |    0.044 |       0.012 |      0.6818 |    15 |     2 |       14.2392 |   0.409725 |    0.5175 |
+|    8 |    0.028 |       0.012 |      0.6805 |    16 |     2 |       14.1803 |   0.465991 |    0.5015 |
+|    9 |    0.022 |       0.012 |      0.6972 |    17 |     2 |        14.154 |   0.424355 |    0.5045 |
+|   10 |    0.046 |       0.004 |      0.5411 |    18 |     3 |        9.0189 |   0.478736 |    0.5904 |
+|   11 |    0.042 |       0.002 |      0.5505 |    19 |     3 |        9.0078 |   0.388377 |    0.5655 |
+|   12 |     0.06 |       0.008 |       0.565 |    20 |     3 |        8.9927 |   0.509848 |    0.5877 |
+|   13 |    0.028 |       0.002 |      0.5283 |    21 |     3 |        8.8673 |   0.445213 |    0.5689 |
+|   14 |    0.046 |       0.004 |      0.5475 |    22 |     3 |        8.9089 |   0.463148 |    0.5672 |
+|   15 |    0.054 |       0.002 |      0.5384 |    23 |     3 |        8.9982 |   0.503659 |    0.5623 |
+|   16 |     0.05 |        0.01 |      0.5511 |    24 |     3 |        8.9604 |   0.410862 |    0.5599 |
 
 
 ## 2025-10-25 18:58:45 Brainstorming at what stage to apply TRM to DeLoRA
@@ -2097,12 +2097,12 @@ My thoughts: confuses the 2, need extra work to work out which part does what. P
 {'project': 'coconut', 'save_path': 'outputs/', 'name': 'trmdelora-qwen3-0.6b', 'model_id': 'suayptalha/Qwen3-0.6B-Math-Expert', 'only_eval': False, 'load_model_path': '', 'resume_epochs': 2, 'use_position_ids': True, 'bf16': True, 'bf16_weight': False, 'opt_8b': False, 'load_in_4bit': False, 'load_in_8bit': False, 'cot_epochs': 0, 'epochs_per_stage': 10, 'max_latent_stage': 3, 'num_epochs': 20, 'batch_size_training': 14, 'gradient_accumulation_steps': 9, 'lr': 0.001, 'weight_decay': 0.01, 'grad_clip': 1.0, 'scheduler': 'cosine', 'debug': False, 'seed': 42, 'reset_optimizer': False, 'loss_seq_vcr': False, 'n_detached_recursions': 2, 'collect_hs': False, 'max_size': 20000, 'c_thought': 1, 'pad_latent_to_max': True, 'uniform_prob': 0.0, 'train_path': 'data/gsm_train.json', 'val_path': 'data/gsm_valid.json', 'system_prompt': '', 'latent_token_id': None, 'bot_token_id': None, 'eot_token_id': None, 'eos_token_id': None, 'skip_stage_zero': True, 'eval_first_epoch': False, 'loss_nll_ratio_margin': False, 'trm_h_cycles': 2, 'trm_l_cycles': 4, 'trm_l_layers': 2, 'trm_num_heads': 3, 'trm_expansion': 4.0, 'layers_spacing_adapter': 8, 'use_trm_delora': True, 'adapter_r': 18, 'adapter_delora_lambda': 15}
 
 DELORA
-|    |   eval/acc |   eval/cot_em |   eval/ratios |   epoch |   stage |   train/minutes |   train/loss |   eval/loss |
-|---:|-----------:|--------------:|--------------:|--------:|--------:|----------------:|-------------:|------------:|
-|  0 |      0.044 |         0.012 |        0.6849 |       2 |       2 |         16.1317 |     0.513245 |      0.4984 |
-|  1 |      0.016 |         0.012 |        0.6987 |       3 |       2 |         16.0478 |     0.289715 |      0.4765 |
-|  2 |      0.04  |         0.012 |        0.7015 |       4 |       2 |         16.0048 |     0.431902 |      0.4633 |
-|  3 |      0.048 |         0.012 |        0.6614 |       5 |       2 |         16.1044 |     0.288153 |      0.4654 |
+|      | eval/acc | eval/cot_em | eval/ratios | epoch | stage | train/minutes | train/loss | eval/loss |
+| ---: | -------: | ----------: | ----------: | ----: | ----: | ------------: | ---------: | --------: |
+|    0 |    0.044 |       0.012 |      0.6849 |     2 |     2 |       16.1317 |   0.513245 |    0.4984 |
+|    1 |    0.016 |       0.012 |      0.6987 |     3 |     2 |       16.0478 |   0.289715 |    0.4765 |
+|    2 |     0.04 |       0.012 |      0.7015 |     4 |     2 |       16.0048 |   0.431902 |    0.4633 |
+|    3 |    0.048 |       0.012 |      0.6614 |     5 |     2 |       16.1044 |   0.288153 |    0.4654 |
 
 
 LORA OLD:
@@ -2114,70 +2114,70 @@ LORA OLD:
 
 
 HRA
-|    |   eval/acc |   eval/cot_em |   eval/ratios |   epoch |   stage |   train/minutes |   train/loss |   eval/loss |
-|---:|-----------:|--------------:|--------------:|--------:|--------:|----------------:|-------------:|------------:|
-|  0 |          0 |             0 |         1.658 |       2 |       2 |         20.9602 |      3.93035 |      3.4403 |
+|      | eval/acc | eval/cot_em | eval/ratios | epoch | stage | train/minutes | train/loss | eval/loss |
+| ---: | -------: | ----------: | ----------: | ----: | ----: | ------------: | ---------: | --------: |
+|    0 |        0 |           0 |       1.658 |     2 |     2 |       20.9602 |    3.93035 |    3.4403 |
 
 
 # Results: trmlora-qwen3-0.6b_20251026-011425
 {'project': 'coconut', 'save_path': 'outputs/', 'name': 'trmlora-qwen3-0.6b', 'model_id': 'suayptalha/Qwen3-0.6B-Math-Expert', 'only_eval': False, 'load_model_path': '', 'resume_epochs': 2, 'use_position_ids': True, 'bf16': True, 'bf16_weight': False, 'opt_8b': False, 'load_in_4bit': False, 'load_in_8bit': False, 'cot_epochs': 0, 'epochs_per_stage': 10, 'max_latent_stage': 3, 'num_epochs': 20, 'batch_size_training': 14, 'gradient_accumulation_steps': 9, 'lr': 0.001, 'weight_decay': 0.01, 'grad_clip': 1.0, 'scheduler': 'cosine', 'debug': False, 'seed': 42, 'reset_optimizer': False, 'loss_seq_vcr': False, 'n_detached_recursions': 2, 'collect_hs': False, 'max_size': 20000, 'c_thought': 1, 'pad_latent_to_max': True, 'uniform_prob': 0.0, 'train_path': 'data/gsm_train.json', 'val_path': 'data/gsm_valid.json', 'system_prompt': '', 'latent_token_id': None, 'bot_token_id': None, 'eot_token_id': None, 'eos_token_id': None, 'skip_stage_zero': True, 'eval_first_epoch': False, 'loss_nll_ratio_margin': False, 'trm_h_cycles': 2, 'trm_l_cycles': 4, 'trm_l_layers': 2, 'trm_num_heads': 3, 'trm_expansion': 4.0, 'layers_spacing_adapter': 8, 'use_trm_lora': True, 'adapter_r': 18, 'adapter_lora_alpha': 32}
-|    |   eval/acc |   eval/cot_em |   eval/ratios |   epoch |   stage |   train/minutes |   train/loss |   eval/loss |
-|---:|-----------:|--------------:|--------------:|--------:|--------:|----------------:|-------------:|------------:|
-|  0 |      0     |         0     |        1.7153 |       2 |       1 |         10.9934 |     3.31153  |      3.1209 |
-|  1 |      0     |         0     |        1.7153 |       3 |       1 |         11.0378 |     2.87605  |      3.1209 |
-|  2 |      0     |         0     |        1.7153 |       4 |       1 |         11.0558 |     3.27911  |      3.1209 |
-|  3 |      0     |         0     |        1.7153 |       5 |       1 |         11.0666 |     3.41369  |      3.1209 |
-|  4 |      0     |         0     |        1.7153 |       6 |       1 |         11.1754 |     4.15342  |      3.1209 |
-|  5 |      0     |         0     |        1.7153 |       7 |       1 |         11.0394 |     3.12628  |      3.1209 |
-|  6 |      0     |         0     |        1.7153 |       8 |       1 |         10.9858 |     3.30152  |      3.1209 |
-|  7 |      0     |         0     |        1.7153 |       9 |       1 |         10.9967 |     3.10288  |      3.1209 |
-|  8 |      0.056 |         0.012 |        0.6893 |      10 |       2 |         15.6406 |     0.381594 |      0.5561 |
-|  9 |      0.046 |         0.012 |        0.669  |      11 |       2 |         15.5133 |     0.521238 |      0.5277 |
-| 10 |      0.062 |         0.012 |        0.6924 |      12 |       2 |         15.6465 |     0.422876 |      0.5036 |
-| 11 |      0.084 |         0.008 |        0.6841 |      13 |       2 |         15.5244 |     0.699863 |      0.4904 |
-| 12 |      0.05  |         0.012 |        0.6773 |      14 |       2 |         15.5299 |     0.339024 |      0.4774 |
-| 13 |      0.058 |         0.002 |        0.6753 |      15 |       2 |         15.5811 |     0.37138  |      0.4884 |
-| 14 |      0.072 |         0.012 |        0.6826 |      16 |       2 |         15.5708 |     0.262936 |      0.4689 |
-| 15 |      0.052 |         0.012 |        0.6817 |      17 |       2 |         15.6231 |     0.355756 |      0.4679 |
-| 16 |      0.054 |         0.012 |        0.6693 |      18 |       2 |         15.5508 |     0.3091   |      0.468  |
-| 17 |      0.044 |         0.01  |        0.6559 |      19 |       2 |         15.6138 |     0.312969 |      0.4713 |
+|      | eval/acc | eval/cot_em | eval/ratios | epoch | stage | train/minutes | train/loss | eval/loss |
+| ---: | -------: | ----------: | ----------: | ----: | ----: | ------------: | ---------: | --------: |
+|    0 |        0 |           0 |      1.7153 |     2 |     1 |       10.9934 |    3.31153 |    3.1209 |
+|    1 |        0 |           0 |      1.7153 |     3 |     1 |       11.0378 |    2.87605 |    3.1209 |
+|    2 |        0 |           0 |      1.7153 |     4 |     1 |       11.0558 |    3.27911 |    3.1209 |
+|    3 |        0 |           0 |      1.7153 |     5 |     1 |       11.0666 |    3.41369 |    3.1209 |
+|    4 |        0 |           0 |      1.7153 |     6 |     1 |       11.1754 |    4.15342 |    3.1209 |
+|    5 |        0 |           0 |      1.7153 |     7 |     1 |       11.0394 |    3.12628 |    3.1209 |
+|    6 |        0 |           0 |      1.7153 |     8 |     1 |       10.9858 |    3.30152 |    3.1209 |
+|    7 |        0 |           0 |      1.7153 |     9 |     1 |       10.9967 |    3.10288 |    3.1209 |
+|    8 |    0.056 |       0.012 |      0.6893 |    10 |     2 |       15.6406 |   0.381594 |    0.5561 |
+|    9 |    0.046 |       0.012 |       0.669 |    11 |     2 |       15.5133 |   0.521238 |    0.5277 |
+|   10 |    0.062 |       0.012 |      0.6924 |    12 |     2 |       15.6465 |   0.422876 |    0.5036 |
+|   11 |    0.084 |       0.008 |      0.6841 |    13 |     2 |       15.5244 |   0.699863 |    0.4904 |
+|   12 |     0.05 |       0.012 |      0.6773 |    14 |     2 |       15.5299 |   0.339024 |    0.4774 |
+|   13 |    0.058 |       0.002 |      0.6753 |    15 |     2 |       15.5811 |    0.37138 |    0.4884 |
+|   14 |    0.072 |       0.012 |      0.6826 |    16 |     2 |       15.5708 |   0.262936 |    0.4689 |
+|   15 |    0.052 |       0.012 |      0.6817 |    17 |     2 |       15.6231 |   0.355756 |    0.4679 |
+|   16 |    0.054 |       0.012 |      0.6693 |    18 |     2 |       15.5508 |     0.3091 |     0.468 |
+|   17 |    0.044 |        0.01 |      0.6559 |    19 |     2 |       15.6138 |   0.312969 |    0.4713 |
 
 # Results: trmdelora-qwen3-0.6b_20251025-210458
 {'project': 'coconut', 'save_path': 'outputs/', 'name': 'trmdelora-qwen3-0.6b', 'model_id': 'suayptalha/Qwen3-0.6B-Math-Expert', 'only_eval': False, 'load_model_path': '', 'resume_epochs': 2, 'use_position_ids': True, 'bf16': True, 'bf16_weight': False, 'opt_8b': False, 'load_in_4bit': False, 'load_in_8bit': False, 'cot_epochs': 0, 'epochs_per_stage': 10, 'max_latent_stage': 3, 'num_epochs': 20, 'batch_size_training': 14, 'gradient_accumulation_steps': 9, 'lr': 0.001, 'weight_decay': 0.01, 'grad_clip': 1.0, 'scheduler': 'cosine', 'debug': False, 'seed': 42, 'reset_optimizer': False, 'loss_seq_vcr': False, 'n_detached_recursions': 2, 'collect_hs': False, 'max_size': 20000, 'c_thought': 1, 'pad_latent_to_max': True, 'uniform_prob': 0.0, 'train_path': 'data/gsm_train.json', 'val_path': 'data/gsm_valid.json', 'system_prompt': '', 'latent_token_id': None, 'bot_token_id': None, 'eot_token_id': None, 'eos_token_id': None, 'skip_stage_zero': True, 'eval_first_epoch': False, 'loss_nll_ratio_margin': False, 'trm_h_cycles': 2, 'trm_l_cycles': 4, 'trm_l_layers': 2, 'trm_num_heads': 3, 'trm_expansion': 4.0, 'layers_spacing_adapter': 8, 'use_trm_delora': True, 'adapter_r': 18, 'adapter_delora_lambda': 15}
-|    |   eval/acc |   eval/cot_em |   eval/ratios |   epoch |   stage |   train/minutes |   train/loss |   eval/loss |
-|---:|-----------:|--------------:|--------------:|--------:|--------:|----------------:|-------------:|------------:|
-|  0 |      0     |         0     |        1.7153 |       2 |       1 |         11.0264 |     2.67611  |      3.1209 |
-|  1 |      0     |         0     |        1.7153 |       3 |       1 |         11.0596 |     3.88671  |      3.1209 |
-|  2 |      0     |         0     |        1.7153 |       4 |       1 |         11.0035 |     3.06495  |      3.1209 |
-|  3 |      0     |         0     |        1.7153 |       5 |       1 |         10.9354 |     3.51003  |      3.1209 |
-|  4 |      0     |         0     |        1.7153 |       6 |       1 |         10.9536 |     4.00484  |      3.1209 |
-|  5 |      0     |         0     |        1.7153 |       7 |       1 |         10.9927 |     3.05607  |      3.1209 |
-|  6 |      0     |         0     |        1.7153 |       8 |       1 |         10.951  |     3.4932   |      3.1209 |
-|  7 |      0     |         0     |        1.7153 |       9 |       1 |         10.9868 |     4.18694  |      3.1209 |
-|  8 |      0.058 |         0.012 |        0.6738 |      10 |       2 |         16.0868 |     0.403685 |      0.5025 |
-|  9 |      0.036 |         0.012 |        0.6825 |      11 |       2 |         16.0627 |     0.316718 |      0.482  |
-| 10 |      0.042 |         0.012 |        0.6786 |      12 |       2 |         16.0689 |     0.276161 |      0.4683 |
-| 11 |      0.042 |         0.014 |        0.6725 |      13 |       2 |         16.0594 |     0.406331 |      0.4606 |
-| 12 |      0.048 |         0.012 |        0.6628 |      14 |       2 |         16.071  |     0.358142 |      0.4601 |
-| 13 |      0.034 |         0.012 |        0.6733 |      15 |       2 |         16.0692 |     0.258621 |      0.4626 |
-| 14 |      0.044 |         0.012 |        0.6644 |      16 |       2 |         16.0005 |     0.302327 |      0.4627 |
-| 15 |      0.046 |         0.012 |        0.6702 |      17 |       2 |         15.9561 |     0.349265 |      0.4718 |
-| 16 |      0.042 |         0.012 |        0.6574 |      18 |       2 |         16.0717 |     0.364065 |      0.4732 |
-| 17 |      0.048 |         0.008 |        0.6124 |      19 |       2 |         16.1421 |     0.395231 |      0.4822 |
+|      | eval/acc | eval/cot_em | eval/ratios | epoch | stage | train/minutes | train/loss | eval/loss |
+| ---: | -------: | ----------: | ----------: | ----: | ----: | ------------: | ---------: | --------: |
+|    0 |        0 |           0 |      1.7153 |     2 |     1 |       11.0264 |    2.67611 |    3.1209 |
+|    1 |        0 |           0 |      1.7153 |     3 |     1 |       11.0596 |    3.88671 |    3.1209 |
+|    2 |        0 |           0 |      1.7153 |     4 |     1 |       11.0035 |    3.06495 |    3.1209 |
+|    3 |        0 |           0 |      1.7153 |     5 |     1 |       10.9354 |    3.51003 |    3.1209 |
+|    4 |        0 |           0 |      1.7153 |     6 |     1 |       10.9536 |    4.00484 |    3.1209 |
+|    5 |        0 |           0 |      1.7153 |     7 |     1 |       10.9927 |    3.05607 |    3.1209 |
+|    6 |        0 |           0 |      1.7153 |     8 |     1 |        10.951 |     3.4932 |    3.1209 |
+|    7 |        0 |           0 |      1.7153 |     9 |     1 |       10.9868 |    4.18694 |    3.1209 |
+|    8 |    0.058 |       0.012 |      0.6738 |    10 |     2 |       16.0868 |   0.403685 |    0.5025 |
+|    9 |    0.036 |       0.012 |      0.6825 |    11 |     2 |       16.0627 |   0.316718 |     0.482 |
+|   10 |    0.042 |       0.012 |      0.6786 |    12 |     2 |       16.0689 |   0.276161 |    0.4683 |
+|   11 |    0.042 |       0.014 |      0.6725 |    13 |     2 |       16.0594 |   0.406331 |    0.4606 |
+|   12 |    0.048 |       0.012 |      0.6628 |    14 |     2 |        16.071 |   0.358142 |    0.4601 |
+|   13 |    0.034 |       0.012 |      0.6733 |    15 |     2 |       16.0692 |   0.258621 |    0.4626 |
+|   14 |    0.044 |       0.012 |      0.6644 |    16 |     2 |       16.0005 |   0.302327 |    0.4627 |
+|   15 |    0.046 |       0.012 |      0.6702 |    17 |     2 |       15.9561 |   0.349265 |    0.4718 |
+|   16 |    0.042 |       0.012 |      0.6574 |    18 |     2 |       16.0717 |   0.364065 |    0.4732 |
+|   17 |    0.048 |       0.008 |      0.6124 |    19 |     2 |       16.1421 |   0.395231 |    0.4822 |
 
 # 2025-10-26 10:58:02 fixed bug with latent skipping
 
  18, 'adapter_delora_lambda': 15}
-|    |   eval/acc |   eval/cot_em |   eval/ratios |   epoch |   stage |   train/minutes |   train/loss |   eval/loss |
-|---:|-----------:|--------------:|--------------:|--------:|--------:|----------------:|-------------:|------------:|
-|  0 |      0     |         0.012 |        0.9294 |       2 |       1 |         11.8333 |     0.382548 |      0.3797 |
-|  1 |      0     |         0.012 |        0.927  |       3 |       1 |         11.915  |     0.155244 |      0.3656 |
-|  2 |      0.012 |         0.012 |        0.9269 |       4 |       1 |         11.9048 |     0.242097 |      0.3547 |
-|  3 |      0.036 |         0.012 |        0.9296 |       5 |       1 |         11.7473 |     0.181678 |      0.3485 |
-|  4 |      0.026 |         0.014 |        0.9354 |       6 |       1 |         12.0946 |     0.380262 |      0.3434 |
-|  5 |      0.01  |         0.012 |        0.923  |       7 |       1 |         12.005  |     0.299629 |      0.3425 |
-|  6 |      0.04  |         0.014 |        0.9284 |       8 |       1 |         12.4158 |     0.109912 |      0.3465 |
-|  7 |      0.034 |         0.008 |        0.9366 |       9 |       1 |         13.0092 |     0.219476 |      0.3503 |
+|      | eval/acc | eval/cot_em | eval/ratios | epoch | stage | train/minutes | train/loss | eval/loss |
+| ---: | -------: | ----------: | ----------: | ----: | ----: | ------------: | ---------: | --------: |
+|    0 |        0 |       0.012 |      0.9294 |     2 |     1 |       11.8333 |   0.382548 |    0.3797 |
+|    1 |        0 |       0.012 |       0.927 |     3 |     1 |        11.915 |   0.155244 |    0.3656 |
+|    2 |    0.012 |       0.012 |      0.9269 |     4 |     1 |       11.9048 |   0.242097 |    0.3547 |
+|    3 |    0.036 |       0.012 |      0.9296 |     5 |     1 |       11.7473 |   0.181678 |    0.3485 |
+|    4 |    0.026 |       0.014 |      0.9354 |     6 |     1 |       12.0946 |   0.380262 |    0.3434 |
+|    5 |     0.01 |       0.012 |       0.923 |     7 |     1 |        12.005 |   0.299629 |    0.3425 |
+|    6 |     0.04 |       0.014 |      0.9284 |     8 |     1 |       12.4158 |   0.109912 |    0.3465 |
+|    7 |    0.034 |       0.008 |      0.9366 |     9 |     1 |       13.0092 |   0.219476 |    0.3503 |
 
 Now try all layers
 
@@ -2255,13 +2255,13 @@ Bug slow one with persistent steering meh
 
 # Results: trmdelora-qwen3-0.6b_20251026-201143
 {'project': 'coconut', 'save_path': 'outputs/', 'name': 'trmdelora-qwen3-0.6b', 'model_id': 'suayptalha/Qwen3-0.6B-Math-Expert', 'only_eval': False, 'load_model_path': '', 'resume_epochs': 2, 'use_position_ids': True, 'bf16': True, 'bf16_weight': False, 'opt_8b': False, 'load_in_4bit': False, 'load_in_8bit': False, 'cot_epochs': 0, 'epochs_per_stage': 8, 'max_latent_stage': 3, 'num_epochs': 40, 'batch_size_training': 16, 'gradient_accumulation_steps': 6, 'lr': 0.0001, 'weight_decay': 0.01, 'grad_clip': 1.0, 'scheduler': 'cosine', 'debug': False, 'seed': 42, 'reset_optimizer': False, 'loss_seq_vcr': False, 'collect_hs': False, 'max_size': 20000, 'c_thought': 1, 'pad_latent_to_max': True, 'uniform_prob': 0.0, 'train_path': 'data/gsm_train.json', 'val_path': 'data/gsm_valid.json', 'system_prompt': '', 'latent_token_id': None, 'bot_token_id': None, 'eot_token_id': None, 'eos_token_id': None, 'skip_stage_zero': True, 'eval_first_epoch': False, 'loss_nll_ratio_margin': False, 'trm_h_cycles': 2, 'trm_l_cycles': 3, 'trm_l_layers': 2, 'trm_num_heads': 2, 'trm_expansion': 4.0, 'trm_persistent_steering': True, 'layers_spacing_adapter': 2000, 'layers_start_adapter': 0.35, 'layers_end_adapter': 0.85, 'use_trm_delora': True, 'adapter_r': 8, 'adapter_delora_lambda': 30}
-|    |   eval/acc |   eval/cot_em |   eval/ratios |   epoch |   stage |   train/minutes |   train/loss |   eval/loss |
-|---:|-----------:|--------------:|--------------:|--------:|--------:|----------------:|-------------:|------------:|
-|  0 |      0.004 |         0.006 |        0.9506 |       2 |       1 |         101.757 |     0.342012 |      0.5266 |
-|  1 |      0.016 |         0.01  |        0.9197 |       3 |       1 |         101.173 |     0.277696 |      0.4714 |
-|  2 |      0.006 |         0     |        0.9255 |       4 |       1 |         101.355 |     0.252481 |      0.4044 |
-|  3 |      0     |         0.002 |        0.9496 |       5 |       1 |         101.378 |     0.258454 |      0.392  |
-|  4 |      0.028 |         0.01  |        0.9258 |       6 |       1 |         101.45  |     0.23829  |      0.3791 |
+|      | eval/acc | eval/cot_em | eval/ratios | epoch | stage | train/minutes | train/loss | eval/loss |
+| ---: | -------: | ----------: | ----------: | ----: | ----: | ------------: | ---------: | --------: |
+|    0 |    0.004 |       0.006 |      0.9506 |     2 |     1 |       101.757 |   0.342012 |    0.5266 |
+|    1 |    0.016 |        0.01 |      0.9197 |     3 |     1 |       101.173 |   0.277696 |    0.4714 |
+|    2 |    0.006 |           0 |      0.9255 |     4 |     1 |       101.355 |   0.252481 |    0.4044 |
+|    3 |        0 |       0.002 |      0.9496 |     5 |     1 |       101.378 |   0.258454 |     0.392 |
+|    4 |    0.028 |        0.01 |      0.9258 |     6 |     1 |        101.45 |    0.23829 |    0.3791 |
 
 
 
@@ -2275,26 +2275,26 @@ with a few larges ones it does!
 
 # Results: trmdelora-qwen3-0.6b_20251027-062352
 {'project': 'coconut', 'save_path': 'outputs/', 'name': 'trmdelora-qwen3-0.6b', 'model_id': 'suayptalha/Qwen3-0.6B-Math-Expert', 'only_eval': False, 'load_model_path': '', 'resume_epochs': 2, 'use_position_ids': True, 'bf16': True, 'bf16_weight': False, 'opt_8b': False, 'load_in_4bit': False, 'load_in_8bit': False, 'cot_epochs': 0, 'epochs_per_stage': 8, 'max_latent_stage': 3, 'num_epochs': 20, 'batch_size_training': 16, 'gradient_accumulation_steps': 4, 'lr': 0.003, 'weight_decay': 0.01, 'grad_clip': 1.0, 'scheduler': 'cosine', 'debug': False, 'seed': 42, 'reset_optimizer': False, 'loss_seq_vcr': False, 'collect_hs': False, 'max_size': 10000, 'c_thought': 1, 'pad_latent_to_max': True, 'uniform_prob': 0.0, 'train_path': 'data/gsm_train.json', 'val_path': 'data/gsm_valid.json', 'system_prompt': '', 'latent_token_id': None, 'bot_token_id': None, 'eot_token_id': None, 'eos_token_id': None, 'skip_stage_zero': True, 'eval_first_epoch': False, 'loss_nll_ratio_margin': False, 'trm_h_cycles': 3, 'trm_l_cycles': 6, 'trm_l_layers': 2, 'trm_num_heads': 8, 'trm_expansion': 8.0, 'trm_persistent_steering': True, 'layers_spacing_adapter': 4, 'layers_start_adapter': 0.35, 'layers_end_adapter': 0.85, 'use_trm_delora': True, 'adapter_r': 8, 'adapter_delora_lambda': 30}
-|    |   eval/acc |   eval/cot_em |   eval/ratios |   epoch |   stage |   train/minutes |   train/loss |   eval/loss |
-|---:|-----------:|--------------:|--------------:|--------:|--------:|----------------:|-------------:|------------:|
-|  0 |     0.0446 |        0.006  |        0.9145 |       2 |       1 |         35.9436 |     0.294424 |      0.435  |
-|  1 |     0.0417 |        0.003  |        0.9294 |       3 |       1 |         34.81   |     0.300684 |      0.3944 |
-|  2 |     0.0685 |        0.003  |        0.9261 |       4 |       1 |         34.8798 |     0.473565 |      0.3732 |
-|  3 |     0.1012 |        0.006  |        0.927  |       5 |       1 |         34.7114 |     0.246281 |      0.3659 |
-|  4 |     0.0982 |        0.003  |        0.9099 |       6 |       1 |         34.6325 |     0.163347 |      0.3772 |
-|  5 |     0.1042 |        0.003  |        0.9202 |       7 |       1 |         34.7413 |     0.318264 |      0.3712 |
-|  6 |     0.0595 |        0.0089 |        0.6229 |       8 |       2 |         44.7343 |     0.402372 |      0.4784 |
-|  7 |     0.0625 |        0.0089 |        0.6186 |       9 |       2 |         44.7637 |     0.268759 |      0.4783 |
-|  8 |     0.0774 |        0.0089 |        0.6176 |      10 |       2 |         44.8088 |     0.343206 |      0.4692 |
-|  9 |     0.0744 |        0.0089 |        0.5813 |      11 |       2 |         44.5965 |     0.284971 |      0.4741 |
-| 10 |     0.0506 |        0.0089 |        0.5913 |      12 |       2 |         44.8857 |     0.199038 |      0.4796 |
-| 11 |     0.0506 |        0.0089 |        0.5889 |      13 |       2 |         44.5729 |     0.386588 |      0.4676 |
-| 12 |     0.0685 |        0.0089 |        0.5802 |      14 |       2 |         44.8392 |     0.283451 |      0.4689 |
-| 13 |     0.0625 |        0.0089 |        0.6037 |      15 |       2 |         44.3527 |     0.237279 |      0.4846 |
-| 14 |     0.0625 |        0.0089 |        0.4643 |      16 |       3 |         55.1522 |     0.315563 |      0.582  |
-| 15 |     0.0595 |        0.0089 |        0.4871 |      17 |       3 |         55.2007 |     0.397172 |      0.5567 |
-| 16 |     0.0476 |        0.0089 |        0.4972 |      18 |       3 |         54.9309 |     0.427072 |      0.5552 |
-| 17 |     0.0774 |        0.0089 |        0.4745 |      19 |       3 |         55.2371 |     0.427683 |      0.5672 |
+|      | eval/acc | eval/cot_em | eval/ratios | epoch | stage | train/minutes | train/loss | eval/loss |
+| ---: | -------: | ----------: | ----------: | ----: | ----: | ------------: | ---------: | --------: |
+|    0 |   0.0446 |       0.006 |      0.9145 |     2 |     1 |       35.9436 |   0.294424 |     0.435 |
+|    1 |   0.0417 |       0.003 |      0.9294 |     3 |     1 |         34.81 |   0.300684 |    0.3944 |
+|    2 |   0.0685 |       0.003 |      0.9261 |     4 |     1 |       34.8798 |   0.473565 |    0.3732 |
+|    3 |   0.1012 |       0.006 |       0.927 |     5 |     1 |       34.7114 |   0.246281 |    0.3659 |
+|    4 |   0.0982 |       0.003 |      0.9099 |     6 |     1 |       34.6325 |   0.163347 |    0.3772 |
+|    5 |   0.1042 |       0.003 |      0.9202 |     7 |     1 |       34.7413 |   0.318264 |    0.3712 |
+|    6 |   0.0595 |      0.0089 |      0.6229 |     8 |     2 |       44.7343 |   0.402372 |    0.4784 |
+|    7 |   0.0625 |      0.0089 |      0.6186 |     9 |     2 |       44.7637 |   0.268759 |    0.4783 |
+|    8 |   0.0774 |      0.0089 |      0.6176 |    10 |     2 |       44.8088 |   0.343206 |    0.4692 |
+|    9 |   0.0744 |      0.0089 |      0.5813 |    11 |     2 |       44.5965 |   0.284971 |    0.4741 |
+|   10 |   0.0506 |      0.0089 |      0.5913 |    12 |     2 |       44.8857 |   0.199038 |    0.4796 |
+|   11 |   0.0506 |      0.0089 |      0.5889 |    13 |     2 |       44.5729 |   0.386588 |    0.4676 |
+|   12 |   0.0685 |      0.0089 |      0.5802 |    14 |     2 |       44.8392 |   0.283451 |    0.4689 |
+|   13 |   0.0625 |      0.0089 |      0.6037 |    15 |     2 |       44.3527 |   0.237279 |    0.4846 |
+|   14 |   0.0625 |      0.0089 |      0.4643 |    16 |     3 |       55.1522 |   0.315563 |     0.582 |
+|   15 |   0.0595 |      0.0089 |      0.4871 |    17 |     3 |       55.2007 |   0.397172 |    0.5567 |
+|   16 |   0.0476 |      0.0089 |      0.4972 |    18 |     3 |       54.9309 |   0.427072 |    0.5552 |
+|   17 |   0.0774 |      0.0089 |      0.4745 |    19 |     3 |       55.2371 |   0.427683 |    0.5672 |
 
 outputs/trmdelora-qwen3-0.6b_20251027-062352/checkpoint_19    
 
@@ -2343,9 +2343,9 @@ Also moun doesn't help as few params are trainable
 
 replace_mul: loss 4 -> 2.67515 
 
-|    |   eval/acc |   eval/cot_em |   eval/ratios |   epoch |   stage |   train/minutes |   train/loss |   eval/loss |
-|---:|-----------:|--------------:|--------------:|--------:|--------:|----------------:|-------------:|------------:|
-|  0 |          0 |             0 |        1.0672 |       2 |       1 |         20.4727 |      2.67515 |      2.4314 |
+|      | eval/acc | eval/cot_em | eval/ratios | epoch | stage | train/minutes | train/loss | eval/loss |
+| ---: | -------: | ----------: | ----------: | ----: | ----: | ------------: | ---------: | --------: |
+|    0 |        0 |           0 |      1.0672 |     2 |     1 |       20.4727 |    2.67515 |    2.4314 |
 
 
 adapter_add 4->2.09
@@ -2356,17 +2356,17 @@ adapter_add 4->2.09
 
 ## adapter_add
 {'project': 'coconut', 'save_path': 'outputs/', 'name': 'trmsvft-qwen3-0.6b', 'model_id': 'suayptalha/Qwen3-0.6B-Math-Expert', 'only_eval': False, 'load_model_path': '', 'resume_epochs': 2, 'use_position_ids': True, 'bf16': True, 'bf16_weight': False, 'opt_8b': False, 'load_in_4bit': False, 'load_in_8bit': False, 'cot_epochs': 0, 'epochs_per_stage': 8, 'max_latent_stage': 3, 'num_epochs': 20, 'batch_size_training': 18, 'gradient_accumulation_steps': 1, 'lr': 0.005, 'weight_decay': 0.01, 'grad_clip': 10.0, 'scheduler': 'linear', 'debug': False, 'seed': 42, 'reset_optimizer': False, 'loss_seq_vcr': False, 'collect_hs': False, 'max_size': 5000, 'c_thought': 1, 'pad_latent_to_max': True, 'uniform_prob': 0.0, 'train_path': 'data/gsm_train.json', 'val_path': 'data/gsm_valid.json', 'system_prompt': '', 'latent_token_id': None, 'bot_token_id': None, 'eot_token_id': None, 'eos_token_id': None, 'skip_stage_zero': True, 'eval_first_epoch': False, 'loss_nll_ratio_margin': False, 'trm_h_cycles': 3, 'trm_l_cycles': 6, 'trm_l_layers': 2, 'trm_num_heads': 8, 'trm_expansion': 8.0, 'trm_persistent_steering': True, 'layers_spacing_adapter': 5, 'layers_start_adapter': 0.35, 'layers_end_adapter': 0.85, 'use_trm_svft': True, 'adapter_r': 32, 'fill_orthonormal': False}
-|    |   eval/acc |   eval/cot_em |   eval/ratios |   epoch |   stage |   train/minutes |   train/loss |   eval/loss |
-|---:|-----------:|--------------:|--------------:|--------:|--------:|----------------:|-------------:|------------:|
-|  0 |          0 |             0 |        0.9568 |       2 |       1 |         20.3744 |      1.56977 |      1.4006 |
+|      | eval/acc | eval/cot_em | eval/ratios | epoch | stage | train/minutes | train/loss | eval/loss |
+| ---: | -------: | ----------: | ----------: | ----: | ----: | ------------: | ---------: | --------: |
+|    0 |        0 |           0 |      0.9568 |     2 |     1 |       20.3744 |    1.56977 |    1.4006 |
 
 
 
 ## replace_mul
 {'project': 'coconut', 'save_path': 'outputs/', 'name': 'trmsvft-qwen3-0.6b', 'model_id': 'suayptalha/Qwen3-0.6B-Math-Expert', 'only_eval': False, 'load_model_path': '', 'resume_epochs': 2, 'use_position_ids': True, 'bf16': True, 'bf16_weight': False, 'opt_8b': False, 'load_in_4bit': False, 'load_in_8bit': False, 'cot_epochs': 0, 'epochs_per_stage': 8, 'max_latent_stage': 3, 'num_epochs': 20, 'batch_size_training': 18, 'gradient_accumulation_steps': 1, 'lr': 0.005, 'weight_decay': 0.01, 'grad_clip': 10.0, 'scheduler': 'linear', 'debug': False, 'seed': 42, 'reset_optimizer': False, 'loss_seq_vcr': False, 'collect_hs': False, 'max_size': 5000, 'c_thought': 1, 'pad_latent_to_max': True, 'uniform_prob': 0.0, 'train_path': 'data/gsm_train.json', 'val_path': 'data/gsm_valid.json', 'system_prompt': '', 'latent_token_id': None, 'bot_token_id': None, 'eot_token_id': None, 'eos_token_id': None, 'skip_stage_zero': True, 'eval_first_epoch': False, 'loss_nll_ratio_margin': False, 'trm_h_cycles': 3, 'trm_l_cycles': 6, 'trm_l_layers': 2, 'trm_num_heads': 8, 'trm_expansion': 8.0, 'trm_persistent_steering': True, 'layers_spacing_adapter': 5, 'layers_start_adapter': 0.35, 'layers_end_adapter': 0.85, 'use_trm_svft': True, 'adapter_r': 32, 'fill_orthonormal': False}
-|    |   eval/acc |   eval/cot_em |   eval/ratios |   epoch |   stage |   train/minutes |   train/loss |   eval/loss |
-|---:|-----------:|--------------:|--------------:|--------:|--------:|----------------:|-------------:|------------:|
-|  0 |          0 |             0 |        1.0353 |       2 |       1 |         20.4486 |       2.0971 |      1.9637 |
+|      | eval/acc | eval/cot_em | eval/ratios | epoch | stage | train/minutes | train/loss | eval/loss |
+| ---: | -------: | ----------: | ----------: | ----: | ----: | ------------: | ---------: | --------: |
+|    0 |        0 |           0 |      1.0353 |     2 |     1 |       20.4486 |     2.0971 |    1.9637 |
 
 
 T Epoch: 3/20, batch 73/278 (loss: 2.16:  27%|▎| 74/278 [
@@ -2378,10 +2378,10 @@ wandb:
 'target-modules-attern': '.+\\.(q_proj|k_proj).*$', 'use_trm_svft': True, 'adapter_r': 32, 'fill_orthonormal': False, 'adapter-svft-mode': 'replace_add'}
 
 
-|    |   eval/acc |   eval/cot_em |   eval/ratios |   epoch |   stage |   train/minutes |   train/loss |   eval/loss |
-|---:|-----------:|--------------:|--------------:|--------:|--------:|----------------:|-------------:|------------:|
-|  0 |          0 |             0 |        0.8572 |       2 |       1 |         17.8973 |      4.515   |      4.0498 |
-|  1 |          0 |             0 |        0.8369 |       3 |       1 |         17.7975 |      3.76521 |      3.656  |
+|      | eval/acc | eval/cot_em | eval/ratios | epoch | stage | train/minutes | train/loss | eval/loss |
+| ---: | -------: | ----------: | ----------: | ----: | ----: | ------------: | ---------: | --------: |
+|    0 |        0 |           0 |      0.8572 |     2 |     1 |       17.8973 |      4.515 |    4.0498 |
+|    1 |        0 |           0 |      0.8369 |     3 |     1 |       17.7975 |    3.76521 |     3.656 |
 
 
 ok lets run some for short epochs
@@ -2400,51 +2400,51 @@ uv run scripts/run.py TRMSvft --adapter-svft-mode='adapter_add'  --layers-spacin
 
 # Results: trmsvft-qwen3-0.6b_20251028-184444
 {'project': 'coconut', 'save_path': 'outputs/', 'name': 'trmsvft-qwen3-0.6b', 'model_id': 'suayptalha/Qwen3-0.6B-Math-Expert', 'only_eval': False, 'load_model_path': '', 'resume_epochs': 2, 'use_position_ids': True, 'bf16': True, 'bf16_weight': False, 'opt_8b': False, 'load_in_4bit': False, 'load_in_8bit': False, 'cot_epochs': 0, 'epochs_per_stage': 8, 'max_latent_stage': 3, 'num_epochs': 4, 'batch_size_training': 12, 'gradient_accumulation_steps': 2, 'lr': 0.001, 'weight_decay': 0.01, 'grad_clip': 10.0, 'scheduler': 'linear', 'debug': False, 'seed': 42, 'reset_optimizer': False, 'loss_seq_vcr': False, 'collect_hs': False, 'max_size': 5000, 'c_thought': 1, 'pad_latent_to_max': True, 'uniform_prob': 0.0, 'train_path': 'data/gsm_train.json', 'val_path': 'data/gsm_valid.json', 'system_prompt': '', 'latent_token_id': None, 'bot_token_id': None, 'eot_token_id': None, 'eos_token_id': None, 'skip_stage_zero': True, 'eval_first_epoch': False, 'loss_nll_ratio_margin': False, 'trm_h_cycles': 2, 'trm_l_cycles': 4, 'trm_l_layers': 2, 'trm_num_heads': 4, 'trm_expansion': 4.0, 'trm_persistent_steering': True, 'layers_spacing_adapter': 5, 'layers_start_adapter': 0.4, 'layers_end_adapter': 0.95, 'target_modules_pattern': '.+\\.(gate_proj).*$', 'use_trm_svft': True, 'adapter_r': 128, 'fill_orthonormal': False, 'adapter_svft_mode': 'adapter_add'}
-|    |   eval/acc |   eval/cot_em |   eval/ratios |   epoch |   stage |   train/minutes |   train/loss |   eval/loss |
-|---:|-----------:|--------------:|--------------:|--------:|--------:|----------------:|-------------:|------------:|
-|  0 |          0 |             0 |        1.7497 |       2 |       1 |          4.475  |      3.60144 |      3.0513 |
-|  1 |          0 |             0 |        1.748  |       3 |       1 |          4.4605 |      3.32092 |      3.0507 |
+|      | eval/acc | eval/cot_em | eval/ratios | epoch | stage | train/minutes | train/loss | eval/loss |
+| ---: | -------: | ----------: | ----------: | ----: | ----: | ------------: | ---------: | --------: |
+|    0 |        0 |           0 |      1.7497 |     2 |     1 |         4.475 |    3.60144 |    3.0513 |
+|    1 |        0 |           0 |       1.748 |     3 |     1 |        4.4605 |    3.32092 |    3.0507 |
 
 
 # Results: trmsvft-qwen3-0.6b_20251028-185401
 {'project': 'coconut', 'save_path': 'outputs/', 'name': 'trmsvft-qwen3-0.6b', 'model_id': 'suayptalha/Qwen3-0.6B-Math-Expert', 'only_eval': False, 'load_model_path': '', 'resume_epochs': 2, 'use_position_ids': True, 'bf16': True, 'bf16_weight': False, 'opt_8b': False, 'load_in_4bit': False, 'load_in_8bit': False, 'cot_epochs': 0, 'epochs_per_stage': 8, 'max_latent_stage': 3, 'num_epochs': 4, 'batch_size_training': 12, 'gradient_accumulation_steps': 2, 'lr': 0.001, 'weight_decay': 0.01, 'grad_clip': 10.0, 'scheduler': 'linear', 'debug': False, 'seed': 42, 'reset_optimizer': False, 'loss_seq_vcr': False, 'collect_hs': False, 'max_size': 5000, 'c_thought': 1, 'pad_latent_to_max': True, 'uniform_prob': 0.0, 'train_path': 'data/gsm_train.json', 'val_path': 'data/gsm_valid.json', 'system_prompt': '', 'latent_token_id': None, 'bot_token_id': None, 'eot_token_id': None, 'eos_token_id': None, 'skip_stage_zero': True, 'eval_first_epoch': False, 'loss_nll_ratio_margin': False, 'trm_h_cycles': 2, 'trm_l_cycles': 4, 'trm_l_layers': 2, 'trm_num_heads': 4, 'trm_expansion': 4.0, 'trm_persistent_steering': True, 'layers_spacing_adapter': 5, 'layers_start_adapter': 0.4, 'layers_end_adapter': 0.95, 'target_modules_pattern': '.+\\.(q_proj|k_proj).*$', 'use_trm_svft': True, 'adapter_r': 128, 'fill_orthonormal': False, 'adapter_svft_mode': 'adapter_add'}
-|    |   eval/acc |   eval/cot_em |   eval/ratios |   epoch |   stage |   train/minutes |   train/loss |   eval/loss |
-|---:|-----------:|--------------:|--------------:|--------:|--------:|----------------:|-------------:|------------:|
-|  0 |          0 |             0 |        1.7355 |       2 |       1 |          6.3569 |      4.41652 |      3.051  |
-|  1 |          0 |             0 |        1.7432 |       3 |       1 |          6.3533 |      3.29902 |      3.0507 |
+|      | eval/acc | eval/cot_em | eval/ratios | epoch | stage | train/minutes | train/loss | eval/loss |
+| ---: | -------: | ----------: | ----------: | ----: | ----: | ------------: | ---------: | --------: |
+|    0 |        0 |           0 |      1.7355 |     2 |     1 |        6.3569 |    4.41652 |     3.051 |
+|    1 |        0 |           0 |      1.7432 |     3 |     1 |        6.3533 |    3.29902 |    3.0507 |
 
 # Results: trmsvft-qwen3-0.6b_20251028-185401
 {'project': 'coconut', 'save_path': 'outputs/', 'name': 'trmsvft-qwen3-0.6b', 'model_id': 'suayptalha/Qwen3-0.6B-Math-Expert', 'only_eval': False, 'load_model_path': '', 'resume_epochs': 2, 'use_position_ids': True, 'bf16': True, 'bf16_weight': False, 'opt_8b': False, 'load_in_4bit': False, 'load_in_8bit': False, 'cot_epochs': 0, 'epochs_per_stage': 8, 'max_latent_stage': 3, 'num_epochs': 4, 'batch_size_training': 12, 'gradient_accumulation_steps': 2, 'lr': 0.001, 'weight_decay': 0.01, 'grad_clip': 10.0, 'scheduler': 'linear', 'debug': False, 'seed': 42, 'reset_optimizer': False, 'loss_seq_vcr': False, 'collect_hs': False, 'max_size': 5000, 'c_thought': 1, 'pad_latent_to_max': True, 'uniform_prob': 0.0, 'train_path': 'data/gsm_train.json', 'val_path': 'data/gsm_valid.json', 'system_prompt': '', 'latent_token_id': None, 'bot_token_id': None, 'eot_token_id': None, 'eos_token_id': None, 'skip_stage_zero': True, 'eval_first_epoch': False, 'loss_nll_ratio_margin': False, 'trm_h_cycles': 2, 'trm_l_cycles': 4, 'trm_l_layers': 2, 'trm_num_heads': 4, 'trm_expansion': 4.0, 'trm_persistent_steering': True, 'layers_spacing_adapter': 5, 'layers_start_adapter': 0.4, 'layers_end_adapter': 0.95, 'target_modules_pattern': '.+\\.(q_proj|k_proj).*$', 'use_trm_svft': True, 'adapter_r': 128, 'fill_orthonormal': False, 'adapter_svft_mode': 'adapter_add'}
-|    |   eval/acc |   eval/cot_em |   eval/ratios |   epoch |   stage |   train/minutes |   train/loss |   eval/loss |
-|---:|-----------:|--------------:|--------------:|--------:|--------:|----------------:|-------------:|------------:|
-|  0 |          0 |             0 |        1.7355 |       2 |       1 |          6.3569 |      4.41652 |      3.051  |
-|  1 |          0 |             0 |        1.7432 |       3 |       1 |          6.3533 |      3.29902 |      3.0507 |
+|      | eval/acc | eval/cot_em | eval/ratios | epoch | stage | train/minutes | train/loss | eval/loss |
+| ---: | -------: | ----------: | ----------: | ----: | ----: | ------------: | ---------: | --------: |
+|    0 |        0 |           0 |      1.7355 |     2 |     1 |        6.3569 |    4.41652 |     3.051 |
+|    1 |        0 |           0 |      1.7432 |     3 |     1 |        6.3533 |    3.29902 |    3.0507 |
 
 
 
 # Results: trmsvft-qwen3-0.6b_20251028-174623
 {'project': 'coconut', 'save_path': 'outputs/', 'name': 'trmsvft-qwen3-0.6b', 'model_id': 'suayptalha/Qwen3-0.6B-Math-Expert', 'only_eval': False, 'load_model_path': '', 'resume_epochs': 2, 'use_position_ids': True, 'bf16': True, 'bf16_weight': False, 'opt_8b': False, 'load_in_4bit': False, 'load_in_8bit': False, 'cot_epochs': 0, 'epochs_per_stage': 8, 'max_latent_stage': 3, 'num_epochs': 4, 'batch_size_training': 12, 'gradient_accumulation_steps': 2, 'lr': 0.001, 'weight_decay': 0.01, 'grad_clip': 10.0, 'scheduler': 'linear', 'debug': False, 'seed': 42, 'reset_optimizer': False, 'loss_seq_vcr': False, 'collect_hs': False, 'max_size': 5000, 'c_thought': 1, 'pad_latent_to_max': True, 'uniform_prob': 0.0, 'train_path': 'data/gsm_train.json', 'val_path': 'data/gsm_valid.json', 'system_prompt': '', 'latent_token_id': None, 'bot_token_id': None, 'eot_token_id': None, 'eos_token_id': None, 'skip_stage_zero': True, 'eval_first_epoch': False, 'loss_nll_ratio_margin': False, 'trm_h_cycles': 2, 'trm_l_cycles': 4, 'trm_l_layers': 2, 'trm_num_heads': 4, 'trm_expansion': 4.0, 'trm_persistent_steering': True, 'layers_spacing_adapter': 5, 'layers_start_adapter': 0.4, 'layers_end_adapter': 0.95, 'target_modules_pattern': None, 'use_trm_svft': True, 'adapter_r': 128, 'fill_orthonormal': False, 'adapter_svft_mode': 'replace_mul'}
-|    |   eval/acc |   eval/cot_em |   eval/ratios |   epoch |   stage |   train/minutes |   train/loss |   eval/loss |
-|---:|-----------:|--------------:|--------------:|--------:|--------:|----------------:|-------------:|------------:|
-|  0 |          0 |        0.0059 |        1.3366 |       2 |       1 |         15.6591 |      4.2251  |      3.892  |
-|  1 |          0 |        0.0059 |        1.3326 |       3 |       1 |         15.5949 |      4.23053 |      3.8891 |
+|      | eval/acc | eval/cot_em | eval/ratios | epoch | stage | train/minutes | train/loss | eval/loss |
+| ---: | -------: | ----------: | ----------: | ----: | ----: | ------------: | ---------: | --------: |
+|    0 |        0 |      0.0059 |      1.3366 |     2 |     1 |       15.6591 |     4.2251 |     3.892 |
+|    1 |        0 |      0.0059 |      1.3326 |     3 |     1 |       15.5949 |    4.23053 |    3.8891 |
 
 
 
 # Results: trmsvft-qwen3-0.6b_20251028-181811
 {'project': 'coconut', 'save_path': 'outputs/', 'name': 'trmsvft-qwen3-0.6b', 'model_id': 'suayptalha/Qwen3-0.6B-Math-Expert', 'only_eval': False, 'load_model_path': '', 'resume_epochs': 2, 'use_position_ids': True, 'bf16': True, 'bf16_weight': False, 'opt_8b': False, 'load_in_4bit': False, 'load_in_8bit': False, 'cot_epochs': 0, 'epochs_per_stage': 8, 'max_latent_stage': 3, 'num_epochs': 4, 'batch_size_training': 12, 'gradient_accumulation_steps': 2, 'lr': 0.001, 'weight_decay': 0.01, 'grad_clip': 10.0, 'scheduler': 'linear', 'debug': False, 'seed': 42, 'reset_optimizer': False, 'loss_seq_vcr': False, 'collect_hs': False, 'max_size': 5000, 'c_thought': 1, 'pad_latent_to_max': True, 'uniform_prob': 0.0, 'train_path': 'data/gsm_train.json', 'val_path': 'data/gsm_valid.json', 'system_prompt': '', 'latent_token_id': None, 'bot_token_id': None, 'eot_token_id': None, 'eos_token_id': None, 'skip_stage_zero': True, 'eval_first_epoch': False, 'loss_nll_ratio_margin': False, 'trm_h_cycles': 2, 'trm_l_cycles': 4, 'trm_l_layers': 2, 'trm_num_heads': 4, 'trm_expansion': 4.0, 'trm_persistent_steering': True, 'layers_spacing_adapter': 5, 'layers_start_adapter': 0.4, 'layers_end_adapter': 0.95, 'target_modules_pattern': '.+\\.(o_proj|v_proj).*$', 'use_trm_svft': True, 'adapter_r': 128, 'fill_orthonormal': False, 'adapter_svft_mode': 'adapter_add'}
-|    |   eval/acc |   eval/cot_em |   eval/ratios |   epoch |   stage |   train/minutes |   train/loss |   eval/loss |
-|---:|-----------:|--------------:|--------------:|--------:|--------:|----------------:|-------------:|------------:|
-|  0 |          0 |             0 |        1.7392 |       2 |       1 |          6.4363 |      4.40532 |      3.0516 |
-|  1 |          0 |             0 |        1.7489 |       3 |       1 |          6.3826 |      3.30272 |      3.0514 |
+|      | eval/acc | eval/cot_em | eval/ratios | epoch | stage | train/minutes | train/loss | eval/loss |
+| ---: | -------: | ----------: | ----------: | ----: | ----: | ------------: | ---------: | --------: |
+|    0 |        0 |           0 |      1.7392 |     2 |     1 |        6.4363 |    4.40532 |    3.0516 |
+|    1 |        0 |           0 |      1.7489 |     3 |     1 |        6.3826 |    3.30272 |    3.0514 |
 
 
 # Results: trmsvft-qwen3-0.6b_20251028-183127
 {'project': 'coconut', 'save_path': 'outputs/', 'name': 'trmsvft-qwen3-0.6b', 'model_id': 'suayptalha/Qwen3-0.6B-Math-Expert', 'only_eval': False, 'load_model_path': '', 'resume_epochs': 2, 'use_position_ids': True, 'bf16': True, 'bf16_weight': False, 'opt_8b': False, 'load_in_4bit': False, 'load_in_8bit': False, 'cot_epochs': 0, 'epochs_per_stage': 8, 'max_latent_stage': 3, 'num_epochs': 4, 'batch_size_training': 12, 'gradient_accumulation_steps': 2, 'lr': 0.001, 'weight_decay': 0.01, 'grad_clip': 10.0, 'scheduler': 'linear', 'debug': False, 'seed': 42, 'reset_optimizer': False, 'loss_seq_vcr': False, 'collect_hs': False, 'max_size': 5000, 'c_thought': 1, 'pad_latent_to_max': True, 'uniform_prob': 0.0, 'train_path': 'data/gsm_train.json', 'val_path': 'data/gsm_valid.json', 'system_prompt': '', 'latent_token_id': None, 'bot_token_id': None, 'eot_token_id': None, 'eos_token_id': None, 'skip_stage_zero': True, 'eval_first_epoch': False, 'loss_nll_ratio_margin': False, 'trm_h_cycles': 2, 'trm_l_cycles': 4, 'trm_l_layers': 2, 'trm_num_heads': 4, 'trm_expansion': 4.0, 'trm_persistent_steering': True, 'layers_spacing_adapter': 5, 'layers_start_adapter': 0.4, 'layers_end_adapter': 0.95, 'target_modules_pattern': '.+\\.(up_proj|down_proj).*$', 'use_trm_svft': True, 'adapter_r': 128, 'fill_orthonormal': False, 'adapter_svft_mode': 'adapter_add'}
-|    |   eval/acc |   eval/cot_em |   eval/ratios |   epoch |   stage |   train/minutes |   train/loss |   eval/loss |
-|---:|-----------:|--------------:|--------------:|--------:|--------:|----------------:|-------------:|------------:|
-|  0 |          0 |             0 |        1.7514 |       2 |       1 |          6.392  |      4.40664 |      3.051  |
-|  1 |          0 |             0 |        1.7495 |       3 |       1 |          6.4288 |      3.29989 |      3.0504 |
+|      | eval/acc | eval/cot_em | eval/ratios | epoch | stage | train/minutes | train/loss | eval/loss |
+| ---: | -------: | ----------: | ----------: | ----: | ----: | ------------: | ---------: | --------: |
+|    0 |        0 |           0 |      1.7514 |     2 |     1 |         6.392 |    4.40664 |     3.051 |
+|    1 |        0 |           0 |      1.7495 |     3 |     1 |        6.4288 |    3.29989 |    3.0504 |
 
 
 the best one on wandb suprisingly was
@@ -2480,12 +2480,12 @@ uv run scripts/run.py TRMSvft --adapter-svft-mode='adapter_mult'
 
 # Results: trmdelora-qwen3-0.6b_20251029-011331
 {'project': 'coconut', 'save_path': 'outputs/', 'name': 'trmdelora-qwen3-0.6b', 'model_id': 'suayptalha/Qwen3-0.6B-Math-Expert', 'only_eval': False, 'load_model_path': '', 'resume_epochs': 2, 'use_position_ids': True, 'bf16': True, 'bf16_weight': False, 'opt_8b': False, 'load_in_4bit': False, 'load_in_8bit': False, 'cot_epochs': 0, 'epochs_per_stage': 8, 'max_latent_stage': 3, 'num_epochs': 6, 'batch_size_training': 12, 'gradient_accumulation_steps': 3, 'lr': 0.0005, 'weight_decay': 0.01, 'grad_clip': 10.0, 'scheduler': 'linear', 'debug': False, 'seed': 42, 'reset_optimizer': False, 'loss_seq_vcr': False, 'collect_hs': False, 'max_size': 5000, 'c_thought': 1, 'pad_latent_to_max': True, 'uniform_prob': 0.0, 'train_path': 'data/gsm_train.json', 'val_path': 'data/gsm_valid.json', 'system_prompt': '', 'latent_token_id': None, 'bot_token_id': None, 'eot_token_id': None, 'eos_token_id': None, 'skip_stage_zero': True, 'eval_first_epoch': False, 'loss_nll_ratio_margin': True, 'trm_h_cycles': 3, 'trm_l_cycles': 6, 'trm_l_layers': 2, 'trm_num_heads': 4, 'trm_expansion': 2.0, 'trm_persistent_steering': True, 'layers_spacing_adapter': 5, 'layers_start_adapter': 0.3, 'layers_end_adapter': 0.95, 'target_modules_pattern': '.+\\.(gate_proj).*$', 'use_trm_delora': True, 'adapter_r': 8, 'adapter_delora_lambda': 30}
-|    |   eval/acc |   eval/cot_em |   eval/ratios |   epoch |   stage |   train/minutes |   train/loss |   eval/loss |
-|---:|-----------:|--------------:|--------------:|--------:|--------:|----------------:|-------------:|------------:|
-|  0 |     0      |        0      |        0.9092 |       2 |       1 |          6.8089 |      15.8411 |     12.6648 |
-|  1 |     0      |        0.0059 |        0.893  |       3 |       1 |          6.7919 |      14.7071 |     12.5811 |
-|  2 |     0.0059 |        0      |        0.9161 |       4 |       1 |          6.8567 |      10.5829 |     12.5568 |
-|  3 |     0      |        0.0059 |        0.8948 |       5 |       1 |          6.7863 |      24.2266 |     12.5008 |
+|      | eval/acc | eval/cot_em | eval/ratios | epoch | stage | train/minutes | train/loss | eval/loss |
+| ---: | -------: | ----------: | ----------: | ----: | ----: | ------------: | ---------: | --------: |
+|    0 |        0 |           0 |      0.9092 |     2 |     1 |        6.8089 |    15.8411 |   12.6648 |
+|    1 |        0 |      0.0059 |       0.893 |     3 |     1 |        6.7919 |    14.7071 |   12.5811 |
+|    2 |   0.0059 |           0 |      0.9161 |     4 |     1 |        6.8567 |    10.5829 |   12.5568 |
+|    3 |        0 |      0.0059 |      0.8948 |     5 |     1 |        6.7863 |    24.2266 |   12.5008 |
 
 # 2025-10-29 06:31:34
 
@@ -2515,9 +2515,9 @@ Your orthogonal tail: Random basis orthogonal to principal V → spans the compl
 
 # Results: trmsvft-qwen3-0.6b_20251029-063730|███████████████▉              | 74/139 [02:01<01:49,  1.68s/it]
 {'project': 'coconut', 'save_path': 'outputs/', 'name': 'trmsvft-qwen3-0.6b', 'model_id': 'suayptalha/Qwen3-0.6B-Math-Expert', 'only_eval': False, 'load_model_path': '', 'resume_epochs': 2, 'use_position_ids': True, 'bf16': True, 'bf16_weight': False, 'opt_8b': False, 'load_in_4bit': False, 'load_in_8bit': False, 'cot_epochs': 0, 'epochs_per_stage': 8, 'max_latent_stage': 3, 'num_epochs': 6, 'batch_size_training': 12, 'gradient_accumulation_steps': 3, 'lr': 0.001, 'weight_decay': 0.01, 'grad_clip': 10.0, 'scheduler': 'linear', 'debug': False, 'seed': 42, 'reset_optimizer': False, 'loss_seq_vcr': False, 'collect_hs': False, 'max_size': 5000, 'c_thought': 1, 'pad_latent_to_max': True, 'uniform_prob': 0.0, 'train_path': 'data/gsm_train.json', 'val_path': 'data/gsm_valid.json', 'system_prompt': '', 'latent_token_id': None, 'bot_token_id': None, 'eot_token_id': None, 'eos_token_id': None, 'skip_stage_zero': True, 'eval_first_epoch': False, 'loss_nll_ratio_margin': False, 'trm_h_cycles': 3, 'trm_l_cycles': 6, 'trm_l_layers': 2, 'trm_num_heads': 4, 'trm_expansion': 2.0, 'trm_persistent_steering': True, 'layers_spacing_adapter': 5, 'layers_start_adapter': 0.3, 'layers_end_adapter': 0.95, 'target_modules_pattern': '.+\\.(gate_proj).*$', 'use_trm_svft': True, 'adapter_fill_orthonormal': False, 'adapter_principal_rank': 64, 'adapter_tail_rank': 32, 'adapter_svft_mode': 'adapter_add'}
-|    |   eval/acc |   eval/cot_em |   eval/ratios |   epoch |   stage |   train/minutes |   train/loss |   eval/loss |
-|---:|-----------:|--------------:|--------------:|--------:|--------:|----------------:|-------------:|------------:|
-|  0 |          0 |        0.0059 |        0.8918 |       2 |       1 |          5.9772 |     0.473206 |      0.5114 |
+|      | eval/acc | eval/cot_em | eval/ratios | epoch | stage | train/minutes | train/loss | eval/loss |
+| ---: | -------: | ----------: | ----------: | ----: | ----: | ------------: | ---------: | --------: |
+|    0 |        0 |      0.0059 |      0.8918 |     2 |     1 |        5.9772 |   0.473206 |    0.5114 |
 
 
 # 2025-10-29 06:54:34
@@ -2530,12 +2530,12 @@ Ah... I had a really good version half way through from exp(sd) and learnable U
 
 # Results: trmsvft-qwen3-0.6b_20251029-071158
 {'project': 'coconut', 'save_path': 'outputs/', 'name': 'trmsvft-qwen3-0.6b', 'model_id': 'suayptalha/Qwen3-0.6B-Math-Expert', 'only_eval': False, 'load_model_path': '', 'resume_epochs': 2, 'use_position_ids': True, 'bf16': True, 'bf16_weight': False, 'opt_8b': False, 'load_in_4bit': False, 'load_in_8bit': False, 'cot_epochs': 0, 'epochs_per_stage': 8, 'max_latent_stage': 3, 'num_epochs': 6, 'batch_size_training': 12, 'gradient_accumulation_steps': 3, 'lr': 0.001, 'weight_decay': 0.01, 'grad_clip': 10.0, 'scheduler': 'linear', 'debug': False, 'seed': 42, 'reset_optimizer': False, 'loss_seq_vcr': False, 'collect_hs': False, 'max_size': 5000, 'c_thought': 1, 'pad_latent_to_max': True, 'uniform_prob': 0.0, 'train_path': 'data/gsm_train.json', 'val_path': 'data/gsm_valid.json', 'system_prompt': '', 'latent_token_id': None, 'bot_token_id': None, 'eot_token_id': None, 'eos_token_id': None, 'skip_stage_zero': True, 'eval_first_epoch': False, 'loss_nll_ratio_margin': False, 'trm_h_cycles': 3, 'trm_l_cycles': 6, 'trm_l_layers': 2, 'trm_num_heads': 4, 'trm_expansion': 2.0, 'trm_persistent_steering': True, 'layers_spacing_adapter': 5, 'layers_start_adapter': 0.3, 'layers_end_adapter': 0.95, 'target_modules_pattern': '.+\\.(gate_proj).*$', 'use_trm_svft': True, 'adapter_fill_orthonormal': False, 'adapter_principal_rank': 64, 'adapter_tail_rank': 32, 'adapter_svft_mode': 'adapter_add'}
-|    |   eval/acc |   eval/cot_em |   eval/ratios |   epoch |   stage |   train/minutes |   train/loss |   eval/loss |
-|---:|-----------:|--------------:|--------------:|--------:|--------:|----------------:|-------------:|------------:|
-|  0 |          0 |        0.0059 |        0.8891 |       2 |       1 |          5.901  |     0.48113  |      0.5102 |
-|  1 |          0 |        0      |        0.8563 |       3 |       1 |          5.9316 |     0.415078 |      0.4389 |
-|  2 |          0 |        0      |        0.8692 |       4 |       1 |          5.9206 |     0.379189 |      0.4106 |
-|  3 |          0 |        0      |        0.8807 |       5 |       1 |          5.9451 |     0.394015 |      0.3977 |
+|      | eval/acc | eval/cot_em | eval/ratios | epoch | stage | train/minutes | train/loss | eval/loss |
+| ---: | -------: | ----------: | ----------: | ----: | ----: | ------------: | ---------: | --------: |
+|    0 |        0 |      0.0059 |      0.8891 |     2 |     1 |         5.901 |    0.48113 |    0.5102 |
+|    1 |        0 |           0 |      0.8563 |     3 |     1 |        5.9316 |   0.415078 |    0.4389 |
+|    2 |        0 |           0 |      0.8692 |     4 |     1 |        5.9206 |   0.379189 |    0.4106 |
+|    3 |        0 |           0 |      0.8807 |     5 |     1 |        5.9451 |   0.394015 |    0.3977 |
 
 
 
@@ -2641,12 +2641,12 @@ ok I just added an output layer since zH is by nature small, but the output may 
 best run yet in terms of loss !!
 
 {'project': 'coconut', 'save_path': 'outputs/', 'name': 'trmsvft-qwen3-0.6b', 'model_id': 'suayptalha/Qwen3-0.6B-Math-Expert', 'only_eval': False, 'load_model_path': '', 'resume_epochs': 2, 'use_position_ids': True, 'bf16': True, 'bf16_weight': False, 'opt_8b': False, 'load_in_4bit': False, 'load_in_8bit': False, 'cot_epochs': 0, 'epochs_per_stage': 8, 'max_latent_stage': 3, 'num_epochs': 6, 'batch_size_training': 12, 'gradient_accumulation_steps': 3, 'lr': 0.001, 'weight_decay': 0.03, 'grad_clip': 10.0, 'scheduler': 'linear', 'debug': False, 'seed': 42, 'reset_optimizer': False, 'loss_seq_vcr': False, 'collect_hs': False, 'max_size': 5000, 'c_thought': 1, 'pad_latent_to_max': True, 'uniform_prob': 0.0, 'train_path': 'data/gsm_train.json', 'val_path': 'data/gsm_valid.json', 'system_prompt': '', 'latent_token_id': None, 'bot_token_id': None, 'eot_token_id': None, 'eos_token_id': None, 'skip_stage_zero': True, 'eval_first_epoch': False, 'loss_nll_ratio_margin': False, 'trm_h_cycles': 3, 'trm_l_cycles': 6, 'trm_l_layers': 2, 'trm_num_heads': 4, 'trm_expansion': 2.0, 'trm_persistent_steering': True, 'layers_spacing_adapter': 5, 'layers_start_adapter': 0.3, 'layers_end_adapter': 0.95, 'target_modules_pattern': '.+\\.(gate_proj).*$', 'use_trm_svft': True, 'adapter_fill_orthonormal': False, 'adapter_principal_rank': 64, 'adapter_tail_rank': 32, 'adapter_svft_mode': 'adapter_add'}
-|    |   eval/acc |   eval/cot_em |   eval/ratios |   epoch |   stage |   train/minutes |   train/loss |   eval/loss |
-|---:|-----------:|--------------:|--------------:|--------:|--------:|----------------:|-------------:|------------:|
-|  0 |     0      |             0 |        0.8497 |       2 |       1 |          5.9709 |     0.274186 |      0.4745 |
-|  1 |     0      |             0 |        0.8814 |       3 |       1 |          5.9252 |     0.389702 |      0.4206 |
-|  2 |     0      |             0 |        0.886  |       4 |       1 |          5.8507 |     0.350984 |      0.4017 |
-|  3 |     0.0059 |             0 |        0.909  |       5 |       1 |          5.8807 |     0.197725 |      0.3944 |
+|      | eval/acc | eval/cot_em | eval/ratios | epoch | stage | train/minutes | train/loss | eval/loss |
+| ---: | -------: | ----------: | ----------: | ----: | ----: | ------------: | ---------: | --------: |
+|    0 |        0 |           0 |      0.8497 |     2 |     1 |        5.9709 |   0.274186 |    0.4745 |
+|    1 |        0 |           0 |      0.8814 |     3 |     1 |        5.9252 |   0.389702 |    0.4206 |
+|    2 |        0 |           0 |       0.886 |     4 |     1 |        5.8507 |   0.350984 |    0.4017 |
+|    3 |   0.0059 |           0 |       0.909 |     5 |     1 |        5.8807 |   0.197725 |    0.3944 |
 
 # 2025-10-29 recap
 
@@ -2655,3 +2655,30 @@ Ok overall
 - with svft learning U was important
 - and having some way to include the tail seems important otherwise we are throwing away valid and important directions
 - it seemed important to have persistent but dynamic steering, but I need to ablate this
+
+# res
+# Results: trmsvft-qwen3-4b-instruct-2507_20251030-040644                                                                                                                                                   | 2/52 [00:36<14:04, 16.88s/it]
+{'project': 'coconut', 'save_path': 'outputs/', 'name': 'trmsvft-qwen3-4b-instruct-2507', 'model_id': 'Qwen/Qwen3-4B-Instruct-2507', 'only_eval': False, 'load_model_path': '', 'resume_epochs': 1, 'use_position_ids': True, 'bf16': True, 'bf16_weight': False, 'opt_8b': False, 'load_in_4bit': False, 'load_in_8bit': False, 'cot_epochs': 0, 'epochs_per_stage': 4, 'max_latent_stage': 3, 'num_epochs': 10, 'batch_size_training': 32, 'gradient_accumulation_steps': 6, 'lr': 0.0006, 'weight_decay': 0.001, 'grad_clip': 10.0, 'scheduler': 'linear', 'debug': False, 'seed': 42, 'reset_optimizer': False, 'loss_seq_vcr': False, 'collect_hs': False, 'max_size': 10000, 'c_thought': 1, 'pad_latent_to_max': True, 'uniform_prob': 0.0, 'train_path': 'data/gsm_train.json', 'val_path': 'data/gsm_valid.json', 'system_prompt': '', 'latent_token_id': None, 'bot_token_id': None, 'eot_token_id': None, 'eos_token_id': None, 'skip_stage_zero': True, 'eval_first_epoch': False, 'loss_nll_ratio_margin': False, 'trm_h_cycles': 3, 'trm_l_cycles': 6, 'trm_l_layers': 2, 'trm_num_heads': 4, 'trm_expansion': 2.0, 'trm_persistent_steering': True, 'layers_spacing_adapter': 3, 'layers_start_adapter': 0.3, 'layers_end_adapter': 0.95, 'target_modules_pattern': None, 'use_trm_svft': True, 'adapter_fill_orthonormal': False, 'adapter_principal_rank': 32, 'adapter_tail_rank': 16, 'adapter_svft_mode': 'replace_add', '__type__': "<class 'coconut.configs.TRMSvft'>"}
+|    |   eval/acc |   eval/cot_em |   eval/ratios |   epoch |   stage |   train/minutes |   train/loss |   eval/loss |
+|---:|-----------:|--------------:|--------------:|--------:|--------:|----------------:|-------------:|------------:|
+|  0 |     0      |        0      |        0.9536 |       1 |       1 |         12.2917 |     1.36708  |      1.389  |
+|  1 |     0.1964 |        0.0089 |        0.8837 |       2 |       1 |         12.3727 |     0.621547 |      0.5846 |
+|  2 |     0.3214 |        0.0089 |        0.8796 |       3 |       1 |         12.1842 |     0.392794 |      0.4368 |
+|  3 |     0.1726 |        0.003  |        0.4929 |       4 |       2 |         16.0773 |     0.428642 |      0.5084 |
+|  4 |     0.1845 |        0.0119 |        0.4864 |       5 |       2 |         16.0175 |     0.371012 |      0.4682 |
+|  5 |     0.1637 |        0.006  |        0.4932 |       6 |       2 |         15.9085 |     0.325109 |      0.4501 |
+|  6 |     0.1696 |        0.0089 |        0.4802 |       7 |       2 |         16.0759 |     0.280929 |      0.4409 |
+|  7 |     0.1845 |        0.003  |        0.3544 |       8 |       3 |         19.9129 |     0.308694 |      0.4921 |
+
+Oh look it got up to 0.32 before it starte overfitting which really hurt the score
+
+# Results: trmsvft-gpt-oss-20b_20251030-061210
+{'project': 'coconut', 'save_path': 'outputs/', 'name': 'trmsvft-gpt-oss-20b', 'model_id': 'openai/gpt-oss-20b', 'only_eval': False, 'load_model_path': '', 'resume_epochs': 1, 'use_position_ids': True, 'bf16': True, 'bf16_weight': False, 'opt_8b': False, 'load_in_4bit': False, 'load_in_8bit': False, 'cot_epochs': 0, 'epochs_per_stage': 4, 'max_latent_stage': 3, 'num_epochs': 10, 'batch_size_training': 8, 'gradient_accumulation_steps': 6, 'lr': 0.0006, 'weight_decay': 0.001, 'grad_clip': 10.0, 'scheduler': 'linear', 'debug': False, 'seed': 42, 'reset_optimizer': False, 'loss_seq_vcr': False, 'collect_hs': False, 'max_size': 10000, 'c_thought': 1, 'pad_latent_to_max': True, 'uniform_prob': 0.0, 'train_path': 'data/gsm_train.json', 'val_path': 'data/gsm_valid.json', 'system_prompt': '', 'latent_token_id': None, 'bot_token_id': None, 'eot_token_id': None, 'eos_token_id': None, 'skip_stage_zero': True, 'eval_first_epoch': False, 'loss_nll_ratio_margin': False, 'trm_h_cycles': 3, 'trm_l_cycles': 6, 'trm_l_layers': 2, 'trm_num_heads': 4, 'trm_expansion': 2.0, 'trm_persistent_steering': True, 'layers_spacing_adapter': 3, 'layers_start_adapter': 0.3, 'layers_end_adapter': 0.95, 'target_modules_pattern': None, 'use_trm_svft': True, 'adapter_fill_orthonormal': False, 'adapter_principal_rank': 32, 'adapter_tail_rank': 16, 'adapter_svft_mode': 'adapter_add', '__type__': "<class 'coconut.configs.TRMSvft'>"}
+|    |   eval/acc |   eval/cot_em |   eval/ratios |   epoch |   stage |   train/minutes |   train/loss |   eval/loss |
+|---:|-----------:|--------------:|--------------:|--------:|--------:|----------------:|-------------:|------------:|
+|  0 |     0.2917 |        0.0119 |        0.9938 |       1 |       1 |         44.4157 |     0.43431  |      0.4479 |
+|  1 |     0.2321 |        0.006  |        0.9946 |       2 |       1 |         42.5343 |     0.217288 |      0.4177 |
+|  2 |     0.2649 |        0.0149 |        0.9927 |       3 |       1 |         42.4159 |     0.360195 |      0.3965 |
+|  3 |     0.3036 |        0.0119 |        0.9847 |       4 |       2 |         54.0988 |     0.423941 |      0.5169 |
+|  4 |     0.2917 |        0.0119 |        0.9878 |       5 |       2 |         55.8403 |     0.576862 |      0.5096 |
+|  5 |     0.3036 |        0.0089 |        0.9832 |       6 |       2 |         55.8457 |     0.401156 |      0.5068 |
