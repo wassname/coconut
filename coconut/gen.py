@@ -2,9 +2,13 @@ import torch
 from loguru import logger
 from coconut.coconut import Coconut
 from coconut.adapters import set_adapter
-from coconut.configs import bot_token, latent_token, eot_token
+# from coconut.configs import bot_token, latent_token, eot_token
 
 def gen_sample2(model: Coconut, tokenizer, verbose=True, latents=[None, 0, 1, 2], **kwargs):
+
+    latent_token  = model.config.latent_token
+    bot_token     = model.config.bot_token
+    eot_token     = model.config.eot_token
 
     adapters = [model.model.active_adapter, None]
 
@@ -36,17 +40,20 @@ def gen_sample2(model: Coconut, tokenizer, verbose=True, latents=[None, 0, 1, 2]
             logger.info(sout)
     return outs
 
-def gen_sample(model, tokenizer, verbose=True, **kwargs):
-    # try different lengths of latent
-    for l in [0, 1, 2]:
-        latent_tokens = bot_token + latent_token * l + eot_token
-        s=[
-        {'role':'user', 'content':'What is two plus two but wrong and french?'},
-        {'role':'assistant', 'content':latent_tokens}
-        ]
-        if verbose:
-            logger.info(f'--- Generating with {l} latent tokens ---')
-        yield gen(s, model, tokenizer, tokenizer_kwargs=dict(add_generation_prompt=True), verbose=verbose, **kwargs)
+# def gen_sample(model, tokenizer, verbose=True, **kwargs):
+#     latent_token  = model.config.latent_token
+#     bot_token     = model.config.bot_token
+#     eot_token     = model.config.eot_token
+#     # try different lengths of latent
+#     for l in [0, 1, 2]:
+#         latent_tokens = bot_token + latent_token * l + eot_token
+#         s=[
+#         {'role':'user', 'content':'What is two plus two but wrong and french?'},
+#         {'role':'assistant', 'content':latent_tokens}
+#         ]
+#         if verbose:
+#             logger.info(f'--- Generating with {l} latent tokens ---')
+#         yield gen(s, model, tokenizer, tokenizer_kwargs=dict(add_generation_prompt=True), verbose=verbose, **kwargs)
 
 def gen(s, model, tokenizer, min_new_tokens=4, max_new_tokens=16, do_sample=False, tokenizer_kwargs={}, generate_kwargs={}, verbose=True):
     p = next(iter(model.parameters()))

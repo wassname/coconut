@@ -12,9 +12,9 @@ from coconut.trmlora.recursive_svft import TRMSvftAConfig
 # bot_token = "<|start-latent|>"
 # eot_token = "<|end-latent|>"
 # TODO it would be nicer to search for a token us tokenizer.encode(" ...")[0], so we can get whitepace right
-bot_token = "Hmm"
-latent_token = "..."
-eot_token = ","
+# bot_token = "Hmm"
+# latent_token = "..."
+# eot_token = "Therefore"
 
 @dataclass(config=ConfigDict(validate_assignment=True)) 
 class BaseConfig:
@@ -74,6 +74,9 @@ class BaseConfig:
     bot_token_id: Optional[int] = None  # beginning of thought token id
     eot_token_id: Optional[int] = None  # end of thought token id
     eos_token_id: Optional[int] = None  # for generate pad/eos
+    latent_token: str = '...'
+    bot_token: str = "Hmm"
+    eot_token: str = 'therefore'
 
 
 @dataclass
@@ -84,8 +87,8 @@ class TRMConfig(BaseConfig):
     resume_epochs: int = 1
     cot_epochs: int = 0
     skip_stage_zero: bool = True  # skip stage 0 : <start_latent><end_latent> training with 0 latent tokens
-    num_epochs: int = 10
-    epochs_per_stage: int = 8
+    num_epochs: int = 6
+    epochs_per_stage: int = 3
     
     scheduler: str = "linear"
     lr: float = 4e-4 # 1e-4 in paper

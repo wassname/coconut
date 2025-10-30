@@ -2780,6 +2780,10 @@ score.
 
 So ideally my final eval should be 4 shot. I can validate my hardness by getting this on the instruction tuned model. I should have a train and test set.
 
+it looks like they use https://github.com/EleutherAI/lm-evaluation-harness lm_eval
+https://github.com/QwenLM/vllm/blob/324960a95c00112ce6b9b858d9311da1597cfb8b/tests/entrypoints/openai/test_accuracy.py#L57
+https://github.com/QwenLM/vllm/blob/324960a95c00112ce6b9b858d9311da1597cfb8b/.buildkite/lm-eval-harness/run-lm-eval-gsm-hf-baseline.sh#L43
+https://github.com/EleutherAI/lm-evaluation-harness/blob/03c44adc0586f88bb343a74da1a1c602103536dd/docs/interface.md?plain=1#L85
 
 # 2025-10-30 16:55:13
 
@@ -2820,22 +2824,25 @@ mainly because they are all single token changes (no need to change token calcs)
 
 ok it seems like it works, as you can see below, when the model is first initialised, it's simialr with adapter on/off, and with tokens 0, 1, 2. That means our thought tokens are not messing up the answer too much
 
-    2025-10-30 20:00:08.850 | INFO     | coconut.gen:gen_sample2:28 - --- Generating adapter=(None) 0 latent tokens ---
-    2025-10-30 20:00:12.244 | INFO     | coconut.gen:gen_sample2:38 - Input:                                 
-    --- Generated with adapter=None and 0 latent tokens ---
-    let's break this down. The question is asking for "two plus two but
-    --- Generated with adapter=None and 1 latent tokens ---
-    let's see. The question is asking for "two plus two but wrong"
-    --- Generated with adapter=None and 2 latent tokens ---
-    let's see. The question is asking for "two plus two but wrong"
-    2025-10-30 20:00:12.322 | INFO     | coconut.gen:gen_sample2:28 - --- Generating adapter=(default) 0 latent tokens ---
-    2025-10-30 20:01:09.598 | INFO     | coconut.gen:gen_sample2:38 - Input:                                 
+    2025-10-30 20:26:35.671 | INFO     | coconut.gen:gen_sample2:36 - Input:                                           
+    --- Generated with adapter=default and None latent tokens ---
+    To solve the problem "What is two plus two but wrong and French?" we
     --- Generated with adapter=default and 0 latent tokens ---
-    let's see. The question is asking for "two plus two but wrong"
+    Hmm, let's see. The question is asking for "two plus two but wrong"
     --- Generated with adapter=default and 1 latent tokens ---
-    let's see. The user wants two plus two but wrong and French. Let
+    Hmm..., let's see. The user wants two plus two but wrong and French. Let
     --- Generated with adapter=default and 2 latent tokens ---
-    let's see. The question says "two plus two but wrong and french"
+    Hmm......, let's see. The question says "two plus two but wrong and french"
+    2025-10-30 20:26:35.843 | INFO     | coconut.gen:gen_sample2:26 - --- Generating adapter=(None) None latent tokens ---
+    2025-10-30 20:26:40.082 | INFO     | coconut.gen:gen_sample2:36 - Input:                                           
+    --- Generated with adapter=None and None latent tokens ---
+    To solve the problem "What is two plus two but wrong and French?" we
+    --- Generated with adapter=None and 0 latent tokens ---
+    Hmm, let's break this down. The question is asking for "two plus two but
+    --- Generated with adapter=None and 1 latent tokens ---
+    Hmm..., let's see. The question is asking for "two plus two but wrong"
+    --- Generated with adapter=None and 2 latent tokens ---
+    Hmm......, let's see. The question is asking for "two plus two but wrong"
 
 TODO 
 - [ ] TODO target_modules need to be saved hrmm
@@ -2848,4 +2855,24 @@ TODO
 uv run scripts/run.py TRMSvft --lr=1e-1 --gradient-accumulation-steps=1 --weight_decay=10 --num_epochs=1 --max_size=1000 --adapter_principal_rank=96
 
 
+
+
+# Results: trmsvft-qwen3-0.6b_20251030-202740
+{'project': 'coconut', 'save_path': 'outputs/', 'name': 'trmsvft-qwen3-0.6b', 'model_id': 'suayptalha/Qwen3-0.6B-Math-Expert', 'only_eval': False, 'load_model_path': '', 'resume_epochs': 1, 'use_position_ids': True, 'bf16': True, 'bf16_weight': False, 'opt_8b': False, 'load_in_4bit': False, 'load_in_8bit': False, 'cot_epochs': 0, 'epochs_per_stage': 8, 'max_latent_stage': 3, 'num_epochs': 10, 'batch_size_training': 12, 'gradient_accumulation_steps': 6, 'lr': 0.0004, 'weight_decay': 0.001, 'grad_clip': 10.0, 'scheduler': 'linear', 'debug': False, 'seed': 42, 'reset_optimizer': False, 'loss_seq_vcr': False, 'collect_hs': False, 'max_size': 10000, 'c_thought': 1, 'pad_latent_to_max': True, 'uniform_prob': 0.0, 'train_path': 'data/gsm_train.json', 'val_path': 'data/gsm_valid.json', 'system_prompt': '', 'latent_token_id': None, 'bot_token_id': None, 'eot_token_id': None, 'eos_token_id': None, 'skip_stage_zero': True, 'eval_first_epoch': True, 'loss_nll_ratio_margin': False, 'trm_h_cycles': 3, 'trm_l_cycles': 6, 'trm_l_layers': 2, 'trm_num_heads': 4, 'trm_expansion': 2.0, 'trm_persistent_steering': True, 'layers_spacing_adapter': 5, 'layers_start_adapter': 0.3, 'layers_end_adapter': 0.95, 'target_modules_pattern': None, 'use_trm_svft': True, 'adapter_fill_orthonormal': False, 'adapter_principal_rank': 32, 'adapter_tail_rank': 16, 'adapter_svft_mode': 'adapter_add', '__type__': 'TRMSvft'}
+CLI args: scripts/run.py TRMSvft
+|    |   eval/acc |   eval/cot_em |   epoch |   stage |   eval/ratios |   train/minutes |   train/loss |   eval/loss |
+|---:|-----------:|--------------:|--------:|--------:|--------------:|----------------:|-------------:|------------:|
+|  0 |     0      |        0      |      -1 |       1 |        0.9265 |        nan      |   nan        |    nan      |
+|  1 |     0.0595 |        0.0089 |       1 |       1 |        0.8863 |         76.5775 |     0.59661  |      0.5896 |
+|  2 |     0.1042 |        0.0268 |       2 |       1 |        0.8882 |         54.2955 |     0.394136 |      0.4949 |
+|  3 |     0.1429 |        0.0179 |       3 |       1 |        0.8867 |         54.202  |     0.236546 |      0.4588 |
+|  4 |     0.1756 |        0.0298 |       4 |       1 |        0.8912 |         53.769  |     0.247504 |      0.4368 |
+|  5 |     0.1726 |        0.0238 |       5 |       1 |        0.8886 |         54.1068 |     0.412213 |      0.4235 |
+|  6 |     0.1964 |        0.0238 |       6 |       1 |        0.8961 |         54.0793 |     0.179641 |      0.4177 |
+|  7 |     0.1964 |        0.0238 |       7 |       1 |        0.893  |         53.6835 |     0.43133  |      0.4127 |
+|  8 |     0.0804 |        0.0119 |       8 |       2 |        0.5516 |         72.2743 |     0.523083 |      0.5337 |
+|  9 |     0.0982 |        0.0119 |       9 |       2 |        0.5614 |         72.1754 |     0.479289 |      0.5203 |
+
+
+ TODO cosider latent that makes it conclude not think
 

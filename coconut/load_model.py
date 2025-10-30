@@ -78,6 +78,9 @@ def load_new_model(conf: BaseConfig, device, dtype):
     bot_id = tokenizer.convert_tokens_to_ids(bot_token)
     eot_id = tokenizer.convert_tokens_to_ids(eot_token)
 
+    conf.latent_token = latent_token
+    conf.bot_token = bot_token
+    conf.eot_token = eot_token
     conf.latent_token_id = latent_id
     conf.bot_token_id = bot_id
     conf.eot_token_id = eot_id

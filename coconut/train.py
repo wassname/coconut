@@ -50,7 +50,7 @@ from coconut.load_model import (
     resume_model,
     save_model,
 )
-from coconut.configs import bot_token, latent_token, eot_token
+# from coconut.configs import bot_token, latent_token, eot_token
 
 
 def run_ratio_eval(
@@ -63,9 +63,12 @@ def run_ratio_eval(
     dtype=torch.bfloat16,
 ):
     """helper function as we run this multiple times and it needs a diff val ds/dl."""
-    latent_id = tokenizer.convert_tokens_to_ids(latent_token)
-    bot_id = tokenizer.convert_tokens_to_ids(bot_token)
-    eot_id = tokenizer.convert_tokens_to_ids(eot_token)
+    # latent_id = tokenizer.convert_tokens_to_ids(latent_token)
+    # bot_id = tokenizer.convert_tokens_to_ids(bot_token)
+    # eot_id = tokenizer.convert_tokens_to_ids(eot_token)
+    latent_id = conf.latent_token_id
+    bot_id = conf.bot_token_id
+    eot_id = conf.eot_token_id
     collator = CoconutCollator(tokenizer, latent_id=latent_id, label_pad_token_id=-100)
     dataset_gen_val2 = get_cot_latent_dataset(
         stage,
@@ -115,7 +118,7 @@ def create_optimizer(model, configs, warmup_fraction=0.1, opt_steps=None, cycles
         elif configs.scheduler == "cosine":
             scheduler = get_cosine_schedule_with_warmup(
                 optimizer, num_warmup_steps=warmup_steps,
-                num_cycles=cycles/2.,
+                num_cycles=1,
                 num_training_steps=opt_steps,
             )
     return optimizer, scheduler
@@ -194,10 +197,13 @@ def train(conf: BaseConfig):
         os.environ["WANDB_MODE"] = "disabled"
         wandb_run = None
 
-    latent_id = tokenizer.convert_tokens_to_ids(latent_token)
-    bot_id = tokenizer.convert_tokens_to_ids(bot_token)
-    eot_id = tokenizer.convert_tokens_to_ids(eot_token)
-    optimiser = None
+    # latent_id = tokenizer.convert_tokens_to_ids(latent_token)
+    # bot_id = tokenizer.convert_tokens_to_ids(bot_token)
+    # eot_id = tokenizer.convert_tokens_to_ids(eot_token)
+    latent_id = conf.latent_token_id
+    bot_id = conf.bot_token_id
+    eot_id = conf.eot_token_id
+    optimizer = None
     collator = CoconutCollator(tokenizer, latent_id=latent_id, label_pad_token_id=-100)
 
     """
@@ -328,8 +334,8 @@ def train(conf: BaseConfig):
                 logger.debug(f"Sample train data (epoch {epoch} stage {stage}):\n{s}")
 
 
-                if (conf.reset_optimizer is True) or (optimiser is None):
-                    opt_steps=len(dataset_train) // conf.gradient_accumulation_steps
+                if (conf.reset_optimizer is True) or (optimizer is None):
+                    opt_steps = len(dataset_train) // conf.gradient_accumulation_steps
                     if not conf.reset_optimizer:
                         opt_steps *= conf.num_epochs
                     epochs=1 if conf.reset_optimizer else conf.num_epochs

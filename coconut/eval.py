@@ -7,7 +7,7 @@ from tqdm.auto import tqdm
 import numpy as np
 import random
 
-def match_token_indices(tokens: torch.Tensor, regex_pattern: str, tokenizer):
+def match_token_indices(tokens: torch.Tensor, tokenizer, regex_pattern: str= r'#+\s*([+-]?\d{1,3}(?:,\d{3})*\.?\d*)'):
     """
     Find start and end indices (0-based, end exclusive) of the minimal token span
     where the decoded text contains a regex match of maximum length.
@@ -17,11 +17,13 @@ def match_token_indices(tokens: torch.Tensor, regex_pattern: str, tokenizer):
     tokens_list = tokens.tolist() if isinstance(tokens, torch.Tensor) else tokens
     max_match_len = 0
     candidate_end = len(tokens_list)
+
+    regex_pattern = re.compile(regex_pattern)
     
     # Forward pass: find end of longest match (preferring rightmost if ties)
     for i in range(len(tokens_list)):
         curr_str = tokenizer.decode(tokens_list[:i+1])
-        match = re.search(regex_pattern, curr_str)
+        match = regex_pattern.search(curr_str)
         if match and len(match.group(0)) > max_match_len:
             max_match_len = len(match.group(0))
             candidate_end = i + 1
@@ -33,7 +35,7 @@ def match_token_indices(tokens: torch.Tensor, regex_pattern: str, tokenizer):
     max_match_len = 0
     for j in range(candidate_end):
         curr_str = tokenizer.decode(tokens_list[j:candidate_end])
-        match = re.search(regex_pattern, curr_str)
+        match = regex_pattern.search(curr_str)
         if (not match) or len(match.group(0)) < max_match_len:
             candidate_start = j - 1
             break
@@ -114,7 +116,9 @@ def evaluate(dataloader, model, tokenizer, ds, max_new_tokens=64, device='cuda',
             llm_text_output = tokenizer.decode(a_toks, skip_special_tokens=True)
 
             # Use token-span matching to find precise answer after #
-            start, end = match_token_indices(a_toks, r'#+\s*\d+\.?\d*', tokenizer)
+            # see https://github.com/QwenLM/Qwen/blob/b5529b8958ba806c633570e1f64aaa38b6dbe3aa/eval/evaluate_chat_gsm8k.py#L49
+            # _PAT_LAST_DIGIT = re.compile(r'#+\s*([+-]?\d{1,3}(?:,\d{3})*\.?\d*)')
+            start, end = match_token_indices(a_toks, tokenizer, r'#+\s*([+-]?\d{1,3}(?:,\d{3})*\.?\d*)')
             if start is not None:
                 answer_span = a_toks[start:end]
                 decoded_span = tokenizer.decode(answer_span, skip_special_tokens=True)
