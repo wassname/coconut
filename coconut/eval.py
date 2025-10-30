@@ -5,6 +5,40 @@ import re
 from torch.nn import CrossEntropyLoss
 from tqdm.auto import tqdm
 import numpy as np
+import random
+
+def match_token_indices(tokens: torch.Tensor, regex_pattern: str, tokenizer):
+    """
+    Find start and end indices (0-based, end exclusive) of the minimal token span
+    where the decoded text contains a regex match of maximum length.
+    Returns (start, end) or (None, None) if no match.
+    Assumes tokens is 1D tensor/list of token IDs.
+    """
+    tokens_list = tokens.tolist() if isinstance(tokens, torch.Tensor) else tokens
+    max_match_len = 0
+    candidate_end = len(tokens_list)
+    
+    # Forward pass: find end of longest match (preferring rightmost if ties)
+    for i in range(len(tokens_list)):
+        curr_str = tokenizer.decode(tokens_list[:i+1])
+        match = re.search(regex_pattern, curr_str)
+        if match and len(match.group(0)) > max_match_len:
+            max_match_len = len(match.group(0))
+            candidate_end = i + 1
+    
+    if max_match_len == 0:
+        return None, None
+    
+    # Backward pass: find leftmost start for that max length match
+    candidate_start = candidate_end
+    for j in range(candidate_end):
+        curr_str = tokenizer.decode(tokens_list[j:candidate_end])
+        match = re.search(regex_pattern, curr_str)
+        if match and len(match.group(0)) == max_match_len:
+            candidate_start = j
+            break  # Leftmost full match
+    
+    return candidate_start, candidate_end
 
 def indent(s):
     return s.replace("\n", "\n\t")
@@ -21,6 +55,7 @@ def crop(s, maxl=30):
 
 @torch.no_grad()
 def evaluate(dataloader, model, tokenizer, ds, max_new_tokens=64, device='cuda', name="", dtype=torch.float32, quick=False, verbose=1):
+    # TODO enable best of 4 like in qwen paper
 
 
     # get original answer
@@ -75,17 +110,20 @@ def evaluate(dataloader, model, tokenizer, ds, max_new_tokens=64, device='cuda',
             ans_tok_list = tokenizer.batch_decode(a_toks, skip_special_tokens=False)
             llm_text_output = tokenizer.decode(a_toks, skip_special_tokens=True)
 
-            # TODO use regexp to find numbers group, can be float, after #
-            # llm_answer_output = llm_text_output.split("#")[-1]
-            llm_answer_output = re.match(
-                r".*#+\s*([0-9\.]+).*", llm_text_output
-            )
-            llm_answer_output = llm_answer_output.group(1) if llm_answer_output else None
-            if llm_answer_output is None:
-                 llm_answer_output = llm_text_output.split("#")[-1].replace(",", "").replace("<|im_end|>", "").strip()
-            llm_cot_output = (
-                ("\n".join(llm_text_output.split("\n")[1:])).split("#")[0].strip()
-            )
+            # Use token-span matching to find precise answer after #
+            start, end = match_token_indices(a_toks, r'#+\s*\d+\.?\d*', tokenizer)
+            if start is not None:
+                answer_span = a_toks[start:end]
+                decoded_span = tokenizer.decode(answer_span, skip_special_tokens=True)
+                match = re.search(r'#+\s*(\d+\.?\d*)', decoded_span)
+                llm_answer_output = match.group(1).strip() if match else None
+                # CoT is everything before the answer span
+                cot_tokens = a_toks[:start]
+                llm_cot_output = tokenizer.decode(cot_tokens, skip_special_tokens=True).strip()
+            else:
+                # No match: answer fails, CoT is full output
+                llm_answer_output = ''
+                llm_cot_output = llm_text_output.strip()
 
             total += 1
             answer = answers_val[test_idx]
@@ -225,7 +263,7 @@ def get_answer_perplexity(
     }
 
 
-import random
+
 
 def corrupt_answer(ans_tokens, tokenizer):
     num2tok = dict([(i,tokenizer.convert_tokens_to_ids(str(i))) for i in range(10)])
@@ -290,11 +328,12 @@ def calc_ans_nll(batch, model, tokenizer, device, dtype, verbose=False):
         idx_ans_start = len(a)-idx_ans_start
         idx_ans_start += 1 # skip [' '] that is after ###
 
-        # find the end of the answer, denoted by eos_token
-        idx_ans_end = (input_ids_i[idx_ans_start:]==tokenizer.eos_token_id).float().argmax() + idx_ans_start
-        if idx_ans_end == idx_ans_start:
-            idx_ans_end = -1
-        
+        remaining_tokens = input_ids_i[idx_ans_start:]
+        rel_start, rel_end = match_token_indices(remaining_tokens, r'\d+\.?\d*', tokenizer)
+        if rel_start is None:
+            raise ValueError(f"No number match found in answer tokens after ###: {tokenizer.decode(remaining_tokens)}")
+        idx_ans_end = idx_ans_start + rel_end
+
         if idx_ans_start == 0:
             raise ValueError(
                 f"Answer token {token_preans} not found in input_ids {input_ids_i} make sure you used get_cot_latent_dataset() to generate the dataset"
