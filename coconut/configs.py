@@ -73,19 +73,19 @@ class TRMConfig(BaseConfig):
     """TRM base config: shared settings for all TRM adapter modes."""
     # see COCOCNUT https://github.com/facebookresearch/coconut/blob/27273cb8cca4bb763c041a63b036d0c3b7cbbb48/args/gsm_coconut.yaml#L34
     # see TRM https://github.com/SamsungSAILMontreal/TinyRecursiveModels/blob/e7b68717f0a6c4cbb4ce6fbef787b14f42083bd9/config/arch/trm.yaml paper
-    resume_epochs: int = 2
+    resume_epochs: int = 0
     cot_epochs: int = 0
     skip_stage_zero: bool = True  # skip stage 0 : <start_latent><end_latent> training with 0 latent tokens
-    num_epochs: int = 8
+    num_epochs: int = 10
     epochs_per_stage: int = 8
     
     scheduler: str = "linear"
-    lr: float = 6e-4 # 1e-4 in paper
-    weight_decay: float = 0.03 # 1 and 0.1 in TRM paper. 0.01 in COCONUT paper. 
+    lr: float = 4e-4 # 1e-4 in paper
+    weight_decay: float = 0.001 # 1 and 0.1 in TRM paper. 0.01 in COCONUT paper. 
     
-    max_size: int = 5_000
+    max_size: int = 10_000
     batch_size_training: int = 12
-    gradient_accumulation_steps: int = 3 # 768 // 14 # paper had effective batch size of 768
+    gradient_accumulation_steps: int = 6 # 768 // 14 # paper had effective batch size of 768
 
     eval_first_epoch: bool = False
     loss_nll_ratio_margin: bool = False
@@ -102,7 +102,7 @@ class TRMConfig(BaseConfig):
     layers_start_adapter: float = 0.3  # start layer fraction to apply adapter
     layers_end_adapter: float = 0.95  # end layer fraction to apply adapter
 
-    target_modules_pattern: Optional[str] = '.+\.(gate_proj).*$'   # regex pattern to match target module names, best performance for '.+\.(gate_proj).*$' 
+    target_modules_pattern: Optional[str] = None   # regex pattern to match target module names, best performance for '.+\.(gate_proj).*$' 
 
 
 @dataclass
@@ -160,8 +160,8 @@ class TRMSvft(TRMConfig):
 
     # adapter_r: int = 20  # Total rank (principal + tail; low for memory)
     adapter_fill_orthonormal: bool = False  # Disable for hybrid (principal + tail covers)
-    adapter_principal_rank: int = 64  # Top SVD for principal directions
-    adapter_tail_rank: int = 32  # Low-rank approx for tail merging
+    adapter_principal_rank: int = 32  # Top SVD for principal directions
+    adapter_tail_rank: int = 16  # Low-rank approx for tail merging
     adapter_svft_mode: Literal["replace_add", "replace_mul", "adapter_add", "adapter_mult"] = "adapter_add"
 
 @dataclass
@@ -178,7 +178,7 @@ class Debug:
     
     cot_epochs: int = 1
     epochs_per_stage: int = 1
-    resume_epochs: int = 3
+    resume_epochs: int = 0
     num_epochs: int = 5
     
     eval_first_epoch: bool = False

@@ -4,7 +4,7 @@ from transformers import (
     AutoConfig,
 )
 from coconut.coconut import Coconut
-from coconut.configs import BaseConfig
+from coconut.configs import BaseConfig, TRMSvft
 from loguru import logger
 from pathlib import Path
 
@@ -17,6 +17,40 @@ from coconut.trmlora import PEFT_TYPE_TO_PREFIX_MAPPING
 from peft.utils.save_and_load import _insert_adapter_name_into_state_dict
 from peft import PeftModel, PeftConfig
 from coconut import trmlora  # ensure trmlora is imported to register peft types
+
+
+def coconut_to_adapter_config_converter(conf: BaseConfig, target_modules: Optional[list[str]] = None) -> PeftConfig:
+    adapter_config_args = {}
+    prefixes = [
+        "adapter_",
+    ]
+    for k in conf.__dataclass_fields__.keys():
+        for p in prefixes:
+            if k.startswith(p):
+                kk = k[len(p) :]
+                adapter_config_args[kk] = getattr(conf, k)
+                break
+
+    AdapterConfig = conf._adapter_class
+    peft_config = AdapterConfig(
+        task_type="CAUSAL_LM",
+        inference_mode=False,
+        # r=conf.lora_r,
+        # lora_alpha=conf.lora_alpha,
+        # lora_dropout=conf.lora_dropout,
+        # target_modules="all-linear",  # Target all linear layers
+        target_modules=target_modules,
+        # bias="none",
+        l_cycles=conf.trm_l_cycles,
+        h_cycles=conf.trm_h_cycles,
+        expansion=conf.trm_expansion,
+        l_layers=conf.trm_l_layers,
+        num_heads=conf.trm_num_heads,
+        # update_mode='lora',
+        modules_to_save=None,
+        **adapter_config_args,
+    )
+    return peft_config
 
 
 def load_new_model(conf: BaseConfig, device, dtype):
@@ -127,25 +161,27 @@ def load_new_model(conf: BaseConfig, device, dtype):
 
     logger.debug(f"Adapter config args: {adapter_config_args}")
 
-    AdapterConfig = conf._adapter_class
-    peft_config = AdapterConfig(
-        task_type="CAUSAL_LM",
-        inference_mode=False,
-        # r=conf.lora_r,
-        # lora_alpha=conf.lora_alpha,
-        # lora_dropout=conf.lora_dropout,
-        # target_modules="all-linear",  # Target all linear layers
-        target_modules=target_modules,
-        # bias="none",
-        l_cycles=conf.trm_l_cycles,
-        h_cycles=conf.trm_h_cycles,
-        expansion=conf.trm_expansion,
-        l_layers=conf.trm_l_layers,
-        num_heads=conf.trm_num_heads,
-        # update_mode='lora',
-        modules_to_save=None,
-        **adapter_config_args,
-    )
+    peft_config = coconut_to_adapter_config_converter(conf, target_modules=target_modules)
+
+    # AdapterConfig = conf._adapter_class
+    # peft_config = AdapterConfig(
+    #     task_type="CAUSAL_LM",
+    #     inference_mode=False,
+    #     # r=conf.lora_r,
+    #     # lora_alpha=conf.lora_alpha,
+    #     # lora_dropout=conf.lora_dropout,
+    #     # target_modules="all-linear",  # Target all linear layers
+    #     target_modules=target_modules,
+    #     # bias="none",
+    #     l_cycles=conf.trm_l_cycles,
+    #     h_cycles=conf.trm_h_cycles,
+    #     expansion=conf.trm_expansion,
+    #     l_layers=conf.trm_l_layers,
+    #     num_heads=conf.trm_num_heads,
+    #     # update_mode='lora',
+    #     modules_to_save=None,
+    #     **adapter_config_args,
+    # )
     # Use TRMLoraModel directly instead of get_peft_model
     # peft_model = TRMLoraModel(base_model, peft_config, "default")
 
@@ -241,7 +277,7 @@ def save_model(model, tokenizer, configs, save_dir: Path, adapter_name="default"
 
 def load_adapter(
     model_id: str,
-    PeftConfig: PeftConfig,
+    Config: BaseConfig,
     save_dir: Path,
     adapter_name="default",
     torch_device="cuda",
@@ -251,17 +287,34 @@ def load_adapter(
     key_mapping: Optional[dict[str, str]] = None,
 ):
     """Peft is to hard to subclass or monkey patch, in the end I needed by own function."""
+    # TODO tokenizer
     base_model = AutoModelForCausalLM.from_pretrained(model_id)
 
-    peft_config = PeftConfig()
+    f = Path(save_dir) / 'coconut_config.toml'
+    import tomli
+    with open(f, 'rb') as fp:
+        conf_dict = tomli.load(fp)
+    conf = Config(**conf_dict,)
+    peft_config = coconut_to_adapter_config_converter(conf)
 
-    model = PeftModel(
+    peft_model = PeftModel(
         base_model,
         peft_config,
         adapter_name,
         autocast_adapter_dtype=autocast_adapter_dtype,
         low_cpu_mem_usage=low_cpu_mem_usage,
     )
+
+    # LOAD coconut...
+    model = Coconut(peft_model, conf)
+
+    tokenizer = AutoTokenizer.from_pretrained(
+        model_id,
+        padding_side="right",
+    )
+    tokenizer.pad_token = tokenizer.eos_token
+    tokenizer.pad_token_id = tokenizer.eos_token_id
+
 
     adapter_save_path = save_dir / "trmlora/"
     state_dict = safetensors.torch.load_file(adapter_save_path/ "adapter_model.safetensors", device=torch_device)
@@ -275,4 +328,4 @@ def load_adapter(
 
     load_result = model.load_state_dict(peft_model_state_dict, strict=False)
     logger.warning(f"Loading adapter weights from {model_id} resulted in {load_result}")
-    return model
+    return tokenizer, model
