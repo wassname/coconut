@@ -50,6 +50,7 @@ from coconut.load_model import (
     resume_model,
     save_model,
 )
+from coconut.configs import bot_token, latent_token, eot_token
 
 
 def run_ratio_eval(
@@ -62,9 +63,9 @@ def run_ratio_eval(
     dtype=torch.bfloat16,
 ):
     """helper function as we run this multiple times and it needs a diff val ds/dl."""
-    latent_id = tokenizer.convert_tokens_to_ids("<|latent|>")
-    bot_id = tokenizer.convert_tokens_to_ids("<|start-latent|>")
-    eot_id = tokenizer.convert_tokens_to_ids("<|end-latent|>")
+    latent_id = tokenizer.convert_tokens_to_ids(latent_token)
+    bot_id = tokenizer.convert_tokens_to_ids(bot_token)
+    eot_id = tokenizer.convert_tokens_to_ids(eot_token)
     collator = CoconutCollator(tokenizer, latent_id=latent_id, label_pad_token_id=-100)
     dataset_gen_val2 = get_cot_latent_dataset(
         stage,
@@ -193,9 +194,9 @@ def train(conf: BaseConfig):
         os.environ["WANDB_MODE"] = "disabled"
         wandb_run = None
 
-    latent_id = tokenizer.convert_tokens_to_ids("<|latent|>")
-    bot_id = tokenizer.convert_tokens_to_ids("<|start-latent|>")
-    eot_id = tokenizer.convert_tokens_to_ids("<|end-latent|>")
+    latent_id = tokenizer.convert_tokens_to_ids(latent_token)
+    bot_id = tokenizer.convert_tokens_to_ids(bot_token)
+    eot_id = tokenizer.convert_tokens_to_ids(eot_token)
     optimiser = None
     collator = CoconutCollator(tokenizer, latent_id=latent_id, label_pad_token_id=-100)
 
@@ -254,7 +255,7 @@ def train(conf: BaseConfig):
                 batch_size=conf.batch_size_training,
                 collate_fn=collator,
             )
-            if epoch == 0 or (epoch==conf.resume_epochs) and conf.eval_first_epoch:
+            if conf.eval_first_epoch and (epoch == 0 or (epoch==conf.resume_epochs)):
                 # quick QC to see how well untouched model does at the task
                 r = evaluate(
                     valid_gen_dataloader,

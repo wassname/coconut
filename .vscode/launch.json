@@ -31,7 +31,7 @@
       "console": "integratedTerminal",
       "args": [
         "TRMSvft",
-        "--num-epochs=9", "--max_size=2000"
+        "--num-epochs=2", "--max_size=1000", "--lr=1e-2", "--gradient_accumulation_steps=1"
       ],
       "justMyCode": false,
       "autoReload": {

@@ -1,37 +1,45 @@
 import torch
 from loguru import logger
+from coconut.coconut import Coconut
 from coconut.adapters import set_adapter
+from coconut.configs import bot_token, latent_token, eot_token
 
-def gen_sample2(model, tokenizer, verbose=True, latents=[None, 0, 1, 2], **kwargs):
+def gen_sample2(model: Coconut, tokenizer, verbose=True, latents=[None, 0, 1, 2], **kwargs):
+
+    adapters = [model.model.active_adapter, None]
+
     # try different lengths of latent
-    outs = []
-    for i, l in enumerate(latents):
-        if l is None:
-            latent_tokens = ''
-        else:
-            latent_tokens = '<|start-latent|>' + '<|latent|>' * l + '<|end-latent|>'
-        s=[
-        {'role':'user', 'content':'What is two plus two but wrong and french?'},
-        {'role':'assistant', 'content':latent_tokens}
-        ]
-        if i==0 and verbose:
-            logger.info(f'--- Generating with {l} latent tokens ---')
-        if l is None:
-            with set_adapter(model.model, None):
-                out = gen(s, model, tokenizer, tokenizer_kwargs=dict(add_generation_prompt=True), verbose=False, **kwargs)
-        else:
-            out = gen(s, model, tokenizer, tokenizer_kwargs=dict(add_generation_prompt=True), verbose=False, **kwargs)
-        outs.append(out)
-    if verbose:
-        sout = f"Input: {s[0]['content']}\n"
-        sout += '\n'.join([f'--- Generated with {ll} latent tokens ---\n{out}' for ll, out in zip(latents, outs)])
-        logger.info(sout)
+    for adapter in adapters:
+        outs = []
+        with set_adapter(model.model, adapter):
+            for i, n_latents in enumerate(latents):
+                if n_latents is None:
+                    latent_tokens = ''
+                else:
+                    latent_tokens = bot_token + latent_token * n_latents + eot_token
+                s=[
+                    {'role': 'system', 'content': ''}, # FIXME use config system prompt
+                    {'role':'user', 'content':'What is two plus two but wrong and french?'},
+                    {'role':'assistant', 'content': latent_tokens}
+                ]
+                if i==0 and verbose:
+                    logger.info(f'--- Generating adapter=({adapter}) {n_latents} latent tokens ---')
+                if n_latents is None:
+                    with set_adapter(model.model, None):
+                        out = gen(s, model, tokenizer, tokenizer_kwargs=dict(add_generation_prompt=True), verbose=False, **kwargs)
+                else:
+                    out = gen(s, model, tokenizer, tokenizer_kwargs=dict(add_generation_prompt=True), verbose=False, **kwargs)
+                outs.append(latent_tokens+out)
+        if verbose:
+            sout = f"Input: {s[0]['content']}\n"
+            sout += '\n'.join([f'--- Generated with adapter={adapter} and {ll} latent tokens ---\n{out}' for ll, out in zip(latents, outs)])
+            logger.info(sout)
     return outs
 
 def gen_sample(model, tokenizer, verbose=True, **kwargs):
     # try different lengths of latent
     for l in [0, 1, 2]:
-        latent_tokens = '<|start-latent|>' + '<|latent|>' * l + '<|end-latent|>'
+        latent_tokens = bot_token + latent_token * l + eot_token
         s=[
         {'role':'user', 'content':'What is two plus two but wrong and french?'},
         {'role':'assistant', 'content':latent_tokens}

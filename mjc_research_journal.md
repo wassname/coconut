@@ -2656,6 +2656,51 @@ Ok overall
 - and having some way to include the tail seems important otherwise we are throwing away valid and important directions
 - it seemed important to have persistent but dynamic steering, but I need to ablate this
 
+# H100 large model results
+
+
+# res
+# Results: trmsvft-qwen3-4b-instruct-2507_20251030-040644                                                                                                                                                   | 2/52 [00:36<14:04, 16.88s/it]
+{'project': 'coconut', 'save_path': 'outputs/', 'name': 'trmsvft-qwen3-4b-instruct-2507', 'model_id': 'Qwen/Qwen3-4B-Instruct-2507', 'only_eval': False, 'load_model_path': '', 'resume_epochs': 1, 'use_position_ids': True, 'bf16': True, 'bf16_weight': False, 'opt_8b': False, 'load_in_4bit': False, 'load_in_8bit': False, 'cot_epochs': 0, 'epochs_per_stage': 4, 'max_latent_stage': 3, 'num_epochs': 10, 'batch_size_training': 32, 'gradient_accumulation_steps': 6, 'lr': 0.0006, 'weight_decay': 0.001, 'grad_clip': 10.0, 'scheduler': 'linear', 'debug': False, 'seed': 42, 'reset_optimizer': False, 'loss_seq_vcr': False, 'collect_hs': False, 'max_size': 10000, 'c_thought': 1, 'pad_latent_to_max': True, 'uniform_prob': 0.0, 'train_path': 'data/gsm_train.json', 'val_path': 'data/gsm_valid.json', 'system_prompt': '', 'latent_token_id': None, 'bot_token_id': None, 'eot_token_id': None, 'eos_token_id': None, 'skip_stage_zero': True, 'eval_first_epoch': False, 'loss_nll_ratio_margin': False, 'trm_h_cycles': 3, 'trm_l_cycles': 6, 'trm_l_layers': 2, 'trm_num_heads': 4, 'trm_expansion': 2.0, 'trm_persistent_steering': True, 'layers_spacing_adapter': 3, 'layers_start_adapter': 0.3, 'layers_end_adapter': 0.95, 'target_modules_pattern': None, 'use_trm_svft': True, 'adapter_fill_orthonormal': False, 'adapter_principal_rank': 32, 'adapter_tail_rank': 16, 'adapter_svft_mode': 'replace_add', '__type__': "<class 'coconut.configs.TRMSvft'>"}
+|    |   eval/acc |   eval/cot_em |   eval/ratios |   epoch |   stage |   train/minutes |   train/loss |   eval/loss |
+|---:|-----------:|--------------:|--------------:|--------:|--------:|----------------:|-------------:|------------:|
+|  0 |     0      |        0      |        0.9536 |       1 |       1 |         12.2917 |     1.36708  |      1.389  |
+|  1 |     0.1964 |        0.0089 |        0.8837 |       2 |       1 |         12.3727 |     0.621547 |      0.5846 |
+|  2 |     0.3214 |        0.0089 |        0.8796 |       3 |       1 |         12.1842 |     0.392794 |      0.4368 |
+|  3 |     0.1726 |        0.003  |        0.4929 |       4 |       2 |         16.0773 |     0.428642 |      0.5084 |
+|  4 |     0.1845 |        0.0119 |        0.4864 |       5 |       2 |         16.0175 |     0.371012 |      0.4682 |
+|  5 |     0.1637 |        0.006  |        0.4932 |       6 |       2 |         15.9085 |     0.325109 |      0.4501 |
+|  6 |     0.1696 |        0.0089 |        0.4802 |       7 |       2 |         16.0759 |     0.280929 |      0.4409 |
+|  7 |     0.1845 |        0.003  |        0.3544 |       8 |       3 |         19.9129 |     0.308694 |      0.4921 |
+
+Oh look it got up to 0.32 before it starte overfitting which really hurt the score
+
+# Results: trmsvft-qwen3-4b-instruct-2507_20251030-014435
+{'project': 'coconut', 'save_path': 'outputs/', 'name': 'trmsvft-qwen3-4b-instruct-2507', 'model_id': 'Qwen/Qwen3-4B-Instruct-2507', 'only_eval': False, 'load_model_path': '', 'resume_epochs': 1, 'use_position_ids': True, 'bf16': True, 'bf16_weight': False, 'opt_8b': False, 'load_in_4bit': False, 'load_in_8bit': False, 'cot_epochs': 0, 'epochs_per_stage': 4, 'max_latent_stage': 3, 'num_epochs': 10, 'batch_size_training': 32, 'gradient_accumulation_steps': 6, 'lr': 0.0006, 'weight_decay': 0.001, 'grad_clip': 10.0, 'scheduler': 'linear', 'debug': False, 'seed': 42, 'reset_optimizer': False, 'loss_seq_vcr': False, 'collect_hs': False, 'max_size': 10000, 'c_thought': 1, 'pad_latent_to_max': True, 'uniform_prob': 0.0, 'train_path': 'data/gsm_train.json', 'val_path': 'data/gsm_valid.json', 'system_prompt': '', 'latent_token_id': None, 'bot_token_id': None, 'eot_token_id': None, 'eos_token_id': None, 'skip_stage_zero': True, 'eval_first_epoch': False, 'loss_nll_ratio_margin': False, 'trm_h_cycles': 3, 'trm_l_cycles': 6, 'trm_l_layers': 2, 'trm_num_heads': 4, 'trm_expansion': 2.0, 'trm_persistent_steering': True, 'layers_spacing_adapter': 3, 'layers_start_adapter': 0.3, 'layers_end_adapter': 0.95, 'target_modules_pattern': None, 'use_trm_svft': True, 'adapter_fill_orthonormal': False, 'adapter_principal_rank': 32, 'adapter_tail_rank': 16, 'adapter_svft_mode': 'replace_mul', '__type__': "<class 'coconut.configs.TRMSvft'>"}
+|    |   eval/acc |   eval/cot_em |   eval/ratios |   epoch |   stage |   train/minutes |   train/loss |   eval/loss |
+|---:|-----------:|--------------:|--------------:|--------:|--------:|----------------:|-------------:|------------:|
+|  0 |     0.0089 |        0.003  |        0.8237 |       1 |       1 |         12.2724 |     0.783954 |      0.8528 |
+|  1 |     0.119  |        0      |        0.8719 |       2 |       1 |         12.2905 |     0.418078 |      0.4486 |
+|  2 |     0.128  |        0.0089 |        0.8689 |       3 |       1 |         12.2246 |     0.308952 |      0.3895 |
+|  3 |     0.1429 |        0.0119 |        0.5105 |       4 |       2 |         16.1189 |     0.418827 |      0.4757 |
+|  4 |     0.1131 |        0.003  |        0.4975 |       5 |       2 |         15.9082 |     0.365518 |      0.455  |
+|  5 |     0.125  |        0.003  |        0.4905 |       6 |       2 |         15.9543 |     0.299352 |      0.4411 |
+|  6 |     0.1637 |        0.003  |        0.4835 |       7 |       2 |         15.9559 |     0.282091 |      0.4288 |
+|  7 |     0.1786 |        0.0089 |        0.3522 |       8 |       3 |         19.8483 |     0.308976 |      0.4825 |
+|  8 |     0.1964 |        0.0089 |        0.3523 |       9 |       3 |         19.8206 |     0.264896 |      0.4795 |
+
+# Results: trmsvft-gpt-oss-20b_20251030-061210
+{'project': 'coconut', 'save_path': 'outputs/', 'name': 'trmsvft-gpt-oss-20b', 'model_id': 'openai/gpt-oss-20b', 'only_eval': False, 'load_model_path': '', 'resume_epochs': 1, 'use_position_ids': True, 'bf16': True, 'bf16_weight': False, 'opt_8b': False, 'load_in_4bit': False, 'load_in_8bit': False, 'cot_epochs': 0, 'epochs_per_stage': 4, 'max_latent_stage': 3, 'num_epochs': 10, 'batch_size_training': 8, 'gradient_accumulation_steps': 6, 'lr': 0.0006, 'weight_decay': 0.001, 'grad_clip': 10.0, 'scheduler': 'linear', 'debug': False, 'seed': 42, 'reset_optimizer': False, 'loss_seq_vcr': False, 'collect_hs': False, 'max_size': 10000, 'c_thought': 1, 'pad_latent_to_max': True, 'uniform_prob': 0.0, 'train_path': 'data/gsm_train.json', 'val_path': 'data/gsm_valid.json', 'system_prompt': '', 'latent_token_id': None, 'bot_token_id': None, 'eot_token_id': None, 'eos_token_id': None, 'skip_stage_zero': True, 'eval_first_epoch': False, 'loss_nll_ratio_margin': False, 'trm_h_cycles': 3, 'trm_l_cycles': 6, 'trm_l_layers': 2, 'trm_num_heads': 4, 'trm_expansion': 2.0, 'trm_persistent_steering': True, 'layers_spacing_adapter': 3, 'layers_start_adapter': 0.3, 'layers_end_adapter': 0.95, 'target_modules_pattern': None, 'use_trm_svft': True, 'adapter_fill_orthonormal': False, 'adapter_principal_rank': 32, 'adapter_tail_rank': 16, 'adapter_svft_mode': 'adapter_add', '__type__': "<class 'coconut.configs.TRMSvft'>"}
+|    |   eval/acc |   eval/cot_em |   eval/ratios |   epoch |   stage |   train/minutes |   train/loss |   eval/loss |
+|---:|-----------:|--------------:|--------------:|--------:|--------:|----------------:|-------------:|------------:|
+|  0 |     0.2917 |        0.0119 |        0.9938 |       1 |       1 |         44.4157 |     0.43431  |      0.4479 |
+|  1 |     0.2321 |        0.006  |        0.9946 |       2 |       1 |         42.5343 |     0.217288 |      0.4177 |
+|  2 |     0.2649 |        0.0149 |        0.9927 |       3 |       1 |         42.4159 |     0.360195 |      0.3965 |
+|  3 |     0.3036 |        0.0119 |        0.9847 |       4 |       2 |         54.0988 |     0.423941 |      0.5169 |
+|  4 |     0.2917 |        0.0119 |        0.9878 |       5 |       2 |         55.8403 |     0.576862 |      0.5096 |
+|  5 |     0.3036 |        0.0089 |        0.9832 |       6 |       2 |         55.8457 |     0.401156 |      0.5068 |
+
+
 
 # Results: trmsvft-qwen3-0.6b_20251029-105142
 {'project': 'coconut', 'save_path': 'outputs/', 'name': 'trmsvft-qwen3-0.6b', 'model_id': 'suayptalha/Qwen3-0.6B-Math-Expert', 'only_eval': False, 'load_model_path': '', 'resume_epochs': 2, 'use_position_ids': True, 'bf16': True, 'bf16_weight': False, 'opt_8b': False, 'load_in_4bit': False, 'load_in_8bit': False, 'cot_epochs': 0, 'epochs_per_stage': 8, 'max_latent_stage': 3, 'num_epochs': 8, 'batch_size_training': 12, 'gradient_accumulation_steps': 3, 'lr': 0.0006, 'weight_decay': 0.03, 'grad_clip': 10.0, 'scheduler': 'linear', 'debug': False, 'seed': 42, 'reset_optimizer': False, 'loss_seq_vcr': False, 'collect_hs': False, 'max_size': 5000, 'c_thought': 1, 'pad_latent_to_max': True, 'uniform_prob': 0.0, 'train_path': 'data/gsm_train.json', 'val_path': 'data/gsm_valid.json', 'system_prompt': '', 'latent_token_id': None, 'bot_token_id': None, 'eot_token_id': None, 'eos_token_id': None, 'skip_stage_zero': True, 'eval_first_epoch': False, 'loss_nll_ratio_margin': False, 'trm_h_cycles': 3, 'trm_l_cycles': 6, 'trm_l_layers': 2, 'trm_num_heads': 4, 'trm_expansion': 2.0, 'trm_persistent_steering': True, 'layers_spacing_adapter': 5, 'layers_start_adapter': 0.3, 'layers_end_adapter': 0.95, 'target_modules_pattern': '.+\\.(gate_proj).*$', 'use_trm_svft': True, 'adapter_fill_orthonormal': False, 'adapter_principal_rank': 64, 'adapter_tail_rank': 32, 'adapter_svft_mode': 'adapter_add', '__type__': "<class 'coconut.configs.TRMSvft'>"}
@@ -2751,8 +2796,46 @@ CLI args: scripts/run.py TRMLoRA --lr=1e-1 --gradient-accumulation-steps=1 --sch
 |  3 |          0 |        0.0089 |        0.9188 |       5 |       1 |         41.5633 |     0.19656  |      0.3889 |
 ****
 
+# 2025-10-30 19:00:17
+
+Wait...
+wait...
+
+Ok I've changed
+
+<|start-latent|> -> "wait"
+<"latent"> -> "..."
+<|end-latent|> -> "OK"
 
 
+but I could choose
+"hmm....\n"
+or
+" ...... "
+
+Thinking... ... ...\n
+
+mainly because they are all single token changes (no need to change token calcs) and in sample. The new, untrained, OOS, tokens were causing confusion in models that haden't been trained for them. And the adapter models would never be trained on them. This at least is in sample, and even in sample for deep thought. The only downside is that the model is likely to generate "..." naturally
+
+
+ok it seems like it works, as you can see below, when the model is first initialised, it's simialr with adapter on/off, and with tokens 0, 1, 2. That means our thought tokens are not messing up the answer too much
+
+    2025-10-30 20:00:08.850 | INFO     | coconut.gen:gen_sample2:28 - --- Generating adapter=(None) 0 latent tokens ---
+    2025-10-30 20:00:12.244 | INFO     | coconut.gen:gen_sample2:38 - Input:                                 
+    --- Generated with adapter=None and 0 latent tokens ---
+    let's break this down. The question is asking for "two plus two but
+    --- Generated with adapter=None and 1 latent tokens ---
+    let's see. The question is asking for "two plus two but wrong"
+    --- Generated with adapter=None and 2 latent tokens ---
+    let's see. The question is asking for "two plus two but wrong"
+    2025-10-30 20:00:12.322 | INFO     | coconut.gen:gen_sample2:28 - --- Generating adapter=(default) 0 latent tokens ---
+    2025-10-30 20:01:09.598 | INFO     | coconut.gen:gen_sample2:38 - Input:                                 
+    --- Generated with adapter=default and 0 latent tokens ---
+    let's see. The question is asking for "two plus two but wrong"
+    --- Generated with adapter=default and 1 latent tokens ---
+    let's see. The user wants two plus two but wrong and French. Let
+    --- Generated with adapter=default and 2 latent tokens ---
+    let's see. The question says "two plus two but wrong and french"
 
 TODO 
 - [ ] TODO target_modules need to be saved hrmm
@@ -2763,3 +2846,6 @@ TODO
 
 
 uv run scripts/run.py TRMSvft --lr=1e-1 --gradient-accumulation-steps=1 --weight_decay=10 --num_epochs=1 --max_size=1000 --adapter_principal_rank=96
+
+
+

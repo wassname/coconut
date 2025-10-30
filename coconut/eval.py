@@ -30,14 +30,17 @@ def match_token_indices(tokens: torch.Tensor, regex_pattern: str, tokenizer):
         return None, None
     
     # Backward pass: find leftmost start for that max length match
-    candidate_start = candidate_end
+    max_match_len = 0
     for j in range(candidate_end):
         curr_str = tokenizer.decode(tokens_list[j:candidate_end])
         match = re.search(regex_pattern, curr_str)
-        if match and len(match.group(0)) == max_match_len:
+        if (not match) or len(match.group(0)) < max_match_len:
+            candidate_start = j - 1
+            break
+        elif match:
             candidate_start = j
-            break  # Leftmost full match
-    
+            max_match_len = len(match.group(0))
+
     return candidate_start, candidate_end
 
 def indent(s):

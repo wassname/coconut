@@ -8,6 +8,14 @@ from coconut.trmlora.recursive_delora import TRMDeloraAConfig
 from coconut.trmlora.recursive_hra import TRMHraAConfig
 from coconut.trmlora.recursive_svft import TRMSvftAConfig
 
+# latent_token = "<|latent|>"
+# bot_token = "<|start-latent|>"
+# eot_token = "<|end-latent|>"
+# TODO it would be nicer to search for a token us tokenizer.encode(" ...")[0], so we can get whitepace right
+bot_token = "Hmm"
+latent_token = "..."
+eot_token = ","
+
 @dataclass(config=ConfigDict(validate_assignment=True)) 
 class BaseConfig:
     """Base COCONUT config: full model training with latent reasoning."""
@@ -19,7 +27,7 @@ class BaseConfig:
     only_eval: bool = False
     
     load_model_path: str = ""  # set to checkpoint path to resume
-    resume_epochs: int = 0  # set to phase/epoch to resume from
+    resume_epochs: int = 1  # set to phase/epoch to resume from
     
     # replacement_method: str = "supressed[0.75:]"  # how to replace latent tokens: 0.5, -3, supressed[0.5:], hs+supressed[0.5:], ie+supressed[0.5:]
     use_position_ids: bool = True  # experimental, might help model mode switch to latent tokens
@@ -73,7 +81,7 @@ class TRMConfig(BaseConfig):
     """TRM base config: shared settings for all TRM adapter modes."""
     # see COCOCNUT https://github.com/facebookresearch/coconut/blob/27273cb8cca4bb763c041a63b036d0c3b7cbbb48/args/gsm_coconut.yaml#L34
     # see TRM https://github.com/SamsungSAILMontreal/TinyRecursiveModels/blob/e7b68717f0a6c4cbb4ce6fbef787b14f42083bd9/config/arch/trm.yaml paper
-    resume_epochs: int = 0
+    resume_epochs: int = 1
     cot_epochs: int = 0
     skip_stage_zero: bool = True  # skip stage 0 : <start_latent><end_latent> training with 0 latent tokens
     num_epochs: int = 10
@@ -87,7 +95,7 @@ class TRMConfig(BaseConfig):
     batch_size_training: int = 12
     gradient_accumulation_steps: int = 6 # 768 // 14 # paper had effective batch size of 768
 
-    eval_first_epoch: bool = False
+    eval_first_epoch: bool = True
     loss_nll_ratio_margin: bool = False
     
     trm_h_cycles: int = 3  # high level recursive cycles (T=3 in repo)

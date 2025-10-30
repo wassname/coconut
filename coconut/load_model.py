@@ -17,6 +17,7 @@ from coconut.trmlora import PEFT_TYPE_TO_PREFIX_MAPPING
 from peft.utils.save_and_load import _insert_adapter_name_into_state_dict
 from peft import PeftModel, PeftConfig
 from coconut import trmlora  # ensure trmlora is imported to register peft types
+from coconut.configs import bot_token, latent_token, eot_token
 
 
 def coconut_to_adapter_config_converter(conf: BaseConfig, target_modules: Optional[list[str]] = None) -> PeftConfig:
@@ -54,6 +55,8 @@ def coconut_to_adapter_config_converter(conf: BaseConfig, target_modules: Option
 
 
 def load_new_model(conf: BaseConfig, device, dtype):
+
+
     # load tokenizer
     tokenizer = AutoTokenizer.from_pretrained(
         conf.model_id,
@@ -61,15 +64,19 @@ def load_new_model(conf: BaseConfig, device, dtype):
     )
     tokenizer.pad_token = tokenizer.eos_token
     tokenizer.pad_token_id = tokenizer.eos_token_id
-    if "<|latent|>" not in tokenizer.additional_special_tokens:
-        # model.generation_config.pad_token_id = tokenizer.pad_token_id
-        tokenizer.add_tokens("<|start-latent|>")
-        tokenizer.add_tokens("<|end-latent|>")
-        tokenizer.add_tokens("<|latent|>")
+    if tokenizer.convert_tokens_to_ids(latent_token) is None:
+        raise ValueError(f"Latent token `{latent_token}` not in tokenizer vocab, please chose a single in sample token.")
+        tokenizer.add_tokens(latent_token)
+    if tokenizer.convert_tokens_to_ids(bot_token) is None:
+        raise ValueError(f"Bot token `{bot_token}` not in tokenizer vocab, please chose a single in sample token.")
+        tokenizer.add_tokens(bot_token)
+    if tokenizer.convert_tokens_to_ids(eot_token) is None:
+        raise ValueError(f"Eot token `{eot_token}` not in tokenizer vocab, please chose a single in sample token.")
+        tokenizer.add_tokens(eot_token)
 
-    latent_id = tokenizer.convert_tokens_to_ids("<|latent|>")
-    bot_id = tokenizer.convert_tokens_to_ids("<|start-latent|>")
-    eot_id = tokenizer.convert_tokens_to_ids("<|end-latent|>")
+    latent_id = tokenizer.convert_tokens_to_ids(latent_token)
+    bot_id = tokenizer.convert_tokens_to_ids(bot_token)
+    eot_id = tokenizer.convert_tokens_to_ids(eot_token)
 
     conf.latent_token_id = latent_id
     conf.bot_token_id = bot_id
