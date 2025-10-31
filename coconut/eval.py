@@ -58,8 +58,24 @@ def crop(s, maxl=30):
     return s
 
 
+from transformers.generation.stopping_criteria import StoppingCriteria, EosTokenCriteria
+
+class GSM8KStoppingCriteria(StoppingCriteria):
+    def __init__(self, tokenizer):
+        self.tokenizer = tokenizer
+
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, **kwargs) -> torch.BoolTensor:
+        # stop if we see two ###
+        outs = self.tokenizer.batch_decode(input_ids, skip_special_tokens=False)
+        stop = torch.zeros(input_ids.shape[0], dtype=torch.bool, device=input_ids.device)
+        for i, out in enumerate(outs):
+            if out.count('###') >= 2:
+                stop[i] = True
+        return stop
+
+
 @torch.no_grad()
-def evaluate(dataloader, model, tokenizer, ds, max_new_tokens=64, device='cuda', name="", dtype=torch.float32, quick=False, verbose=1):
+def evaluate(dataloader, model, tokenizer, ds, max_new_tokens=32, device='cuda', name="", dtype=torch.float32, quick=False, verbose=1, best_of_n=1):
     # TODO enable best of 4 like in qwen paper
 
 
@@ -98,11 +114,20 @@ def evaluate(dataloader, model, tokenizer, ds, max_new_tokens=64, device='cuda',
                 **batch,
                 use_cache=False,
                 max_new_tokens=max_new_tokens,
-                min_new_tokens=max_new_tokens,
-                early_stopping=False,
+                min_new_tokens=6,
+                early_stopping=True,
                 pad_token_id=tokenizer.pad_token_id,
+                num_return_sequences=best_of_n,
+                return_dict_in_generate=True,
+                output_scores=True,
+                stopping_criteria=[
+                    GSM8KStoppingCriteria(tokenizer),
+                    EosTokenCriteria(tokenizer.eos_token_id)
+                ],
                 # padding_side='left',
             )
+
+        # FIXME handle multiple return sequences
 
         for i in range(len(outputs)):
             test_idx = idx[i].item()
