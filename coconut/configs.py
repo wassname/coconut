@@ -74,9 +74,10 @@ class BaseConfig:
     bot_token_id: Optional[int] = None  # beginning of thought token id
     eot_token_id: Optional[int] = None  # end of thought token id
     eos_token_id: Optional[int] = None  # for generate pad/eos
-    latent_token: str = '...'
+
+    latent_token: str = '...' # latent reasoning token, we chose something that is in the tokenizer vocab, that makes a phrase not to out of sample for training, and is a single token. e.g. ["Hmm", "...", "...", "Therefore"]
     bot_token: str = "Hmm"
-    eot_token: str = 'therefore'
+    eot_token: str = 'Therefore'
 
 
 @dataclass
@@ -169,10 +170,10 @@ class TRMSvft(TRMConfig):
     name: str = "trmsvft-qwen3-0.6b"
     use_trm_svft: bool = True
 
-    # adapter_r: int = 20  # Total rank (principal + tail; low for memory)
+    adapter_r: int = 42  # Total rank (principal + tail; low for memory)
     adapter_fill_orthonormal: bool = False  # Disable for hybrid (principal + tail covers)
-    adapter_principal_rank: int = 32  # Top SVD for principal directions
-    adapter_tail_rank: int = 16  # Low-rank approx for tail merging
+    # adapter_principal_rank: int = 32  # Top SVD for principal directions
+    adapter_tail_rank: int = 12  # Low-rank approx for tail merging
     adapter_svft_mode: Literal["replace_add", "replace_mul", "adapter_add", "adapter_mult"] = "adapter_add"
 
 @dataclass

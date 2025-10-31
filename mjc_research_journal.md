@@ -2873,6 +2873,77 @@ CLI args: scripts/run.py TRMSvft
 |  8 |     0.0804 |        0.0119 |       8 |       2 |        0.5516 |         72.2743 |     0.523083 |      0.5337 |
 |  9 |     0.0982 |        0.0119 |       9 |       2 |        0.5614 |         72.1754 |     0.479289 |      0.5203 |
 
+# Results: trmsvft-qwen3-0.6b_20251031-203942
+{'project': 'coconut', 'save_path': 'outputs/', 'name': 'trmsvft-qwen3-0.6b', 'model_id': 'suayptalha/Qwen3-0.6B-Math-Expert', 'only_eval': False, 'load_model_path': '', 'resume_epochs': 1, 'use_position_ids': True, 'bf16': True, 'bf16_weight': False, 'opt_8b': False, 'load_in_4bit': False, 'load_in_8bit': False, 'cot_epochs': 0, 'epochs_per_stage': 3, 'max_latent_stage': 3, 'num_epochs': 6, 'batch_size_training': 12, 'gradient_accumulation_steps': 6, 'lr': 0.0004, 'weight_decay': 0.001, 'grad_clip': 10.0, 'scheduler': 'linear', 'debug': False, 'seed': 42, 'reset_optimizer': False, 'loss_seq_vcr': False, 'collect_hs': False, 'max_size': 10000, 'c_thought': 1, 'pad_latent_to_max': True, 'uniform_prob': 0.0, 'train_path': 'data/gsm_train.json', 'val_path': 'data/gsm_valid.json', 'system_prompt': '', 'latent_token_id': None, 'bot_token_id': None, 'eot_token_id': None, 'eos_token_id': None, 'latent_token': '...', 'bot_token': 'Hmm', 'eot_token': 'Therefore', 'skip_stage_zero': True, 'eval_first_epoch': True, 'loss_nll_ratio_margin': False, 'trm_h_cycles': 3, 'trm_l_cycles': 6, 'trm_l_layers': 2, 'trm_num_heads': 4, 'trm_expansion': 2.0, 'trm_persistent_steering': True, 'layers_spacing_adapter': 5, 'layers_start_adapter': 0.3, 'layers_end_adapter': 0.95, 'target_modules_pattern': None, 'use_trm_svft': True, 'adapter_r': 42, 'adapter_fill_orthonormal': False, 'adapter_tail_rank': 12, 'adapter_svft_mode': 'adapter_add', '__type__': 'TRMSvft'}
+CLI args: scripts/run.py TRMSvft
+|    |   eval/acc |   eval/cot_em |   epoch |   stage |   eval/ratios |   train/minutes |   train/loss |   eval/loss |
+|---:|-----------:|--------------:|--------:|--------:|--------------:|----------------:|-------------:|------------:|
+|  0 |     0      |        0      |      -1 |       1 |        0.896  |        nan      |   nan        |    nan      |
+|  1 |     0.0893 |        0.0119 |       1 |       1 |        0.8808 |         75.8372 |     0.458867 |      0.5276 |
+|  2 |     0.1607 |        0.0208 |       2 |       1 |        0.8907 |         53.596  |     0.26109  |      0.4401 |
+|  3 |     0.0923 |        0.006  |       3 |       2 |        0.5455 |         71.9701 |     0.436569 |      0.5127 |
+|  4 |     0.0833 |        0.0089 |       4 |       2 |        0.5827 |         71.4527 |     0.411667 |      0.5131 |
+|  5 |     0.1012 |        0.0089 |       5 |       2 |        0.5422 |         72.2099 |     0.297468 |      0.4925 |
 
+# Results: trmsvft-qwen3-0.6b_20251031-145159
+{'project': 'coconut', 'save_path': 'outputs/', 'name': 'trmsvft-qwen3-0.6b', 'model_id': 'suayptalha/Qwen3-0.6B-Math-Expert', 'only_eval': False, 'load_model_path': '', 'resume_epochs': 1, 'use_position_ids': True, 'bf16': True, 'bf16_weight': False, 'opt_8b': False, 'load_in_4bit': False, 'load_in_8bit': False, 'cot_epochs': 0, 'epochs_per_stage': 3, 'max_latent_stage': 3, 'num_epochs': 6, 'batch_size_training': 12, 'gradient_accumulation_steps': 6, 'lr': 0.0004, 'weight_decay': 0.001, 'grad_clip': 10.0, 'scheduler': 'linear', 'debug': False, 'seed': 42, 'reset_optimizer': False, 'loss_seq_vcr': False, 'collect_hs': False, 'max_size': 10000, 'c_thought': 1, 'pad_latent_to_max': True, 'uniform_prob': 0.0, 'train_path': 'data/gsm_train.json', 'val_path': 'data/gsm_valid.json', 'system_prompt': '', 'latent_token_id': None, 'bot_token_id': None, 'eot_token_id': None, 'eos_token_id': None, 'latent_token': '...', 'bot_token': 'Hmm', 'eot_token': 'Therefore', 'skip_stage_zero': True, 'eval_first_epoch': True, 'loss_nll_ratio_margin': False, 'trm_h_cycles': 3, 'trm_l_cycles': 6, 'trm_l_layers': 2, 'trm_num_heads': 4, 'trm_expansion': 2.0, 'trm_persistent_steering': True, 'layers_spacing_adapter': 5, 'layers_start_adapter': 0.3, 'layers_end_adapter': 0.95, 'target_modules_pattern': None, 'use_trm_svft': True, 'adapter_r': 42, 'adapter_fill_orthonormal': False, 'adapter_tail_rank': 12, 'adapter_svft_mode': 'replace_mul', '__type__': 'TRMSvft'}
+CLI args: scripts/run.py TRMSvft --adapter-svft-mode=replace_mul
+|    |   eval/acc |   eval/cot_em |   epoch |   stage |   eval/ratios |   train/minutes |   train/loss |   eval/loss |
+|---:|-----------:|--------------:|--------:|--------:|--------------:|----------------:|-------------:|------------:|
+|  0 |     0      |        0      |      -1 |       1 |        1.1047 |        nan      |   nan        |    nan      |
+|  1 |     0.0387 |        0.003  |       1 |       1 |        0.8981 |         75.7081 |     0.620416 |      0.6863 |
+|  2 |     0.0863 |        0.0089 |       2 |       1 |        0.8942 |         53.4317 |     0.366101 |      0.5583 |
+|  3 |     0.0387 |        0.0089 |       3 |       2 |        0.6195 |         71.9189 |     0.674564 |      0.6117 |
+|  4 |     0.0446 |        0.0089 |       4 |       2 |        0.6081 |         72.0497 |     0.465444 |      0.5976 |
+|  5 |     0.0685 |        0.0089 |       5 |       2 |        0.5757 |         71.7885 |     0.397496 |      0.574  |
+
+# Results: trmsvft-qwen3-0.6b_20251031-090744
+{'project': 'coconut', 'save_path': 'outputs/', 'name': 'trmsvft-qwen3-0.6b', 'model_id': 'suayptalha/Qwen3-0.6B-Math-Expert', 'only_eval': False, 'load_model_path': '', 'resume_epochs': 1, 'use_position_ids': True, 'bf16': True, 'bf16_weight': False, 'opt_8b': False, 'load_in_4bit': False, 'load_in_8bit': False, 'cot_epochs': 0, 'epochs_per_stage': 3, 'max_latent_stage': 3, 'num_epochs': 6, 'batch_size_training': 12, 'gradient_accumulation_steps': 6, 'lr': 0.0004, 'weight_decay': 0.001, 'grad_clip': 10.0, 'scheduler': 'linear', 'debug': False, 'seed': 42, 'reset_optimizer': False, 'loss_seq_vcr': False, 'collect_hs': False, 'max_size': 10000, 'c_thought': 1, 'pad_latent_to_max': True, 'uniform_prob': 0.0, 'train_path': 'data/gsm_train.json', 'val_path': 'data/gsm_valid.json', 'system_prompt': '', 'latent_token_id': None, 'bot_token_id': None, 'eot_token_id': None, 'eos_token_id': None, 'latent_token': '...', 'bot_token': 'Hmm', 'eot_token': 'Therefore', 'skip_stage_zero': True, 'eval_first_epoch': True, 'loss_nll_ratio_margin': False, 'trm_h_cycles': 3, 'trm_l_cycles': 6, 'trm_l_layers': 2, 'trm_num_heads': 4, 'trm_expansion': 2.0, 'trm_persistent_steering': True, 'layers_spacing_adapter': 5, 'layers_start_adapter': 0.3, 'layers_end_adapter': 0.95, 'target_modules_pattern': None, 'use_trm_svft': True, 'adapter_r': 42, 'adapter_fill_orthonormal': False, 'adapter_tail_rank': 12, 'adapter_svft_mode': 'adapter_mult', '__type__': 'TRMSvft'}
+CLI args: scripts/run.py TRMSvft --adapter-svft-mode=adapter_mult
+|    |   eval/acc |   eval/cot_em |   epoch |   stage |   eval/ratios |   train/minutes |   train/loss |   eval/loss |
+|---:|-----------:|--------------:|--------:|--------:|--------------:|----------------:|-------------:|------------:|
+|  0 |     0      |        0      |      -1 |       1 |        1.066  |        nan      |   nan        |    nan      |
+|  1 |     0.0982 |        0.0208 |       1 |       1 |        0.8824 |         74.7259 |     0.478486 |      0.5083 |
+|  2 |     0.2054 |        0.0208 |       2 |       1 |        0.8847 |         53.0227 |     0.282807 |      0.4278 |
+|  3 |     0.1161 |        0.0119 |       3 |       2 |        0.5558 |         71.2966 |     0.405203 |      0.5148 |
+|  4 |     0.1012 |        0.0089 |       4 |       2 |        0.5357 |         71.0045 |     0.397018 |      0.5039 |
+|  5 |     0.1488 |        0.0119 |       5 |       2 |        0.5309 |         71.4924 |     0.305298 |      0.4858 |
+
+# Results: trmsvft-qwen3-0.6b_20251031-075100
+{'project': 'coconut', 'save_path': 'outputs/', 'name': 'trmsvft-qwen3-0.6b', 'model_id': 'suayptalha/Qwen3-0.6B-Math-Expert', 'only_eval': False, 'load_model_path': '', 'resume_epochs': 1, 'use_position_ids': True, 'bf16': True, 'bf16_weight': False, 'opt_8b': False, 'load_in_4bit': False, 'load_in_8bit': False, 'cot_epochs': 0, 'epochs_per_stage': 3, 'max_latent_stage': 3, 'num_epochs': 2, 'batch_size_training': 12, 'gradient_accumulation_steps': 6, 'lr': 0.1, 'weight_decay': 1.0, 'grad_clip': 10.0, 'scheduler': 'linear', 'debug': False, 'seed': 42, 'reset_optimizer': False, 'loss_seq_vcr': False, 'collect_hs': False, 'max_size': 10000, 'c_thought': 1, 'pad_latent_to_max': True, 'uniform_prob': 0.0, 'train_path': 'data/gsm_train.json', 'val_path': 'data/gsm_valid.json', 'system_prompt': '', 'latent_token_id': None, 'bot_token_id': None, 'eot_token_id': None, 'eos_token_id': None, 'latent_token': '...', 'bot_token': '?', 'eot_token': ':', 'skip_stage_zero': True, 'eval_first_epoch': True, 'loss_nll_ratio_margin': False, 'trm_h_cycles': 3, 'trm_l_cycles': 6, 'trm_l_layers': 2, 'trm_num_heads': 4, 'trm_expansion': 2.0, 'trm_persistent_steering': True, 'layers_spacing_adapter': 5, 'layers_start_adapter': 0.3, 'layers_end_adapter': 0.95, 'target_modules_pattern': None, 'use_trm_svft': True, 'adapter_r': 42, 'adapter_fill_orthonormal': False, 'adapter_tail_rank': 12, 'adapter_svft_mode': 'adapter_add', '__type__': 'TRMSvft'}
+CLI args: scripts/run.py TRMSvft --bot_token=? --eot_token=: --latent_token=... --lr=1e-1 --weight_decay=1 --num_epochs=2
+|    |   eval/acc |   eval/cot_em |   epoch |   stage |   eval/ratios |   train/minutes |   train/loss |   eval/loss |
+|---:|-----------:|--------------:|--------:|--------:|--------------:|----------------:|-------------:|------------:|
+|  0 |          0 |             0 |      -1 |       1 |        0.9105 |        nan      |    nan       |     nan     |
+|  1 |          0 |             0 |       1 |       1 |        1.1425 |         75.8564 |      7.06421 |       6.141 |
+
+# Results: trmsvft-qwen3-0.6b_20251031-065726
+{'project': 'coconut', 'save_path': 'outputs/', 'name': 'trmsvft-qwen3-0.6b', 'model_id': 'suayptalha/Qwen3-0.6B-Math-Expert', 'only_eval': False, 'load_model_path': '', 'resume_epochs': 1, 'use_position_ids': True, 'bf16': True, 'bf16_weight': False, 'opt_8b': False, 'load_in_4bit': False, 'load_in_8bit': False, 'cot_epochs': 0, 'epochs_per_stage': 3, 'max_latent_stage': 3, 'num_epochs': 6, 'batch_size_training': 12, 'gradient_accumulation_steps': 1, 'lr': 0.1, 'weight_decay': 1.0, 'grad_clip': 10.0, 'scheduler': 'cosine', 'debug': False, 'seed': 42, 'reset_optimizer': False, 'loss_seq_vcr': False, 'collect_hs': False, 'max_size': 1000, 'c_thought': 1, 'pad_latent_to_max': True, 'uniform_prob': 0.0, 'train_path': 'data/gsm_train.json', 'val_path': 'data/gsm_valid.json', 'system_prompt': '', 'latent_token_id': None, 'bot_token_id': None, 'eot_token_id': None, 'eos_token_id': None, 'latent_token': '...', 'bot_token': 'Hmm', 'eot_token': 'Therefore', 'skip_stage_zero': True, 'eval_first_epoch': True, 'loss_nll_ratio_margin': False, 'trm_h_cycles': 3, 'trm_l_cycles': 6, 'trm_l_layers': 2, 'trm_num_heads': 4, 'trm_expansion': 2.0, 'trm_persistent_steering': True, 'layers_spacing_adapter': 15, 'layers_start_adapter': 0.3, 'layers_end_adapter': 0.95, 'target_modules_pattern': '.+\\.(gate_proj|down_proj).*$', 'use_trm_svft': True, 'adapter_r': 128, 'adapter_fill_orthonormal': False, 'adapter_tail_rank': 12, 'adapter_svft_mode': 'adapter_add', '__type__': 'TRMSvft'}
+CLI args: scripts/run.py TRMSvft --lr=1e-1 --gradient-accumulation-steps=1 --weight_decay=1 --num_epochs=6 --max_size=1000 --adapter_r=128 --scheduler=cosine --target-modules-pattern=.+\.(gate_proj|down_proj).*$ --layers-spacing-adapter=15
+|    |   eval/acc |   eval/cot_em |   epoch |   stage |   eval/ratios |   train/minutes |   train/loss |   eval/loss |
+|---:|-----------:|--------------:|--------:|--------:|--------------:|----------------:|-------------:|------------:|
+|  0 |     0      |             0 |      -1 |       1 |        1.806  |        nan      |    nan       |    nan      |
+|  1 |     0      |             0 |       1 |       1 |        1.0231 |          6.8419 |      2.67147 |      2.379  |
+|  2 |     0      |             0 |       2 |       1 |        0.721  |          4.5315 |      3.705   |      3.6209 |
+|  3 |     0.0556 |             0 |       3 |       2 |        0.8515 |          5.985  |      1.81062 |      1.7358 |
+|  4 |     0.0278 |             0 |       4 |       2 |        0.8675 |          5.9881 |      1.99384 |      2.189  |
+|  5 |     0      |             0 |       5 |       2 |        1.2953 |          5.9719 |      2.41983 |      2.3091 |
+
+# Results: trmlora-qwen3-0.6b_20251101-022749|█████████████████████████████████████████████████████████████████████▎             | 116/139 [30:57<06:10, 16.12s/it]
+{'project': 'coconut', 'save_path': 'outputs/', 'name': 'trmlora-qwen3-0.6b', 'model_id': 'suayptalha/Qwen3-0.6B-Math-Expert', 'only_eval': False, 'load_model_path': '', 'resume_epochs': 1, 'use_position_ids': True, 'bf16': True, 'bf16_weight': False, 'opt_8b': False, 'load_in_4bit': False, 'load_in_8bit': False, 'cot_epochs': 0, 'epochs_per_stage': 3, 'max_latent_stage': 3, 'num_epochs': 6, 'batch_size_training': 12, 'gradient_accumulation_steps': 6, 'lr': 0.0004, 'weight_decay': 0.001, 'grad_clip': 10.0, 'scheduler': 'linear', 'debug': False, 'seed': 42, 'reset_optimizer': False, 'loss_seq_vcr': False, 'collect_hs': False, 'max_size': 10000, 'c_thought': 1, 'pad_latent_to_max': True, 'uniform_prob': 0.0, 'train_path': 'data/gsm_train.json', 'val_path': 'data/gsm_valid.json', 'system_prompt': '', 'latent_token_id': None, 'bot_token_id': None, 'eot_token_id': None, 'eos_token_id': None, 'latent_token': '...', 'bot_token': 'Hmm', 'eot_token': 'Therefore', 'skip_stage_zero': True, 'eval_first_epoch': True, 'loss_nll_ratio_margin': False, 'trm_h_cycles': 3, 'trm_l_cycles': 6, 'trm_l_layers': 2, 'trm_num_heads': 4, 'trm_expansion': 2.0, 'trm_persistent_steering': True, 'layers_spacing_adapter': 5, 'layers_start_adapter': 0.3, 'layers_end_adapter': 0.95, 'target_modules_pattern': None, 'use_trm_lora': True, 'adapter_r': 8, 'adapter_lora_alpha': 32, '__type__': 'TRMLoRA'}
+CLI args: scripts/run.py TRMLoRA
+|    |   eval/acc |   eval/cot_em |   epoch |   stage |   eval/ratios |   train/minutes |   train/loss |   eval/loss |
+|---:|-----------:|--------------:|--------:|--------:|--------------:|----------------:|-------------:|------------:|
+|  0 |     0      |        0      |      -1 |       1 |        1.347  |        nan      |   nan        |    nan      |
+|  1 |     0      |        0      |       1 |       1 |        1.0115 |         62.1977 |     2.37505  |      2.2988 |
+|  2 |     0.0417 |        0.0089 |       2 |       1 |        0.8918 |         41.0049 |     0.308487 |      0.5188 |
+|  3 |     0.0476 |        0.006  |       3 |       2 |        0.5632 |         59.4351 |     0.535073 |      0.5781 |
+
+
+
+# 2025-11-01 05:43:09
+
+TODO what about trying a BiPDO
  TODO cosider latent that makes it conclude not think
 
+adapter_multi > adapter_add

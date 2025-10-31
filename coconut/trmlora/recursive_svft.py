@@ -45,7 +45,7 @@ class TRMSvftAConfig(PeftConfig):
     Hybrid SVD merging: Approximate full SVD cheaply. Principal (top-principal_rank SVD) captures base variance. Tail (low-rank random ortho basis to principal V, zero S init) merges tail info without full compute. Hypothesis: Principal leverages pretrain; tail recovers subtle patterns > pure top-k or random LoRA. Concat bases; single TRM on r=principal+tail (principal strong init, tail explores).
     """
     # SVFT-specific parameters
-    principal_rank: int = field(default=16, metadata={"help": "Top-k SVD rank for principal directions (base variance)"})
+    r: int = field(default=19, metadata={"help": "Rank, includes Top-k SVD rank for principal directions (base variance), and tail_rank for low-rank approx of remaining vectors (subtle info)"})
     tail_rank: int = field(default=4, metadata={"help": "Low-rank approx rank for tail merging (ortho random basis; subtle info)"})
     # NOTE: off_diag disabled - diagonal-only (Plain SVFT) for simplicity and parameter efficiency
     # Paper shows full-rank diagonal outperforms low-rank banded for same param count
@@ -83,7 +83,9 @@ class TRMSvftAConfig(PeftConfig):
 
     def __post_init__(self):
         self.peft_type = 'TRMSVFT'
-        self.r = self.principal_rank + self.tail_rank  # Total rank
+        assert self.r > self.tail_rank, "Total rank r must be greater than tail_rank"
+        self.principal_rank = self.r - self.tail_rank
+        # self.r = self.principal_rank + self.tail_rank  # Total rank
         if self.target_modules is None:
             self.target_modules = ["q_proj", "v_proj"]
 

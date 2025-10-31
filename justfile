@@ -23,6 +23,12 @@ run:
   # uv run scripts/run.py TRMSvft --adapter-svft-mode='adapter_mult' --layers-spacing-adapter=5
   # uv run scripts/run.py TRMSvft --adapter-svft-mode='adapter_add'  --layers-spacing-adapter=5 --no-persistent-steering
 
+  uv run scripts/run.py TRMSvft --lr=1e-1 --gradient-accumulation-steps=1 --weight_decay=1 --num_epochs=6 --max_size=1000 --adapter_r=128 --scheduler=cosine  --target-modules-pattern='.+\.(gate_proj|down_proj).*$' --layers-spacing-adapter=15
+  # do one with <think>...</think>
+  # uv run scripts/run.py TRMSvft --bot_token="<think>" --eot_token="</think>" --lr=1e-2 --weight_decay=.1 --num_epochs=2
+  # uv run scripts/run.py TRMSvft --bot_token="🤔" --eot_token="💭" --latent_token="∴" --lr=1e-2 --weight_decay=.1 --num_epochs=2
+  # uv run scripts/run.py TRMSvft --bot_token="🤔" --eot_token="➡️" --latent_token="🔄" --lr=1e-2 --weight_decay=.1 --num_epochs=2
+  uv run scripts/run.py TRMSvft --bot_token="Wait" --eot_token="Ans" --latent_token="..." --lr=1e-2 --weight_decay=.1 --num_epochs=2
   uv run scripts/run.py TRMSvft --adapter-svft-mode='adapter_mult'
   uv run scripts/run.py TRMSvft --adapter-svft-mode='replace_mul'
   uv run scripts/run.py TRMSvft

@@ -17,7 +17,7 @@ from coconut.trmlora import PEFT_TYPE_TO_PREFIX_MAPPING
 from peft.utils.save_and_load import _insert_adapter_name_into_state_dict
 from peft import PeftModel, PeftConfig
 from coconut import trmlora  # ensure trmlora is imported to register peft types
-from coconut.configs import bot_token, latent_token, eot_token
+# from coconut.configs import bot_token, latent_token, eot_token
 
 
 def coconut_to_adapter_config_converter(conf: BaseConfig, target_modules: Optional[list[str]] = None) -> PeftConfig:
@@ -55,6 +55,9 @@ def coconut_to_adapter_config_converter(conf: BaseConfig, target_modules: Option
 
 
 def load_new_model(conf: BaseConfig, device, dtype):
+    latent_token  = conf.latent_token
+    bot_token     = conf.bot_token
+    eot_token     = conf.eot_token
 
 
     # load tokenizer

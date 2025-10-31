@@ -331,12 +331,13 @@ def calc_ans_nll(batch, model, tokenizer, device, dtype, verbose=False):
             continue
         
         # get the last instance of '###'
+        # FIXME should be first? as the mode repeats itself, but after the question as we might have it in system prompt
         idx_ans_start = a.flip(0).argmax()
         idx_ans_start = len(a)-idx_ans_start
         idx_ans_start += 1 # skip [' '] that is after ###
 
         remaining_tokens = input_ids_i[idx_ans_start:]
-        rel_start, rel_end = match_token_indices(remaining_tokens, r'\d+\.?\d*', tokenizer)
+        rel_start, rel_end = match_token_indices(remaining_tokens, tokenizer, r'\d+\.?\d*')
         if rel_start is None:
             raise ValueError(f"No number match found in answer tokens after ###: {tokenizer.decode(remaining_tokens)}")
         idx_ans_end = idx_ans_start + rel_end
