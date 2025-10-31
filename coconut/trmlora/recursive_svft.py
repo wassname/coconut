@@ -122,7 +122,7 @@ class TRMSvftLayer(BaseTunerLayer):
     Code from https://github.com/VijayLingam95/SVFT/blob/8303115d45868712f952e6a847735bb59b1a9f18/svft/svft_layers.py
     """
     
-    adapter_layer_names = ("svft_lambda", "svft_l_nets", "svft_zL_init", "svft_zH_init", "svft_u_delta", "svft_output_head")
+    adapter_layer_names = ("svft_l_nets", "svft_zL_init", "svft_zH_init", "svft_u_delta", "svft_output_head")
     other_param_names = ("svft_u_init", "svft_v", "svft_s0", "svft_configs")
 
     def __init__(self, base_layer: nn.Module, **kwargs) -> None:
@@ -134,7 +134,6 @@ class TRMSvftLayer(BaseTunerLayer):
         self.svft_u_delta = nn.ParameterDict({})  # Learnable delta: U_eff = U_init + U_delta
         self.svft_v = nn.ParameterDict({})
         self.svft_s0 = BufferDict({})
-        self.svft_lambda = nn.ParameterDict({})
         # Per-adapter output heads (modules) for mixing zH
         self.svft_output_head = nn.ModuleDict({})
 
@@ -240,18 +239,7 @@ class TRMSvftLayer(BaseTunerLayer):
         
         # Initialize learnable parameters based on mode
         mode = svft_config.svft_mode
-        
-        if mode.startswith("adapter_"):
-            lambda_init = 1e-2  # DeLoRA-style init for adapters
-        elif mode == "replace_add":
-            lambda_init = 0.0  # Start close to base
-        elif mode == "replace_mul":
-            lambda_init = -2.0  # Small relative change
-        else:
-            lambda_init = 1e-2
-        
-        self.svft_lambda[adapter_name] = nn.Parameter(torch.tensor([lambda_init], device=device), requires_grad=True)
-        
+                
         # Initialize TRM components: single L_net on combined r
         k = r
         self.svft_l_nets[adapter_name] = L_net(
@@ -308,8 +296,8 @@ class TRMSvftLayer(BaseTunerLayer):
         x_v = x @ V.T  # [b, s, r]
         
         # Normalize by V's magnitude (like DeLoRA's A norm)
-        Vn = torch.clamp(V.norm(dim=1), min=1e-6)  # [r] - norm of each row of V
-        x_v_normalized = x_v / Vn.unsqueeze(0).unsqueeze(0)  # [b, s, r] - unit norm per component
+        # Vn = torch.clamp(V.norm(dim=1), min=1e-6)  # [r] - norm of each row of V
+        # x_v_normalized = x_v / Vn.unsqueeze(0).unsqueeze(0)  # [b, s, r] - unit norm per component
         
         # Check if we're in steering mode (post-latent)
         steering_mode = recursion_cache.get('steering_mode', False)
@@ -318,11 +306,11 @@ class TRMSvftLayer(BaseTunerLayer):
             # Don't run TRM, just apply cached refined sd
             zH = recursion_cache.get('zH')
             zL = recursion_cache.get('zL')
-            zLs, zHs = self.trm(adapter, zL, zH, x_v_normalized, h_cycles=1)
+            zLs, zHs = self.trm(adapter, zL, zH, x_v, h_cycles=1)
             zHs = self.svft_output_head[adapter](zHs)  # Apply head in steering
         else:
             # TRM recursion mode
-            b = x_v_normalized.shape[0]
+            b = x_v.shape[0]
 
             # Initialize or retrieve zH and zL in r_dim
             zL = recursion_cache.get('zL', None)
@@ -333,47 +321,38 @@ class TRMSvftLayer(BaseTunerLayer):
                 zH = self.svft_zH_init[adapter].unsqueeze(0).expand(b, -1).to(x.device)
             
             # TRM refines in normalized space (like DeLoRA)
-            zLs, zHs = self.trm(adapter, zL, zH, x_v_normalized[:, -1:])
+            zLs, zHs = self.trm(adapter, zL, zH, x_v[:, -1:])
             zHs = self.svft_output_head[adapter](zHs)  # Apply head after TRM
             
             # Update cache for next layer
             recursion_cache['zL'] = zLs[:, -1, :]  # [b, r]
             recursion_cache['zH'] = zHs[:, -1, :]  # [b, r]
             
-        # DeLoRA pattern: Scale OUTPUT by lambda and compensate for up-projection matrix norm
         # Don't normalize zHs - it contains learned per-component magnitudes!
         S0 = self.svft_s0[adapter]  # [r] - base singular values
-        lambda_val = self.svft_lambda[adapter]
-        r = V.shape[0]
-        
-        # Compensate for U's magnitude (like DeLoRA's B norm)
-        Un = torch.clamp(U.norm(dim=0), min=1e-6)  # [r] - norm of each column of U
-        scaling = (lambda_val / r) / Un  # [r] - per-component
         
         # Apply mode-specific transformation
         mode = self.svft_configs[adapter].svft_mode
         S0_expanded = S0.unsqueeze(0).unsqueeze(0)  # [1, 1, r]
-        scaling_expanded = scaling.unsqueeze(0).unsqueeze(0)  # [1, 1, r]
         
         if mode == "adapter_add":
             # Additive delta: exp for per-component expressiveness
-            sd = torch.exp(zHs * scaling_expanded)  # [b, s, r]
-            # sd = (zHs * scaling_expanded)  # [b, s, r]
-            s_eff = sd * S0_expanded  # Scale by base magnitude
+            # Scaling by tanh ensure delta [-s0, s0] range, which means we can't flip sign of singular values
+            s_eff = torch.tanh(zHs) * S0_expanded 
             
         elif mode == "adapter_mult":
             # Multiplicative delta: softplus for smooth positive scaling
-            sd = F.softplus(zHs * scaling_expanded)
+            sd = F.softplus(zHs)
             s_eff = sd * S0_expanded
             
         elif mode == "replace_add":
             # Replace via addition: softplus for positive values
-            sd = F.softplus(zHs * scaling_expanded)
+            sd = F.softplus(zHs)
             s_eff = S0_expanded + sd
             
         elif mode == "replace_mul":
             # Replace via multiplication: softplus for positive scaling factor
-            sd = F.softplus(zHs * scaling_expanded)
+            sd = F.softplus(zHs)
             s_eff = S0_expanded * (1.0 + sd)
             
         else:
