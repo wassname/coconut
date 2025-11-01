@@ -22,7 +22,6 @@ from transformers import (
 import wandb
 
 from coconut.dataset import (
-    CoconutCollator,
     get_cot_latent_dataset,
     get_dataset,
     get_question_only_latent_dataset,
@@ -55,7 +54,7 @@ def main():
     import coconut.silence
     import tyro
     from coconut import configs # this will be my dataclass files
-    experiments = configs.__dict__.keys()
+    # experiments = configs.__dict__.keys()
     # logger.debug(f"Available experiments: {experiments}")
     # parser = argparse.ArgumentParser(description="coconut")
     # parser.add_argument("experiment", type=str, help=f"experiment names: [{experiments}]")

@@ -117,8 +117,8 @@ def evaluate(dataloader, model, tokenizer, ds, max_new_tokens=32, device='cuda',
                 min_new_tokens=6,
                 early_stopping=True,
                 pad_token_id=tokenizer.pad_token_id,
-                # num_return_sequences=best_of_n,
-                # num_beams=best_of_n,
+                num_return_sequences=best_of_n,
+                num_beams=best_of_n,
                 return_dict_in_generate=True,
                 output_scores=True,
                 stopping_criteria=[
@@ -135,7 +135,8 @@ def evaluate(dataloader, model, tokenizer, ds, max_new_tokens=32, device='cuda',
 
             # split into question and answer
             q_toks = batch["input_ids"][i]
-            a_toks = outputs[i][q_toks.size(0):]
+            
+            
             q_s = tokenizer.decode(q_toks, skip_special_tokens=False)
             ans_tok_list = tokenizer.decode(a_toks, skip_special_tokens=False)
             ans_tok_list = tokenizer.batch_decode(a_toks, skip_special_tokens=False)

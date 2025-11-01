@@ -281,11 +281,21 @@ class TRMSvftLayer(BaseTunerLayer):
         Compute adapter delta with ΔU parameterization.
         U_effective = U_init + U_delta (weight decay on U_delta naturally pulls U → U_init)
         """
+        b = x.shape[0]
 
         if self._recursion_cache is None:
             recursion_cache = {}
         else:
             recursion_cache = self._recursion_cache
+
+
+        # Initialize or retrieve zH and zL in r_dim
+        zL = recursion_cache.get('zL', None)
+        if zL is None:
+            zL = self.svft_zL_init[adapter].unsqueeze(0).expand(b, -1).to(x.device)
+        zH = recursion_cache.get('zH', None)
+        if zH is None:
+            zH = self.svft_zH_init[adapter].unsqueeze(0).expand(b, -1).to(x.device)
 
         # Effective U = U_init (frozen SVD) + U_delta (learnable adaptation)
         U = self.svft_u_init[adapter] + self.svft_u_delta[adapter]
@@ -295,65 +305,65 @@ class TRMSvftLayer(BaseTunerLayer):
         # Down-project to singular value space
         x_v = x @ V.T  # [b, s, r]
         
-        # Normalize by V's magnitude (like DeLoRA's A norm)
-        # Vn = torch.clamp(V.norm(dim=1), min=1e-6)  # [r] - norm of each row of V
-        # x_v_normalized = x_v / Vn.unsqueeze(0).unsqueeze(0)  # [b, s, r] - unit norm per component
-        
         # Check if we're in steering mode (post-latent)
-        steering_mode = recursion_cache.get('steering_mode', False)
-        
-        if steering_mode:
-            # Don't run TRM, just apply cached refined sd
-            zH = recursion_cache.get('zH')
-            zL = recursion_cache.get('zL')
-            zLs, zHs = self.trm(adapter, zL, zH, x_v, h_cycles=1)
-            zHs = self.svft_output_head[adapter](zHs)  # Apply head in steering
-        else:
-            # TRM recursion mode
-            b = x_v.shape[0]
+        # steering_mode = recursion_cache.get('steering_mode', False)
+        pos = x.shape[1] - 1  # Current position (last token)
+        latent_mask = recursion_cache['latent_mask'][:, pos]  # [b]
 
-            # Initialize or retrieve zH and zL in r_dim
-            zL = recursion_cache.get('zL', None)
-            if zL is None:
-                zL = self.svft_zL_init[adapter].unsqueeze(0).expand(b, -1).to(x.device)
-            zH = recursion_cache.get('zH', None)
-            if zH is None:
-                zH = self.svft_zH_init[adapter].unsqueeze(0).expand(b, -1).to(x.device)
+        if latent_mask.sum() == 0:
+            # No latents - shallow only
+            # zLs, zHs = self.trm(adapter, zL, zH, x_v[:, -1:])
+            zLs, zHs = self.trm(adapter, zL, zH, x_v, h_cycles=1)
+        else:
+
+            # Deep only for latents
+            zLs_deep_part, zH_deep_part = self.trm(adapter, zL, zH, x_v[latent_mask])
+            zLs_shallow_part, zH_shallow_part = self.trm(adapter, zL, zH, x_v[~latent_mask], h_cycles=1)
+
+            def rebuild_z(z_part, z_full, latent_mask):
+                """Rebuild full z from latent-only z_latent using scatter (differentiable, unlike in place ops)."""
+                z_full = torch.zeros_like(z_part)
+                indices = latent_mask.nonzero(as_tuple=False)  # [n_latent, 1]
+                z_full[indices[:, 0], :] = z_part
+                return z_full
+
+            zLs_deep = rebuild_z(zLs_deep_part, zL, latent_mask)
+            zHs_deep = rebuild_z(zH_deep_part, zH, latent_mask)
+            zLs_shallow = rebuild_z(zLs_shallow_part, zL, ~latent_mask)
+            zHs_shallow = rebuild_z(zH_shallow_part, zH, ~latent_mask)
+
+            # Blend
+            zHs = torch.where(latent_mask.unsqueeze(-1), zHs_deep, zHs_shallow)
+            zLs = torch.where(latent_mask.unsqueeze(-1), zLs_deep, zLs_shallow)
+        
+        # Update cache for next layer
+        recursion_cache['zL'] = zLs[:, -1, :]  # [b, r]
+        recursion_cache['zH'] = zHs[:, -1, :]  # [b, r]
             
-            # TRM refines in normalized space (like DeLoRA)
-            zLs, zHs = self.trm(adapter, zL, zH, x_v[:, -1:])
-            zHs = self.svft_output_head[adapter](zHs)  # Apply head after TRM
-            
-            # Update cache for next layer
-            recursion_cache['zL'] = zLs[:, -1, :]  # [b, r]
-            recursion_cache['zH'] = zHs[:, -1, :]  # [b, r]
-            
-        # Don't normalize zHs - it contains learned per-component magnitudes!
-        S0 = self.svft_s0[adapter]  # [r] - base singular values
+        S0 = self.svft_s0[adapter].unsqueeze(0).unsqueeze(0)  # [1, 1, r]
         
         # Apply mode-specific transformation
         mode = self.svft_configs[adapter].svft_mode
-        S0_expanded = S0.unsqueeze(0).unsqueeze(0)  # [1, 1, r]
         
         if mode == "adapter_add":
             # Additive delta: exp for per-component expressiveness
             # Scaling by tanh ensure delta [-s0, s0] range, which means we can't flip sign of singular values
-            s_eff = torch.tanh(zHs) * S0_expanded 
+            s_eff = torch.tanh(zHs) * S0 
             
         elif mode == "adapter_mult":
             # Multiplicative delta: softplus for smooth positive scaling
             sd = F.softplus(zHs)
-            s_eff = sd * S0_expanded
+            s_eff = sd * S0
             
         elif mode == "replace_add":
             # Replace via addition: softplus for positive values
             sd = F.softplus(zHs)
-            s_eff = S0_expanded + sd
+            s_eff = S0 + sd
             
         elif mode == "replace_mul":
             # Replace via multiplication: softplus for positive scaling factor
             sd = F.softplus(zHs)
-            s_eff = S0_expanded * (1.0 + sd)
+            s_eff = S0 * (1.0 + sd)
             
         else:
             raise ValueError(f"Unknown svft_mode: {mode}")
@@ -363,7 +373,7 @@ class TRMSvftLayer(BaseTunerLayer):
             s_eff_diag = torch.clamp(s_eff, min=1e-6)  # Ensure positive for valid SVD
         else:
             # Adapter modes: bound magnitude to prevent instability
-            max_magnitude = 10.0 * S0_expanded
+            max_magnitude = 10.0 * S0
             s_eff_diag = torch.clamp(s_eff, min=-max_magnitude, max=max_magnitude)
         
         # Complete transformation: x @ V.T @ diag(s_eff) @ U.T

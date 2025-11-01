@@ -2968,7 +2968,7 @@ OK it's time to simplify
 
 now my `with recursive` with include a latent mask that will control recursion depth
 
-```
+```py
 
 # Right (preserves backprop):
 zH_shallow = trm(zH, loops=1)  # All tokens, shallow
@@ -2980,8 +2980,134 @@ zH = torch.where(
     zH_deep,
     zH_shallow
 )
+
+def forward(self, x, latent_mask=None):
+    """
+    x: Float[Tensor, 'b s h']
+    latent_mask: Bool[Tensor, 'b s']
+    """
+    if latent_mask is None or not latent_mask.any():
+        return self.recursive_forward(x, loops=1)
+    
+    # Shallow for all
+    zH_shallow = self.recursive_forward(x, loops=1)  # [b, s, h]
+    
+    # Deep only for latents
+    x_latent = x[latent_mask]  # [n_latent, h]
+    zH_latent_deep = self.recursive_forward(x_latent, loops=self.max_loops)
+    
+    # Build full deep tensor using scatter (differentiable, unlike in place ops)
+    zH_deep = torch.zeros_like(zH_shallow)
+    indices = latent_mask.nonzero(as_tuple=False)  # [n_latent, 2]
+    zH_deep[indices[:, 0], indices[:, 1]] = zH_latent_deep
+    
+    # Blend
+    zH = torch.where(latent_mask.unsqueeze(-1), zH_deep, zH_shallow)
+    return zH
 ```
 
 this lets me simplify
 - no coconutcollator
 - no multiple part forward and generation just `with recursive_latent_mask(...)` and either forward or generate!
+
+
+Yes! Use `torch.scatter` or `index_put` (non-inplace version). Here's the gradient-safe selective computation:
+
+```python
+def forward(self, x, latent_mask=None):
+    """
+    x: Float[Tensor, 'b s h']
+    latent_mask: Bool[Tensor, 'b s']
+    """
+    b, s, h = x.shape
+    
+    # Shallow pass for all tokens
+    zH = self.recursive_forward(x, loops=1)  # [b, s, h]
+    
+    if latent_mask is not None and latent_mask.any():
+        # Extract latent positions
+        x_latent = x[latent_mask]  # [n_latent, h]
+        
+        # Deep recursion only on latents
+        zH_latent_deep = self.recursive_forward(x_latent, loops=self.max_loops)
+        
+        # Non-inplace scatter back using index_put (creates new tensor)
+        indices = latent_mask.nonzero(as_tuple=True)  # tuple of (batch_indices, seq_indices)
+        zH = zH.index_put(indices, zH_latent_deep, accumulate=False)
+    
+    return zH
+```
+
+Or using einops for clarity:
+
+```python
+from einops import pack, unpack
+
+def forward(self, x, latent_mask=None):
+    b, s, h = x.shape
+    
+    # Shallow everywhere
+    zH = self.recursive_forward(x, loops=1)
+    
+    if latent_mask is not None and latent_mask.any():
+        # Pack: extract latent positions preserving structure
+        x_latent, ps = pack([x[latent_mask]], '* h')
+        
+        # Deep recursion
+        zH_latent_deep = self.recursive_forward(x_latent, loops=self.max_loops)
+        
+        # Unpack and scatter back (non-inplace)
+        zH_new = zH.clone()  # Explicit copy for autograd
+        zH_new[latent_mask] = zH_latent_deep
+        zH = zH_new
+    
+    return zH
+```
+
+Actually, the cleanest is `torch.where` with selective computation:
+
+```python
+def forward(self, x, latent_mask=None):
+    b, s, h = x.shape
+    
+    # Always compute shallow
+    zH_shallow = self.recursive_forward(x, loops=1)
+    
+    if latent_mask is None or not latent_mask.any():
+        return zH_shallow
+    
+    # Compute deep ONLY for latent positions
+    x_latent = x[latent_mask]  # [n_latent, h]
+    zH_latent_deep = self.recursive_forward(x_latent, loops=self.max_loops)
+    
+    # Build full tensor with deep values at latent positions
+    # Use scatter_: creates new tensor, preserves gradients
+    zH_deep_full = zH_shallow.new_zeros(b, s, h)
+    zH_deep_full[latent_mask] = zH_latent_deep
+    
+    # Blend (torch.where is fully differentiable)
+    zH = torch.where(latent_mask.unsqueeze(-1), zH_deep_full, zH_shallow)
+    
+    return zH
+```
+
+The key: `index_put`, `scatter`, and boolean indexing for assignment all create new tensors in the backward pass, so gradients flow correctly. The `clone()` approach also works but is more explicit about the copy.
+
+Best version (most efficient + gradient safe):
+
+```python
+def forward(self, x, latent_mask=None):
+    zH_shallow = self.recursive_forward(x, loops=1)
+    
+    if latent_mask is None or not latent_mask.any():
+        return zH_shallow
+    
+    # Deep only where needed
+    zH_latent_deep = self.recursive_forward(x[latent_mask], loops=self.max_loops)
+    
+    # Scatter using index_put (non-inplace, gradient-safe)
+    indices = latent_mask.nonzero(as_tuple=True)
+    return zH_shallow.index_put(indices, zH_latent_deep)
+```
+
+This gives you O(k) deep computation for k latent tokens, not O(s).

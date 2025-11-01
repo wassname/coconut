@@ -91,117 +91,6 @@ def get_dataset(path, tokenizer, max_size=1000000000, drop_unused=True, system_p
 
     return dataset_tok
 
-
-@dataclass
-class CoconutCollator:
-    tokenizer: PreTrainedTokenizerBase
-    latent_id: Optional[int] = None
-    label_pad_token_id: Optional[int] = -100
-
-    def __call__(self, features, return_tensors=None):
-        assert self.tokenizer.padding_side == "right"
-
-        """
-        Pad the batch like this to maximize the reuse of kv cache. This is because out coconut forward is more effecient when doing a batch of tokens so we want to line up the <latent> tokens
-        E.g.,
-        
-        xxxxxxxxxx<latent><latent>xxxxx--
-        -----xxxxx<latent>xxxxxxxx-------
-        ---xxxxxxx<latent><latent>xxxxxxx
-
-
-        ("x" is word token, "-" is pad token)
-        """
-
-        earliest_latent = [
-            feature["input_ids"].index(self.latent_id)
-            for feature in features
-            if self.latent_id in feature["input_ids"]
-        ]
-
-        if len(earliest_latent) > 0:  # if there are continuous thoughts in the sequence
-            latest_earliest_latent = max(earliest_latent)
-            for feature in features:
-                if self.latent_id in feature["input_ids"]:
-                    n_tok_pad = latest_earliest_latent - feature["input_ids"].index(
-                        self.latent_id
-                    )
-                else:
-                    n_tok_pad = 0
-                feature["position_ids"] = [0] * n_tok_pad + list(
-                    range(len(feature["input_ids"]))
-                )
-                feature["input_ids"] = [
-                    self.tokenizer.pad_token_id
-                ] * n_tok_pad + feature["input_ids"]
-                if "labels" in feature:
-                    feature["labels"] = [self.label_pad_token_id] * n_tok_pad + feature[
-                        "labels"
-                    ]
-                feature["attention_mask"] = [0] * n_tok_pad + feature["attention_mask"]
-
-        label_name = "label" if "label" in features[0].keys() else "labels"
-
-        non_label_position_features = [
-            {
-                k: v
-                for k, v in feature.items()
-                if k != label_name and k != "position_ids"
-            }
-            for feature in features
-        ]
-
-        # run through tokenizer without labels to ensure no side effects
-        batch = pad_without_fast_tokenizer_warning(
-            self.tokenizer,
-            non_label_position_features,
-            padding=True,
-            pad_to_multiple_of=None,
-            return_tensors="pt",
-        )
-
-        labels = (
-            [feature[label_name] for feature in features]
-            if label_name in features[0].keys()
-            else None
-        )
-        if labels is not None and all(label is None for label in labels):
-            labels = None
-        position_ids = (
-            [feature["position_ids"] for feature in features]
-            if "position_ids" in features[0].keys()
-            else None
-        )
-        # we have to pad the labels and position_ids manually as we cannot rely on `tokenizer.pad`
-
-        if labels is not None:
-            max_label_length = max(len(l) for l in labels)
-
-            batch["labels"] = [
-                label + [self.label_pad_token_id] * (max_label_length - len(label))
-                for label in labels
-            ]
-            batch["labels"] = torch.tensor(batch["labels"], dtype=torch.int64)
-
-        if position_ids is not None:
-            max_pos_length = max(len(l) for l in position_ids)
-
-            batch["position_ids"] = [
-                position_id + [0] * (max_pos_length - len(position_id))
-                for position_id in position_ids
-            ]
-            batch["position_ids"] = torch.tensor(
-                batch["position_ids"], dtype=torch.int64
-            )
-
-        whitelist = ["input_ids", "attention_mask", "labels", "position_ids", "question_tokenized", "steps_tokenized", "answer_tokenized", "idx", "position_ids"]
-        for k in batch.keys():
-            if k not in whitelist:
-                del batch[k]
-
-        return batch
-
-
 @anycache('.anycache')
 def get_question_only_latent_dataset(
     scheduled_stage,
@@ -253,13 +142,13 @@ def get_question_only_latent_dataset(
             "input_ids": tokens,
             "idx": sample["idx"],
             "attention_mask": [1] * len(tokens),
-            "position_ids": list(range(len(tokens))),
+            # "position_ids": list(range(len(tokens))),
         }
 
     return base_dataset_valid.map(
         process_dataset, remove_columns=list(base_dataset_valid.features) if drop_unused else None, num_proc=num_proc,
          desc=f"process_dataset: q_latent_{scheduled_stage}"
-    )
+    ).with_format('pt')
 
 
 def get_cot_latent_dataset(
@@ -341,7 +230,7 @@ def get_cot_latent_dataset(
             ],  
             "attention_mask": [1] * len(tokens),
             "idx": sample["idx"],
-            "position_ids": list(range(len(tokens))),
+            # "position_ids": list(range(len(tokens))),
         }
 
     processed_dataset = base_dataset.map(
@@ -350,6 +239,6 @@ def get_cot_latent_dataset(
     )
     if shuffle:
         processed_dataset = processed_dataset.shuffle()
-    dataset = processed_dataset
+    dataset = processed_dataset.with_format('pt')
 
     return dataset

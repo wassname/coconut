@@ -37,7 +37,6 @@ from transformers import (
 import wandb
 from coconut.gen import gen_sample2
 from coconut.dataset import (
-    CoconutCollator,
     get_cot_latent_dataset,
     get_dataset,
     get_question_only_latent_dataset,
@@ -50,7 +49,7 @@ from coconut.load_model import (
     resume_model,
     save_model,
 )
-from transformers import DataCollatorWithPadding
+from transformers import DataCollatorForSeq2Seq
 # from coconut.configs import bot_token, latent_token, eot_token
 
 
@@ -70,7 +69,7 @@ def run_ratio_eval(
     latent_id = conf.latent_token_id
     bot_id = conf.bot_token_id
     eot_id = conf.eot_token_id
-    collator = CoconutCollator(tokenizer, latent_id=latent_id, label_pad_token_id=-100)
+    collator = DataCollatorForSeq2Seq(tokenizer, )
     dataset_gen_val2 = get_cot_latent_dataset(
         stage,
         base_dataset_valid,
@@ -205,7 +204,7 @@ def train(conf: BaseConfig):
     bot_id = conf.bot_token_id
     eot_id = conf.eot_token_id
     optimizer = None
-    collator = CoconutCollator(tokenizer, latent_id=latent_id, label_pad_token_id=-100)
+    collator = DataCollatorForSeq2Seq(tokenizer, padding=True, return_tensors="pt")
 
     """
     The stages
@@ -347,7 +346,7 @@ def train(conf: BaseConfig):
                     )
 
                 train_dataloader = torch.utils.data.DataLoader(
-                    dataset_train,
+                    dataset_train.select_columns(['input_ids', 'attention_mask', 'labels']),
                     num_workers=1,
                     shuffle=True,
                     pin_memory=True,
