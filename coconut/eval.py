@@ -135,8 +135,7 @@ def evaluate(dataloader, model, tokenizer, ds, max_new_tokens=32, device='cuda',
 
             # split into question and answer
             q_toks = batch["input_ids"][i]
-            
-            
+            a_toks = outputs.sequences[i][q_toks.size(0):]
             q_s = tokenizer.decode(q_toks, skip_special_tokens=False)
             ans_tok_list = tokenizer.decode(a_toks, skip_special_tokens=False)
             ans_tok_list = tokenizer.batch_decode(a_toks, skip_special_tokens=False)

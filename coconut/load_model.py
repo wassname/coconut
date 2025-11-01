@@ -63,7 +63,7 @@ def load_new_model(conf: BaseConfig, device, dtype):
     # load tokenizer
     tokenizer = AutoTokenizer.from_pretrained(
         conf.model_id,
-        padding_side="right",
+        padding_side="left",
     )
     tokenizer.pad_token = tokenizer.eos_token
     tokenizer.pad_token_id = tokenizer.eos_token_id
