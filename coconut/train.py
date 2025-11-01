@@ -50,6 +50,7 @@ from coconut.load_model import (
     resume_model,
     save_model,
 )
+from transformers import DataCollatorWithPadding
 # from coconut.configs import bot_token, latent_token, eot_token
 
 
@@ -260,6 +261,7 @@ def train(conf: BaseConfig):
                 pin_memory=True,
                 batch_size=conf.batch_size_training,
                 collate_fn=collator,
+                # collate_fn=DataCollatorWithPadding(tokenizer),
             )
             if conf.eval_first_epoch and (epoch == 0 or (epoch==conf.resume_epochs)):
                 # quick QC to see how well untouched model does at the task

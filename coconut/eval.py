@@ -112,12 +112,13 @@ def evaluate(dataloader, model, tokenizer, ds, max_new_tokens=32, device='cuda',
         with torch.autocast(device_type=device, dtype=dtype):
             outputs = model.generate(
                 **batch,
-                use_cache=False,
+                # use_cache=True,
                 max_new_tokens=max_new_tokens,
                 min_new_tokens=6,
                 early_stopping=True,
                 pad_token_id=tokenizer.pad_token_id,
-                num_return_sequences=best_of_n,
+                # num_return_sequences=best_of_n,
+                # num_beams=best_of_n,
                 return_dict_in_generate=True,
                 output_scores=True,
                 stopping_criteria=[
@@ -127,7 +128,7 @@ def evaluate(dataloader, model, tokenizer, ds, max_new_tokens=32, device='cuda',
                 # padding_side='left',
             )
 
-        # FIXME handle multiple return sequences
+        # FIXME handle multiple return sequences in COCONUT
 
         for i in range(len(outputs)):
             test_idx = idx[i].item()

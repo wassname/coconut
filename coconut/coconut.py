@@ -4,6 +4,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import copy
 from torch.nn import CrossEntropyLoss
 from collections import namedtuple
 from collections import defaultdict
@@ -28,7 +29,7 @@ from transformers import (
     PreTrainedModel,
 )
 
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 # from coconut.hs2ie import hs2ie, get_supressed_activations
 from coconut.configs import BaseConfig
 from coconut.adapters import set_adapter
@@ -47,12 +48,17 @@ Outputs = namedtuple(
         "past_key_values",
         "hidden_states",
         "log",
+        "recursion_cache"
         # "input_embed_diff"
     ],  # loss_ar loss_vcr
 )
 
 # max during gen
 MAX_N_LATENT = 8
+
+def kv_cache_shape(kv_cache: DynamicCache) -> tuple:
+    # [layers, batch, n_heads, seq_len, head_dim]
+    return (len(kv_cache.layers),) + tuple(kv_cache.layers[0].values.shape)
 
 
 def get_nll(logits, labels=None, attention_mask=None):
@@ -113,6 +119,21 @@ class Coconut(nn.Module):
             for module in trm_layers:
                 module._recursion_cache = None
 
+    @contextmanager
+    def with_adapter_and_recursion(self, enable_adapter: Optional[Union[bool, str]] = True, recursion_cache: Optional[dict] = None, steering_mode: Optional[bool] = None):
+        """Combined context manager: enables adapter and/or recursion as specified."""
+        adapter_name = self.model.active_adapter if enable_adapter is True else (enable_adapter if isinstance(enable_adapter, str) else None)
+        adapter_ctx = set_adapter(self.model, adapter_name)
+
+        if recursion_cache is not None:
+            recursion_ctx = self.recursion_context(recursion_cache, steering_mode=steering_mode)
+        else:
+            recursion_ctx = nullcontext()
+
+        with adapter_ctx:
+            with recursion_ctx:
+                yield
+
     def forward(
         self, input_ids, attention_mask=None, labels=None, position_ids=None, **kwargs
     ):
@@ -168,7 +189,7 @@ class Coconut(nn.Module):
             for i in range(input_ids.shape[0])
         ]  # bs, num_latent_tokens_in_the_instance (difference across the batch)
 
-        max_n_latents = max([len(l) for l in latent_lists])
+        max_n_latents = max([len(latent_list) for latent_list in latent_lists])
 
         a, b = 0, input_ids.shape[1]
         inputs_embeds = self.model.get_input_embeddings()(input_ids)
@@ -186,10 +207,10 @@ class Coconut(nn.Module):
         # Three-stage processing: (1) before latents, (2) latents one-by-one, (3) after latents
         # Each stage is a forward pass through the model on a different portion of the sequence
         
-        # STAGE 1: Before first latent (base model only)
+        # STAGE 1: Before first latent (adapter off, no recursion)
         if max_n_latents > 0:
             with torch.no_grad():
-                with set_adapter(self.model, None):
+                with self.with_adapter_and_recursion(enable_adapter=False):
                     outputs = self.model.forward(
                         inputs_embeds=inputs_embeds[:, a:b],
                         attention_mask=attention_mask[:, :b],
@@ -210,73 +231,63 @@ class Coconut(nn.Module):
                     
                     a = b  # Move to first latent position
             
-            # STAGE 2: Latent tokens - one forward pass per token (adapter + recursion active)
-            with self.recursion_context(recursion_cache):
+        # STAGE 2: Latent tokens (adapter on, recursion on)
+        if max_n_latents > 0:
+            with self.with_adapter_and_recursion(enable_adapter=True, recursion_cache=recursion_cache):
                 for pass_idx in range(max_n_latents):
 
                     # Process one latent token
                     b = a + 1
                     
-                    with set_adapter(self.model, self.model.active_adapter):
-                        outputs = self.model.forward(
-                            inputs_embeds=inputs_embeds[:, a:b],
-                            attention_mask=attention_mask[:, :b],
-                            position_ids=position_ids[:, a:b],
-                            recursion_cache=recursion_cache,
-                            past_key_values=kv_cache,  # Cache already has exactly positions [0:a]
-                            output_hidden_states=True,
-                            use_cache=True,
-                        )
-
-                        logits.append(outputs.logits)
-
-                        kv_cache = outputs.past_key_values
-                        assert kv_cache is not None
-
-                        if self.config.collect_hs:
-                            hs = rearrange(
-                                list(outputs.hidden_states),
-                                "l b t h -> l b t h",
-                            ).detach().cpu()
-                            all_hs.append(hs)
-                        
-                        a = b  # Move to next position
-                
-                assert len(recursion_cache) > 0, "Recursion cache should be populated after latent processing"
-
-        # STAGE 3: After latents (base model only)
-        # If no latents exist (max_n_latents==0), a=0 so this processes entire sequence
-        b = input_ids.shape[1]
-        if a < b:  # True when: (1) tokens remain after latents, or (2) no latents at all
-
-            has_zH = len(recursion_cache) and ('zH' in next(iter(recursion_cache.values())))  # just to make sure it's not empty
-
-            # in peristent steering mode, the learned latent is applied even after the <latent> tokens
-            if self.config.trm_persistent_steering and has_zH:
-                with self.recursion_context(recursion_cache, steering_mode=True):
-                    with set_adapter(self.model, self.model.active_adapter):
-                        outputs = self.model.forward(
-                            inputs_embeds=inputs_embeds[:, a:b],
-                            attention_mask=attention_mask[:, :b],
-                            position_ids=position_ids[:, a:b],
-                            past_key_values=kv_cache,
-                            output_hidden_states=True,
-                            use_cache=True,
-                        )
-            else:
-                with set_adapter(self.model, None):
+                    # FIXME [l.values.shape[2] for l in outputs.past_key_values.layers]
                     outputs = self.model.forward(
                         inputs_embeds=inputs_embeds[:, a:b],
                         attention_mask=attention_mask[:, :b],
                         position_ids=position_ids[:, a:b],
+                        recursion_cache=recursion_cache,  # Pass explicitly if needed by model.forward
                         past_key_values=kv_cache,
                         output_hidden_states=True,
                         use_cache=True,
                     )
 
+                    logits.append(outputs.logits)
+
+                    kv_cache = outputs.past_key_values
+                    assert kv_cache is not None
+
+                    if self.config.collect_hs:
+                        hs = rearrange(
+                            list(outputs.hidden_states),
+                            "l b t h -> l b t h",
+                        ).detach().cpu()
+                        all_hs.append(hs)
+                        
+                    a = b  # Move to next position
+                
+                assert len(recursion_cache) > 0, "Recursion cache should be populated after latent processing"
+
+        # STAGE 3: After latents (conditional: if persistent steering, adapter on + recursion steering; else adapter off, no recursion)
+        b = input_ids.shape[1]
+        if a < b:  # True when: (1) tokens remain after latents, or (2) no latents at all
+
+            enable_adapter_stage3 = self.config.trm_persistent_steering and len(recursion_cache) and ('zH' in next(iter(recursion_cache.values())))
+            with self.with_adapter_and_recursion(
+                enable_adapter=enable_adapter_stage3,
+                recursion_cache=recursion_cache if enable_adapter_stage3 else None,
+                steering_mode=True if enable_adapter_stage3 else None
+            ):
+                # FIXME [l.values.shape[2] for l in outputs.past_key_values.layers]
+                outputs = self.model.forward(
+                    inputs_embeds=inputs_embeds[:, a:b],
+                    attention_mask=attention_mask[:, :b],
+                    position_ids=position_ids[:, a:b],
+                    past_key_values=kv_cache,
+                    output_hidden_states=True,
+                    use_cache=True,
+                )
+
             logits.append(outputs.logits)
 
-            # collect hs
             if self.config.collect_hs:
                 hs = rearrange(list(outputs.hidden_states), "l b t h -> l b t h").detach().cpu()
                 all_hs.append(hs)
@@ -322,9 +333,12 @@ class Coconut(nn.Module):
             extra[f"loss/{k}"] = v
 
         extra = {k: v.mean().detach().cpu().item() for k, v in extra.items()}
+        # [l.values.shape[2] for l in outputs.past_key_values.layers]
+
 
         return Outputs(loss=total_loss, inputs_embeds=inputs_embeds, logits=logits, past_key_values=outputs.past_key_values,
                         hidden_states=list(all_hs), 
+                        recursion_cache={k: v.detach().cpu() for k, v in recursion_cache.items()} if len(recursion_cache) > 0 else None,
                         log=extra)
 
     def generate(
@@ -344,63 +358,63 @@ class Coconut(nn.Module):
         # self.gen_forward_cnt = 0
 
         # assert input_ids.shape[0] == 1, "only support batch_size == 1 now"
-        lyr_embed = self.model.get_input_embeddings()
 
         tokens = input_ids.detach()
-        T = input_ids.shape[1]
 
-        # reuse the forward pass from training to go through all the inputs before gen, this includes latent thoughts
-        # Use self.forward (Coconut) not self.model.forward (base LLM) to enable TRM
+        # Initial forward through full input (including latents) with Coconut logic
         with torch.no_grad():
-            coconut_outputs = self.forward(input_ids, attention_mask)
-        outputs = type(
-            "obj",
-            (object,),
-            {
-                "logits": coconut_outputs.logits,
-                "past_key_values": coconut_outputs.past_key_values,
-            },
-        )()
+            outputs = self.forward(input_ids, attention_mask)
 
-        # get the first token using the current hidden state
+        # Append first token
         next_token = outputs.logits[:, -1].argmax(-1).detach().unsqueeze(1)
         tokens = torch.cat((tokens, next_token), dim=1)
-        new_inputs_embeds = lyr_embed(next_token)
-        # new_inputs_embeds = torch.cat((inputs_embeds, new_token_embed), dim=1)
         B = tokens.shape[0]
         new_att_mask = torch.cat(
             (attention_mask, torch.ones((B, 1), device=attention_mask.device)), dim=1
         )
 
-        # get other tokens
-        kv_cache = outputs.past_key_values
-        for _ in range(max_new_tokens - 1):
-            # Use base model forward for answer generation (latents already processed above)
-            check_input_lens(new_inputs_embeds, new_att_mask, kv_cache)
-            outputs = self.model.forward(
-                inputs_embeds=new_inputs_embeds,
-                past_key_values=kv_cache,
-                attention_mask=new_att_mask,
-            )
-            kv_cache = outputs.past_key_values
-            # self.gen_forward_cnt += 1
-            next_token = outputs.logits[:, -1].argmax(-1).detach().unsqueeze(1)
-            if (next_token == self.config.latent_token_id).any():
-                logger.error("Latent token generated, not implemented in gen")
+        # Only works with elft padding
 
-            tokens = torch.cat((tokens, next_token), dim=1)
+        recursion_cache = outputs.recursion_cache
+        # Conditional context for remaining generation
+        enable_adapter_gen = self.config.trm_persistent_steering and recursion_cache
+        with self.with_adapter_and_recursion(
+            enable_adapter=enable_adapter_gen,
+            recursion_cache=recursion_cache if enable_adapter_gen else None,
+            steering_mode=True if enable_adapter_gen else None
+        ):
+            # FIXME, num_return_sequences seems to require cache duplication along batch
+            with torch.autocast(device_type=input_ids.device.type):
+                past_key_values = copy.deepcopy(outputs.past_key_values)
+                check_input_lens(next_token, new_att_mask, outputs.past_key_values)
+                n = past_key_values.layers[0].values.shape[2]
+                old_len = input_ids.shape[1] 
+                cache_position=new_att_mask.sum(1)
+                cache_position=torch.ones_like(next_token) * n
+                cache_position = torch.full((B, next_token.shape[1]), old_len, dtype=torch.long, device=input_ids.device)
+                print([l.values.shape[2] for l in outputs.past_key_values.layers])
+                gen_outputs = self.model.generate(
+                    input_ids=next_token,
+                    attention_mask=new_att_mask,
+                    # max_new_tokens=max_new_tokens - 1,
+                    # min_new_tokens=max(0, min_new_tokens - 1),
+                    past_key_values=past_key_values,
+                    cache_position=cache_position,
+                    pad_token_id=self.model.config.pad_token_id,
+                    eos_token_id=self.model.config.eos_token_id,
+                    bos_token_id=self.model.config.bos_token_id,
+                    #**kwargs,
+                )
 
-            # Allow it to stop early if all batch have generated EOS
-            if (tokens[:, T:] == self.model.config.eos_token_id).any(1).all(0):
-                if _ > min_new_tokens:
-                    logger.info("EOS token generated, stopping early")
-                    break
+        # Full generated sequence
+        full_tokens = torch.cat([input_ids, gen_outputs], dim=1) if gen_outputs.shape[1] > 1 else torch.cat([input_ids, next_token], dim=1)
+        
+        # Early stop log
+        generated = full_tokens[:, input_ids.shape[1]:]
+        if (generated == self.model.config.eos_token_id).any(1).all():
+            logger.info("EOS token generated")
 
-            new_inputs_embeds = lyr_embed(next_token)
-            new_att_mask = torch.cat(
-                (new_att_mask, torch.ones((B, 1), device=new_att_mask.device)), dim=1
-            )
-        return tokens
+        return full_tokens
 
 
 def check_input_lens(input_ids, attention_mask, kv_cache):

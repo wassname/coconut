@@ -2939,7 +2939,12 @@ CLI args: scripts/run.py TRMLoRA
 |  2 |     0.0417 |        0.0089 |       2 |       1 |        0.8918 |         41.0049 |     0.308487 |      0.5188 |
 |  3 |     0.0476 |        0.006  |       3 |       2 |        0.5632 |         59.4351 |     0.535073 |      0.5781 |
 
-
+# Results: trmsvft-qwen3-0.6b_20251101-055440
+{'project': 'coconut', 'save_path': 'outputs/', 'name': 'trmsvft-qwen3-0.6b', 'model_id': 'suayptalha/Qwen3-0.6B-Math-Expert', 'only_eval': False, 'load_model_path': '', 'resume_epochs': 1, 'use_position_ids': True, 'bf16': True, 'bf16_weight': False, 'opt_8b': False, 'load_in_4bit': False, 'load_in_8bit': False, 'cot_epochs': 0, 'epochs_per_stage': 3, 'max_latent_stage': 3, 'num_epochs': 2, 'batch_size_training': 12, 'gradient_accumulation_steps': 6, 'lr': 0.01, 'weight_decay': 1.0, 'grad_clip': 10.0, 'scheduler': 'linear', 'debug': False, 'seed': 42, 'reset_optimizer': False, 'loss_seq_vcr': False, 'collect_hs': False, 'max_size': 10000, 'c_thought': 1, 'pad_latent_to_max': True, 'uniform_prob': 0.0, 'train_path': 'data/gsm_train.json', 'val_path': 'data/gsm_valid.json', 'system_prompt': '', 'latent_token_id': None, 'bot_token_id': None, 'eot_token_id': None, 'eos_token_id': None, 'latent_token': '...', 'bot_token': 'Wait', 'eot_token': 'Ans', 'skip_stage_zero': True, 'eval_first_epoch': False, 'loss_nll_ratio_margin': False, 'trm_h_cycles': 3, 'trm_l_cycles': 6, 'trm_l_layers': 2, 'trm_num_heads': 4, 'trm_expansion': 2.0, 'trm_persistent_steering': True, 'layers_spacing_adapter': 5, 'layers_start_adapter': 0.3, 'layers_end_adapter': 0.95, 'target_modules_pattern': None, 'use_trm_svft': True, 'adapter_r': 42, 'adapter_fill_orthonormal': False, 'adapter_tail_rank': 12, 'adapter_svft_mode': 'adapter_add', '__type__': 'TRMSvft'}
+CLI args: scripts/run.py TRMSvft --bot_token=Wait --eot_token=Ans --latent_token=... --lr=1e-2 --weight_decay=1 --num_epochs=2
+|    |   eval/acc |   eval/cot_em |   eval/ratios |   epoch |   stage |   train/minutes |   train/loss |   eval/loss |
+|---:|-----------:|--------------:|--------------:|--------:|--------:|----------------:|-------------:|------------:|
+|  0 |     0.1786 |        0.0208 |        0.9011 |       1 |       1 |         53.9976 |     0.170352 |        0.39 |
 
 # 2025-11-01 05:43:09
 
@@ -2947,3 +2952,36 @@ TODO what about trying a BiPDO
  TODO cosider latent that makes it conclude not think
 
 adapter_multi > adapter_add
+
+# 2025-11-01 10:22:55
+
+removed delora from svft
+change norm on context
+improved eval
+
+trying to make generate have persistent steering but generate fails with right padding!
+
+
+# 2025-11-01 11:00:38
+
+OK it's time to simplify
+
+now my `with recursive` with include a latent mask that will control recursion depth
+
+```
+
+# Right (preserves backprop):
+zH_shallow = trm(zH, loops=1)  # All tokens, shallow
+zH_deep = trm(zH, loops=16)     # All tokens, deep
+
+# Blend based on mask
+zH = torch.where(
+    latent_mask.unsqueeze(-1),  # [b, s, 1] for broadcasting
+    zH_deep,
+    zH_shallow
+)
+```
+
+this lets me simplify
+- no coconutcollator
+- no multiple part forward and generation just `with recursive_latent_mask(...)` and either forward or generate!

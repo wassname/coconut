@@ -92,14 +92,14 @@ class TRMConfig(BaseConfig):
     epochs_per_stage: int = 3
     
     scheduler: str = "linear"
-    lr: float = 4e-4 # 1e-4 in paper
-    weight_decay: float = 0.001 # 1 and 0.1 in TRM paper. 0.01 in COCONUT paper. 
+    lr: float = 4e-3 # 1e-4 in paper
+    weight_decay: float = 1. # 1 and 0.1 in TRM paper. 0.01 in COCONUT paper. 
     
     max_size: int = 10_000
     batch_size_training: int = 12
     gradient_accumulation_steps: int = 6 # 768 // 14 # paper had effective batch size of 768
 
-    eval_first_epoch: bool = True
+    eval_first_epoch: bool = False
     loss_nll_ratio_margin: bool = False
     
     trm_h_cycles: int = 3  # high level recursive cycles (T=3 in repo)

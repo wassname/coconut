@@ -120,7 +120,6 @@ def trm_recursion(
     x = rearrange(context, 'b s r -> (b s) 1 r')
 
     # Normalize context to mean≈0, std=1 to match TRM's initialized state (trunc_normal with std=1)
-    # TRM inits at mean=0; SwiGLU creates positive bias during forward passes
     # context_flat = rms_norm(context_flat, variance_epsilon=1e-5)
     eps = 1e-5
     x = (x - x.mean(dim=-1, keepdim=True)) / (x.std(dim=-1, keepdim=True) + eps)
