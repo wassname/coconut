@@ -148,10 +148,12 @@ class TRMLoraLayer(LoraLayer):
         trm_config = self.lora_configs[adapter_name]
         if h_cycles is None:
             h_cycles = trm_config.h_cycles
-        
-        # trm_recursion expects [b, s, r], so add sequence dimension
-        context = context_hs.unsqueeze(1)  # [b, 1, r]
-        
+        # trm_recursion expects context shape [b, s, r]. Accept either [b, r] or [b, s, r].
+        if context_hs.dim() == 2:
+            context = context_hs.unsqueeze(1)  # [b, 1, r]
+        else:
+            context = context_hs
+
         zLs, zHs = trm_recursion(
             l_net=self.lora_l_nets[adapter_name],
             zL=zL,
@@ -160,12 +162,9 @@ class TRMLoraLayer(LoraLayer):
             l_cycles=trm_config.l_cycles,
             h_cycles=h_cycles,
         )
-        
-        # Apply output head to mix zHs
-        zHs = self.lora_output_head[adapter_name](zHs)
-        
-        # Return last token: [b, s, r] -> [b, r]
-        return zLs[:, -1, :], zHs[:, -1, :]
+
+        # zLs, zHs are [b, s, r]; return full sequences so caller can handle per-sample merging
+        return zLs, zHs
 
     def forward(
         self,
@@ -202,14 +201,10 @@ class TRMLoraLayer(LoraLayer):
             for adapter in self.active_adapters:
                 if adapter not in self.lora_B:
                     continue
-
                 # Project INPUT (not output) down to low-rank via lora_A
                 x_down = self.lora_A[adapter](self.lora_dropout[adapter](hidden_states))  # [b, s, r]
-                # NOTE lora_a never gets grad, so it 
-                
-                # For TRM, use last token's projection as context
-                context_hs = x_down[:, -1, :]  # [b, r]
-                b = context_hs.shape[0]
+
+                b, s, r = x_down.shape
 
                 # Initialize or retrieve zH and zL in r_dim
                 zL = recursion_cache.get('zL', None)
@@ -219,36 +214,53 @@ class TRMLoraLayer(LoraLayer):
                 if zH is None:
                     zH = self.lora_zH_init[adapter].unsqueeze(0).expand(b, -1).to(base_hidden.device)
 
-                # Check if we're in steering mode (post-latent)
-                steering_mode = recursion_cache.get('steering_mode', False)
-                if steering_mode:
-                    # Don't run TRM, just apply cached zH and output head
-                    zH = recursion_cache.get('zH')
-                    zL = recursion_cache.get('zL')
-                    zH = self.lora_output_head[adapter](zH)  # Apply head
+                # Check latent mask for current position
+                pos = hidden_states.shape[1] - 1
+                latent_mask = recursion_cache['latent_mask'][:, pos]
 
-                    # Up-project refined state via lora_B with standard LoRA scaling
-                    delta = self.lora_B[adapter](zH) * self.scaling[adapter]  # [b, out_features]
-            
-                    # Add to base output (broadcast across sequence)
-                    result = result + delta.unsqueeze(1)  # [b, 1, out], broadcasts to [b, s, out], but it's only ever one token that we are processing with <latent>, so s=1
+                # Helper to rebuild full (b, s, r) tensor from parts
+                def rebuild_z_parts(z_part, batch_size, seq_len, latent_mask):
+                    device = z_part.device
+                    dtype = z_part.dtype
+                    z_full = torch.zeros((batch_size, seq_len, z_part.shape[-1]), device=device, dtype=dtype)
+                    if z_part.numel() == 0:
+                        return z_full
+                    indices = latent_mask.nonzero(as_tuple=False).squeeze(1)
+                    z_full[indices] = z_part
+                    return z_full
 
-                    # Update cache for next layer
-                    recursion_cache['zL'] = zL
-                    recursion_cache['zH'] = zH
+                # If no latents at this position, run shallow-only (h_cycles=1)
+                if latent_mask.sum() == 0:
+                    zLs, zHs = self.trm(adapter, zL, zH, x_down, h_cycles=1)
                 else:
-                    # Run TRM recursion: trm(A @ x, zL, zH)
-                    zL, zH = self.trm(adapter, zL, zH, context_hs)
+                    # Deep for latent samples, shallow for others
+                    zLs_deep_part, zHs_deep_part = self.trm(adapter, zL, zH, x_down[latent_mask], h_cycles=self.lora_configs[adapter].h_cycles)
+                    zLs_shallow_part, zHs_shallow_part = self.trm(adapter, zL, zH, x_down[~latent_mask], h_cycles=1)
 
-                    # Up-project refined state via lora_B with standard LoRA scaling
-                    delta = self.lora_B[adapter](zH) * self.scaling[adapter]  # [b, out_features]
-            
-                    # Add to base output (broadcast across sequence)
-                    result = result + delta.unsqueeze(1)  # [b, 1, out], broadcasts to [b, s, out], but it's only ever one token that we are processing with <latent>, so s=1
+                    # Rebuild full (b, s, r) tensors
+                    zLs_deep = rebuild_z_parts(zLs_deep_part, b, s, latent_mask)
+                    zHs_deep = rebuild_z_parts(zHs_deep_part, b, s, latent_mask)
+                    zLs_shallow = rebuild_z_parts(zLs_shallow_part, b, s, ~latent_mask)
+                    zHs_shallow = rebuild_z_parts(zHs_shallow_part, b, s, ~latent_mask)
 
-                    # Update cache for next layer
-                    recursion_cache['zL'] = zL
-                    recursion_cache['zH'] = zH
+                    # Blend per-sample
+                    mask3 = latent_mask.unsqueeze(-1).unsqueeze(-1)
+                    zHs = torch.where(mask3, zHs_deep, zHs_shallow)
+                    zLs = torch.where(mask3, zLs_deep, zLs_shallow)
+
+                # Take last token's zH and mix with output head
+                zH_last = zHs[:, -1, :]
+                zH_mixed = self.lora_output_head[adapter](zH_last)
+
+                # Up-project refined state via lora_B with standard LoRA scaling
+                delta = self.lora_B[adapter](zH_mixed) * self.scaling[adapter]  # [b, out_features]
+
+                # Add to base output (broadcast across sequence)
+                result = result + delta.unsqueeze(1)
+
+                # Update cache for next layer
+                recursion_cache['zL'] = zLs[:, -1, :]
+                recursion_cache['zH'] = zHs[:, -1, :]
 
         result = result.to(previous_dtype)
         return result

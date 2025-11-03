@@ -244,19 +244,12 @@ def resume_model(conf: BaseConfig, device="auto", dtype=torch.bfloat16):
     return model, tokenizer
 
 
-def save_model(model, tokenizer, configs, save_dir: Path, adapter_name="default"):
+def save_adapter(model: PeftModel, save_folder: Path, adapter_name="default"):
     """Peft is to hard to subclass or monkey patch, in the end I needed by own function."""
-    save_dir.mkdir(parents=True, exist_ok=True)
-    with open(save_dir / "coconut_config.toml", "w") as f:
-        toml.dump(configs, f)
-    logger.info(f"saving model {save_dir}")
-
-    # save state dict (only TRM adapter, not frozen base model)
-    save_folder = save_dir / "trmlora/"
     save_folder.mkdir(parents=True, exist_ok=True)
+    logger.info(f"saving adapter {adapter_name} to {save_folder}")
 
-
-    config = model.model.peft_config[adapter_name]
+    config = model.peft_config[adapter_name]
     state_dict = model.state_dict()
 
     # Filter by prefix (same logic as PEFT but without type check)
@@ -288,7 +281,23 @@ def save_model(model, tokenizer, configs, save_dir: Path, adapter_name="default"
     logger.info(f"Saved TRM adapter to {save_folder}")
 
 
-def load_adapter(
+def save_model(model: Coconut, tokenizer, configs, save_dir: Path, adapter_name="default"):
+    """Peft is to hard to subclass or monkey patch, in the end I needed by own function."""
+    save_dir.mkdir(parents=True, exist_ok=True)
+    with open(save_dir / "coconut_config.toml", "w") as f:
+        toml.dump(configs, f)
+    logger.info(f"saving model {save_dir}")
+
+    # save state dict (only TRM adapter, not frozen base model)
+    save_folder = save_dir / "trmlora/"
+    save_folder.mkdir(parents=True, exist_ok=True)
+
+    save_adapter(model.model, save_folder, adapter_name=adapter_name)
+
+    logger.info(f"Saved TRM adapter to {save_folder}")
+
+
+def load_model(
     model_id: str,
     Config: BaseConfig,
     save_dir: Path,
@@ -323,7 +332,7 @@ def load_adapter(
 
     tokenizer = AutoTokenizer.from_pretrained(
         model_id,
-        padding_side="right",
+        padding_side="left",
     )
     tokenizer.pad_token = tokenizer.eos_token
     tokenizer.pad_token_id = tokenizer.eos_token_id

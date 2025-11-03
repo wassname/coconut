@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from typing import Optional
 import multiprocessing as mp
 import os
-
+import re
 import torch
 import torch.distributed as dist
 from datasets import Dataset
@@ -58,12 +58,18 @@ def get_dataset(path, tokenizer, max_size=1000000000, drop_unused=True, system_p
         assert len(parts_t) == n_steps + 2, f"{len(parts_t)} != {n_steps+2} {text} {sample['steps']}"
         question_tokenized = parts_t[0]
         steps_tokenized = parts_t[1:n_steps+1]
+
+        # FIXME this is '### 300\n<|im_end|>\n', not just the answer
+        # ['###', ' ', '3', '0', '0', '\n', '<|im_end|>', '\n']
         answer_tokenized = parts_t[n_steps+1]
+        rexp = re.compile(r'\d+\.?\d*')
+        answer_mask = [rexp.match(x) is not None for x in tokenizer.batch_decode(answer_tokenized)]
 
         sample = {
             "question_tokenized": question_tokenized,
             "steps_tokenized": steps_tokenized,
             "answer_tokenized": answer_tokenized,
+            "answer_mask": answer_mask,
             "idx": sample["idx"],
             # "messages_split": messages_split,
             # "text": text,
@@ -100,6 +106,7 @@ def get_question_only_latent_dataset(
     latent_id,
     eot_id,
     no_bot_eot=False,
+    skip_bot_eot=True,
     drop_unused=True,
     num_proc=default_num_proc,
 ):
@@ -112,7 +119,7 @@ def get_question_only_latent_dataset(
     - no_bot_eot: if True, don't include thought tokens 
     """
 
-    no_bot_eot = scheduled_stage < 0
+    no_bot_eot = scheduled_stage < 0 or skip_bot_eot
 
     def process_dataset(sample):
 
@@ -161,12 +168,13 @@ def get_cot_latent_dataset(
     shuffle=False,
     drop_unused=True,
     num_proc=default_num_proc,
+    skip_bot_eot=True,
 ):
     """chain of thought latent dataset for training
     
     format: question, latent, reasoning, answer
     """
-    no_bot_eot = scheduled_stage < 0
+    no_bot_eot = scheduled_stage < 0 or skip_bot_eot
     # Number of wrapper tokens around latent block: [bot_id] + latents + [eot_id]
     # These need to be masked in labels (set to -100) along with question and latent tokens
     n_additional_tokens = 0 if no_bot_eot else 2
@@ -183,19 +191,19 @@ def get_cot_latent_dataset(
 
         # progressivly replace reasoning steps with latent tokens
         # n_skip_steps: number of reasoning steps to skip, replace with `c_thought` latent tokens
-        if scheduled_stage_to_train <= configs.max_latent_stage:
-             n_skip_steps, n_latent_tokens = (
-                scheduled_stage_to_train,
-                scheduled_stage_to_train,
-            )
+        # if scheduled_stage_to_train <= configs.max_latent_stage:
+        #      n_skip_steps, n_latent_tokens = (
+        #         scheduled_stage_to_train,
+        #         scheduled_stage_to_train,
+        #     )
+        # else:
+        n_skip_steps = 10000  # skip all verbal reasoning steps
+        if configs.pad_latent_to_max:
+            n_latent_tokens = configs.max_latent_stage
         else:
-            n_skip_steps = 10000  # skip all verbal reasoning steps
-            if configs.pad_latent_to_max:
-                n_latent_tokens = configs.max_latent_stage
-            else:
-                n_latent_tokens = min(
-                    len(sample["steps_tokenized"]), configs.max_latent_stage
-                )
+            n_latent_tokens = min(
+                len(sample["steps_tokenized"]), configs.max_latent_stage
+            )
         
         # if configs.no_cot:
         #     n_skip_steps = 100  # skip all step
@@ -214,6 +222,13 @@ def get_cot_latent_dataset(
             )
             + sample["answer_tokenized"]
         )
+
+
+        labels = [-100] * (
+            len(tokens)
+        )
+        answer_labels = torch.tensor(sample['answer_mask']) * torch.tensor(sample["answer_tokenized"])
+        labels[-len(answer_labels):] = answer_labels.tolist()
 
         return {
             "input_ids": tokens,

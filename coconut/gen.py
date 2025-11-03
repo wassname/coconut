@@ -1,6 +1,6 @@
 import torch
 from loguru import logger
-from coconut.coconut import Coconut
+from coconut.coconut import Coconut, recursion_context
 from coconut.adapters import set_adapter
 # from coconut.configs import bot_token, latent_token, eot_token
 
@@ -79,15 +79,16 @@ def gen(s, model, tokenizer, min_new_tokens=4, max_new_tokens=16, do_sample=Fals
     ).to(device)
 
     with torch.autocast(device_type='cuda', dtype=dtype):
-        inputs = {k: v.to(device=device) for k, v in inputs.items()}
-        out = model.generate(
-            input_ids=inputs["input_ids"],
-            attention_mask=inputs["attention_mask"],
-            max_new_tokens=max_new_tokens,
-            min_new_tokens=min_new_tokens,
-            do_sample=do_sample,
-            **generate_kwargs
-        )
+        with recursion_context(model, inputs["input_ids"], {}, tokenizer.convert_tokens_to_ids('...')):
+            inputs = {k: v.to(device=device) for k, v in inputs.items()}
+            out = model.generate(
+                input_ids=inputs["input_ids"],
+                attention_mask=inputs["attention_mask"],
+                max_new_tokens=max_new_tokens,
+                min_new_tokens=min_new_tokens,
+                do_sample=do_sample,
+                **generate_kwargs
+            )
 
     n = inputs["input_ids"].shape[1]
     out = out[:, n:]  # only return generated tokens

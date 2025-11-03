@@ -75,7 +75,7 @@ class GSM8KStoppingCriteria(StoppingCriteria):
 
 
 @torch.no_grad()
-def evaluate(dataloader, model, tokenizer, ds, max_new_tokens=32, device='cuda', name="", dtype=torch.float32, quick=False, verbose=1, best_of_n=1):
+def evaluate(dataloader, model, tokenizer, ds, max_new_tokens=16, device='cuda', name="", dtype=torch.float32, quick=False, verbose=1, best_of_n=1):
     # TODO enable best of 4 like in qwen paper
 
 
@@ -115,7 +115,7 @@ def evaluate(dataloader, model, tokenizer, ds, max_new_tokens=32, device='cuda',
                 # use_cache=True,
                 max_new_tokens=max_new_tokens,
                 min_new_tokens=6,
-                early_stopping=True,
+                # early_stopping=True,
                 pad_token_id=tokenizer.pad_token_id,
                 num_return_sequences=best_of_n,
                 num_beams=best_of_n,

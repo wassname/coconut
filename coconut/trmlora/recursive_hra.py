@@ -141,10 +141,12 @@ class TRMHraLayer(HRALayer):
         hra_config = self.hra_configs[adapter_name]
         if h_cycles is None:
             h_cycles = hra_config.h_cycles
-        
-        # trm_recursion expects [b, s, r], so add sequence dimension
-        context = context_hs.unsqueeze(1)  # [b, 1, r]
-        
+        # Accept either [b, r] or [b, s, r] for context_hs
+        if context_hs.dim() == 2:
+            context = context_hs.unsqueeze(1)
+        else:
+            context = context_hs
+
         zLs, zHs = trm_recursion(
             l_net=self.l_nets[adapter_name],
             zL=zL,
@@ -154,7 +156,7 @@ class TRMHraLayer(HRALayer):
             h_cycles=h_cycles,
         )
         zHs = self.hra_output_head[adapter_name](zHs)
-        return zLs[:, -1, :], zHs[:, -1, :]
+        return zLs, zHs
 
     def forward(
         self,
@@ -212,27 +214,57 @@ class TRMHraLayer(HRALayer):
             if zH is None:
                 zH = self.hra_zH_init[adapter].unsqueeze(0).expand(b, -1).to(result.device)
 
-            # Run TRM recursion: trm(context_hs, zL, zH) -> refined zL, zH
-            zL, zH = self.trm(adapter, zL, zH, context_hs)
-            zH = self.hra_output_head[adapter](zH)  # Apply head
+            # Use latent steering mask for current position
+            pos = hidden_states.shape[1] - 1
+            latent_mask = recursion_cache['latent_mask'][:, pos]
+
+            # Build a context with sequence dim for TRM (1-length seq)
+            context_seq = context_hs.unsqueeze(1)  # [b, 1, r]
+
+            def rebuild_z_parts(z_part, batch_size, seq_len, mask):
+                device = z_part.device
+                dtype = z_part.dtype
+                z_full = torch.zeros((batch_size, seq_len, z_part.shape[-1]), device=device, dtype=dtype)
+                if z_part.numel() == 0:
+                    return z_full
+                idx = mask.nonzero(as_tuple=False).squeeze(1)
+                z_full[idx] = z_part
+                return z_full
+
+            if latent_mask.sum() == 0:
+                zLs, zHs = self.trm(adapter, zL, zH, context_seq, h_cycles=1)
+            else:
+                zLs_deep_part, zHs_deep_part = self.trm(adapter, zL, zH, context_seq[latent_mask], h_cycles=self.hra_configs[adapter].h_cycles)
+                zLs_shallow_part, zHs_shallow_part = self.trm(adapter, zL, zH, context_seq[~latent_mask], h_cycles=1)
+
+                zLs_deep = rebuild_z_parts(zLs_deep_part, b, 1, latent_mask)
+                zHs_deep = rebuild_z_parts(zHs_deep_part, b, 1, latent_mask)
+                zLs_shallow = rebuild_z_parts(zLs_shallow_part, b, 1, ~latent_mask)
+                zHs_shallow = rebuild_z_parts(zHs_shallow_part, b, 1, ~latent_mask)
+
+                mask3 = latent_mask.unsqueeze(-1).unsqueeze(-1)
+                zHs = torch.where(mask3, zHs_deep, zHs_shallow)
+                zLs = torch.where(mask3, zLs_deep, zLs_shallow)
+
+            # Take last token's zH and apply output head
+            zH_last = zHs[:, -1, :]
+            zH_mixed = self.hra_output_head[adapter](zH_last)
 
             # Reconstruct input delta in span of u: u @ zH^T .T -> [b, in_features]
-            input_delta = (opt_u @ zH.T).T  # [b, in_features]
+            input_delta = (opt_u @ zH_mixed.T).T  # [b, in_features]
 
             # Project through base weight to output delta, broadcast across sequence
-            # base_layer.weight is [out, in], input_delta.unsqueeze(1) is [b, 1, in]
-            # compute (b,1,out) via (b,1,in) @ (in, out)
             delta_hidden = input_delta.unsqueeze(1) @ base_layer.weight.T  # [b, 1, out_features]
 
             # Apply HRA-style scaling (alpha / r) to the refinement delta
             scaling = self.hra_alpha[adapter] / self.hra_r[adapter]
             delta = delta_hidden * scaling
-            
+
             result += delta
 
             # Update cache for next layer
-            recursion_cache['zL'] = zL
-            recursion_cache['zH'] = zH
+            recursion_cache['zL'] = zLs[:, -1, :]
+            recursion_cache['zH'] = zHs[:, -1, :]
 
         if self._recursion_cache is not None:
             self._recursion_cache = recursion_cache

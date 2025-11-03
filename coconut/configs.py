@@ -163,18 +163,16 @@ class TRMHra(TRMConfig):
 class TRMSvft(TRMConfig):
     """TRM SVFT mode: inline recursive SVFT adapter on frozen LLM.
     
-    Hybrid SVD: principal_rank for top SVD (base variance) + tail_rank for low-rank approx of remaining vectors (subtle info).
-    Hypothesis: Merges tail without full-rank memory; principal leverages pretrain, tail recovers truncation loss—better than pure top-k or random LoRA.
+    Simple top-r SVD + residual. TRM refines S scaling and V rotation.
     """
     _adapter_class: ClassVar = TRMSvftAConfig
     name: str = "trmsvft-qwen3-0.6b"
     use_trm_svft: bool = True
 
-    adapter_r: int = 42  # Total rank (principal + tail; low for memory)
-    adapter_fill_orthonormal: bool = False  # Disable for hybrid (principal + tail covers)
-    # adapter_principal_rank: int = 32  # Top SVD for principal directions
-    adapter_tail_rank: int = 12  # Low-rank approx for tail merging
-    adapter_svft_mode: Literal["replace_add", "replace_mul", "adapter_add", "adapter_mult"] = "adapter_add"
+    adapter_r: int = 42  # Top-r SVD rank
+    adapter_svft_mode: Literal["replace_add", "replace_mul", "adapter_add", "adapter_mult", "adapter_add2"] = "adapter_add"
+    adapter_rotate_v: bool = True  # Enable V rotation
+    adapter_k_reflect: int = 4  # Householder reflections for rotation
 
 @dataclass
 class Debug:

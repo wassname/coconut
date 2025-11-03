@@ -2976,3 +2976,25 @@ this lets me simplify
 - [ ] rm chain of thought
 - [ ] get rid of the CoT epoch and data and curriculum
 - [ ] try base model
+
+# 2025-11-02 17:47:03
+
+Rather than tanh(log_ds) * s0
+
+I should consider just absorbing negative signs from S into U, so that it has the opposite effect on the output of W
+```
+S = S + ds # where ds [-inf, inf]
+U = S.sign() * U
+S = S.abs()
+W = U @ diag(S) @ Vt
+hs = W @ x
+```
+
+- [x] in the PiSSA paper, they down project by U @ sqrt(S) then up proj by sqrt(S) @ V
+should I consider this, as I'm operating between V and U S 
+not "inside" S
+
+- [x] and the tail is done wrong!
+
+
+it also looks like we could just use PiSSA init from peft for many benefits https://github.com/huggingface/peft/blob/main/src/peft/tuners/lora/layer.py#L327

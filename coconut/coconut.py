@@ -86,7 +86,29 @@ def get_nll(logits, labels=None, attention_mask=None):
     nll = (loss_per_token * shift_mask).sum() / (shift_mask.sum() + 1e-8)
     return nll, loss_per_token
 
+@contextmanager
+def recursion_context(model, input_ids: Tensor, cache: dict, latent_token_id):
+    """Context manager to inject recursion_cache into all TRM layers."""
+    # Walk down model tree and inject cache into TRM layers
+    latent_mask = (input_ids == latent_token_id).detach().cpu()  # B x T
+    trm_layers = []
+    for name, module in model.named_modules():
+        if isinstance(
+            module, (TRMLoraLayer, TRMDeloraLayer, TRMHraLayer, TRMSvftLayer)
+        ):
+            trm_layers.append(module)
+            if name not in cache:
+                cache[name] = {}
+            cache[name]["latent_mask"] = latent_mask
+            module._recursion_cache = cache[name]
 
+    try:
+        yield cache
+    finally:
+        # Clean up: remove cache from all TRM layers
+        for module in trm_layers:
+            module._recursion_cache = None
+            
 class Coconut(nn.Module):
     def __init__(self, base_model: PreTrainedModel, config: BaseConfig):
         super().__init__()
@@ -101,29 +123,10 @@ class Coconut(nn.Module):
         self._recursion_cache = None  # Will be set via context manager
 
     @contextmanager
-    def recursion_context(self, input_ids: Tensor, cache: dict, steering_mode=None):
+    def recursion_context(self, input_ids: Tensor, cache: dict):
         """Context manager to inject recursion_cache into all TRM layers."""
-        # Walk down model tree and inject cache into TRM layers
-        latent_mask = (input_ids == self.config.latent_token_id).detach().cpu()  # B x T
-        trm_layers = []
-        for name, module in self.model.named_modules():
-            if isinstance(
-                module, (TRMLoraLayer, TRMDeloraLayer, TRMHraLayer, TRMSvftLayer)
-            ):
-                trm_layers.append(module)
-                if name not in cache:
-                    cache[name] = {}
-                if steering_mode is not None:
-                    cache[name]["steering_mode"] = steering_mode
-                cache[name]["latent_mask"] = latent_mask
-                module._recursion_cache = cache[name]
-
-        try:
+        with recursion_context(self.model, input_ids, cache, self.config.latent_token_id):
             yield cache
-        finally:
-            # Clean up: remove cache from all TRM layers
-            for module in trm_layers:
-                module._recursion_cache = None
 
     @contextmanager
     def with_adapter_and_recursion(

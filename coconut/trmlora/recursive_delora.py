@@ -139,12 +139,17 @@ class TRMDeloraLayer(DeloraLayer):
         trm_config = self.delora_configs[adapter_name]
         if h_cycles is None:
             h_cycles = trm_config.h_cycles
-        
+        # Accept either [b, r] or [b, s, r] for context_hs
+        if context_hs.dim() == 2:
+            context = context_hs.unsqueeze(1)
+        else:
+            context = context_hs
+
         zLs, zHs = trm_recursion(
             l_net=self.delora_l_nets[adapter_name],
             zL=zL,
             zH=zH,
-            context=context_hs,
+            context=context,
             l_cycles=trm_config.l_cycles,
             h_cycles=h_cycles,
         )
@@ -188,26 +193,37 @@ class TRMDeloraLayer(DeloraLayer):
                 An = torch.clamp(self.delora_A[adapter].norm(dim=1), min=1e-4)  # [r]
                 h_normalized = h / An.unsqueeze(0).unsqueeze(0)  # [b, s, r] - unit norm per component
                     
-                # Check if we're in steering mode (post-latent)
-                steering_mode = recursion_cache.get('steering_mode', False)
-                if steering_mode:
-                    # Don't run TRM, just apply cached zH
-                    zH = recursion_cache.get('zH')
-                    zL = recursion_cache.get('zL')
-                    
-                    # Apply steering (detached, no grad)
-                    # Bn = torch.clamp(self.delora_B[adapter].norm(dim=0), min=1e-4)
-                    # scaling = (self.delora_lambda[adapter] / self.r[adapter]) / Bn
-                    # h = (zH * scaling).detach()  # Detach to prevent grad flow
+                # Use latent_mask steering like other TRM adapters
+                pos = x.shape[1] - 1
+                latent_mask = recursion_cache['latent_mask'][:, pos]
 
-                    # # fold sequence dimension into b, then back out
-                    # context = rearrange(h_normalized, 'b s r -> (b s) r')  # [b*s, r]
-                    # zL = repeat(zL, 'b r -> (b s) r', b=h.shape[0], s=h.shape[1])
-                    # zH = repeat(zH, 'b r -> (b s) r', b=h.shape[0], s=h.shape[1])
+                b, s, r = h_normalized.shape
 
-                    # TRM refines direction (operates on normalized space)
-                    zLs, zHs = self.trm(adapter, zL, zH, h_normalized, h_cycles=1)  # zH is refined 1 time
-                else:                       
+                def rebuild_z_parts(z_part, batch_size, seq_len, mask):
+                    device = z_part.device
+                    dtype = z_part.dtype
+                    z_full = torch.zeros((batch_size, seq_len, z_part.shape[-1]), device=device, dtype=dtype)
+                    if z_part.numel() == 0:
+                        return z_full
+                    idx = mask.nonzero(as_tuple=False).squeeze(1)
+                    z_full[idx] = z_part
+                    return z_full
+
+                if latent_mask.sum() == 0:
+                    zLs, zHs = self.trm(adapter, zL, zH, h_normalized, h_cycles=1)
+                else:
+                    # Deep-only for latent samples, shallow for others
+                    zLs_deep_part, zHs_deep_part = self.trm(adapter, zL, zH, h_normalized[latent_mask], h_cycles=self.delora_configs[adapter].h_cycles)
+                    zLs_shallow_part, zHs_shallow_part = self.trm(adapter, zL, zH, h_normalized[~latent_mask], h_cycles=1)
+
+                    zLs_deep = rebuild_z_parts(zLs_deep_part, b, s, latent_mask)
+                    zHs_deep = rebuild_z_parts(zHs_deep_part, b, s, latent_mask)
+                    zLs_shallow = rebuild_z_parts(zLs_shallow_part, b, s, ~latent_mask)
+                    zHs_shallow = rebuild_z_parts(zHs_shallow_part, b, s, ~latent_mask)
+
+                    mask3 = latent_mask.unsqueeze(-1).unsqueeze(-1)
+                    zHs = torch.where(mask3, zHs_deep, zHs_shallow)
+                    zLs = torch.where(mask3, zLs_deep, zLs_shallow)
                     """
                     TRM DeLoRA combines DeLoRA's magnitude decoupling with TRM's recursive refinement:
                     

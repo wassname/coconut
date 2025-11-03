@@ -14,9 +14,10 @@ from coconut.trmlora.recursive_lora import TRMLoraAConfig, TRMLoraModel
 from coconut.trmlora.recursive_delora import TRMDeloraAConfig, TRMDeloraModel
 from coconut.trmlora.recursive_hra import TRMHraAConfig, TRMHraModel
 from coconut.trmlora.recursive_svft import TRMSvftAConfig, TRMSvftModel
-from coconut.gen import gen, gen_sample
-from coconut.load_model import Coconut, load_new_model, save_model, load_adapter, coconut_to_adapter_config_converter
+from coconut.gen import gen
+from coconut.load_model import Coconut, load_new_model, save_model, load_model, coconut_to_adapter_config_converter
 from coconut.configs import BaseConfig, TRMLoRA, TRMDelora, TRMHra, TRMSvft
+from coconut.coconut import recursion_context
 
 
 @pytest.mark.parametrize(
@@ -82,7 +83,7 @@ def test_adapter(config_class, adapter_name):
     input_text = "What is two plus two? <latent><latent><latent>"
     input_text = [
         {'role':'user', 'content':'What is two plus two but wrong and french?'},
-        {'role':'assistant', 'content':'<latent><latent><latent>'},]
+        {'role':'assistant', 'content':'.........'},]
 
     s1 = gen(input_text, model, tokenizer, max_new_tokens=4, verbose=False)
     print("Generating sample with adapter enabled...", s1)
@@ -107,7 +108,7 @@ def test_adapter(config_class, adapter_name):
     # loaded_model = PeftModel.from_pretrained(AutoModelForCausalLM.from_pretrained(model_id), save_path)G
 
 
-    _, loaded_model = load_adapter(
+    _, loaded_model = load_model(
         model_id=model_id,
         save_dir=save_path,
         Config=type(config),

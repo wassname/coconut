@@ -329,14 +329,14 @@ def train(conf: BaseConfig):
                     shuffle=True,
                 )
 
-                # TODO log sample of train data
+                # log sample of train data
                 t = dataset_train[0]['input_ids']
                 s = tokenizer.decode(t, skip_special_tokens=False)
                 logger.debug(f"Sample train data (epoch {epoch} stage {stage}):\n{s}")
 
 
                 if (conf.reset_optimizer is True) or (optimizer is None):
-                    opt_steps = len(dataset_train) // conf.gradient_accumulation_steps
+                    opt_steps = len(dataset_train) // conf.batch_size_training // conf.gradient_accumulation_steps
                     if not conf.reset_optimizer:
                         opt_steps *= conf.num_epochs
                     epochs=1 if conf.reset_optimizer else conf.num_epochs
