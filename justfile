@@ -23,6 +23,11 @@ run:
   # uv run scripts/run.py TRMSvft --adapter-svft-mode='adapter_mult' --layers-spacing-adapter=5
   # uv run scripts/run.py TRMSvft --adapter-svft-mode='adapter_add'  --layers-spacing-adapter=5 --no-persistent-steering
 
+  uv run scripts/run.py TRMSvft  --target-modules-pattern='.+\.(gate_proj).*$'
+  uv run scripts/run.py TRMSvft  --target-modules-pattern='.+\.(o_proj).*$'
+  uv run scripts/run.py TRMSvft  --layers_spacing_adapter=2  --adapter-svft-mode='replace_add'
+  uv run scripts/run.py TRMSvft  --target-modules-pattern='.+\.(gate_proj).*$' --layers_spacing_adapter=2 --adapter_r=512
+
   uv run scripts/run.py TRMSvft --trm_h_cycles=0 --trm_l_cycles=0 --trm_num_heads=1 --trm_expansion=1
   uv run scripts/run.py TRMSvft --lr=1e-1 --gradient-accumulation-steps=1 --weight_decay=1 --num_epochs=6 --max_size=1000 --adapter_r=128 --scheduler=cosine  --target-modules-pattern='.+\.(gate_proj|down_proj).*$' --layers-spacing-adapter=15
   # do one with <think>...</think>

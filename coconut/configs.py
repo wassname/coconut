@@ -169,10 +169,10 @@ class TRMSvft(TRMConfig):
     name: str = "trmsvft-qwen3-0.6b"
     use_trm_svft: bool = True
 
-    adapter_r: int = 42  # Top-r SVD rank
-    adapter_svft_mode: Literal["replace_add", "replace_mul", "adapter_add", "adapter_mult", "adapter_add2"] = "adapter_add"
-    adapter_rotate_v: bool = True  # Enable V rotation
-    adapter_k_reflect: int = 4  # Householder reflections for rotation
+    adapter_r: int = 128  # Top-r SVD rank (also number of Householder vectors for rotation)
+    adapter_svft_mode: Literal["replace_add", "replace_mul", "adapter_add", "adapter_mult", "adapter_add2"] = "replace_mul"
+    adapter_rotate_v: bool = False  # Enable V rotation (HRA-style with r Householder reflections)
+    adapter_rotate_u: bool = True  # Enable U rotation (HRA-style with r Householder reflections)
 
 @dataclass
 class Debug:

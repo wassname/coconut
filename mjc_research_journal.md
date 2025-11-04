@@ -2998,3 +2998,114 @@ not "inside" S
 
 
 it also looks like we could just use PiSSA init from peft for many benefits https://github.com/huggingface/peft/blob/main/src/peft/tuners/lora/layer.py#L327
+
+# 2025-11-05 05:51:53
+
+ResultsResults
+
+# Results: trmsvft-qwen3-0.6b_20251104-201503
+{'project': 'coconut', 'save_path': 'outputs/', 'name': 'trmsvft-qwen3-0.6b', 'model_id': 'suayptalha/Qwen3-0.6B-Math-Expert', 'only_eval': False, 'load_model_path': '', 'resume_epochs': 1, 'use_position_ids': True, 'bf16': True, 'bf16_weight': False, 'opt_8b': False, 'load_in_4bit': False, 'load_in_8bit': False, 'cot_epochs': 0, 'epochs_per_stage': 3, 'max_latent_stage': 3, 'num_epochs': 6, 'batch_size_training': 12, 'gradient_accumulation_steps': 6, 'lr': 0.004, 'weight_decay': 1.0, 'grad_clip': 10.0, 'scheduler': 'linear', 'debug': False, 'seed': 42, 'reset_optimizer': False, 'loss_seq_vcr': False, 'collect_hs': False, 'max_size': 10000, 'c_thought': 1, 'pad_latent_to_max': True, 'uniform_prob': 0.0, 'train_path': 'data/gsm_train.json', 'val_path': 'data/gsm_valid.json', 'system_prompt': '', 'latent_token_id': None, 'bot_token_id': None, 'eot_token_id': None, 'eos_token_id': None, 'latent_token': '...', 'bot_token': 'Hmm', 'eot_token': 'Therefore', 'skip_stage_zero': True, 'eval_first_epoch': False, 'loss_nll_ratio_margin': False, 'trm_h_cycles': 3, 'trm_l_cycles': 6, 'trm_l_layers': 2, 'trm_num_heads': 4, 'trm_expansion': 2.0, 'trm_persistent_steering': True, 'layers_spacing_adapter': 5, 'layers_start_adapter': 0.3, 'layers_end_adapter': 0.95, 'target_modules_pattern': '.+\\.(gate_proj).*$', 'use_trm_svft': True, 'adapter_r': 42, 'adapter_svft_mode': 'replace_mul', 'adapter_rotate_v': True, 'adapter_rotate_u': True, 'adapter_k_reflect': 4, '__type__': 'TRMSvft'}
+CLI args: scripts/run.py TRMSvft --target-modules-pattern=.+\.(gate_proj).*$
+|    |   eval/acc |   eval/cot_em |   eval/ratios |   epoch |   stage |   train/minutes |   train/loss |   eval/loss |
+|---:|-----------:|--------------:|--------------:|--------:|--------:|----------------:|-------------:|------------:|
+|  0 |     0      |             0 |        0.3861 |       1 |       1 |          6.4956 |     0.442916 |      0.6157 |
+|  1 |     0      |             0 |        0.344  |       2 |       1 |          6.3521 |     0.576805 |      0.5966 |
+|  2 |     0.0476 |             0 |        0.3251 |       3 |       2 |          6.3638 |     0.626636 |      0.5946 |
+|  3 |     0.0476 |             0 |        0.3467 |       4 |       2 |          6.3805 |     0.514364 |      0.5981 |
+|  4 |     0.0476 |             0 |        0.2936 |       5 |       2 |          6.39   |     0.63252  |      0.5846 |
+
+# Results: trmsvft-qwen3-0.6b_20251104-204740
+{'project': 'coconut', 'save_path': 'outputs/', 'name': 'trmsvft-qwen3-0.6b', 'model_id': 'suayptalha/Qwen3-0.6B-Math-Expert', 'only_eval': False, 'load_model_path': '', 'resume_epochs': 1, 'use_position_ids': True, 'bf16': True, 'bf16_weight': False, 'opt_8b': False, 'load_in_4bit': False, 'load_in_8bit': False, 'cot_epochs': 0, 'epochs_per_stage': 3, 'max_latent_stage': 3, 'num_epochs': 6, 'batch_size_training': 12, 'gradient_accumulation_steps': 6, 'lr': 0.004, 'weight_decay': 1.0, 'grad_clip': 10.0, 'scheduler': 'linear', 'debug': False, 'seed': 42, 'reset_optimizer': False, 'loss_seq_vcr': False, 'collect_hs': False, 'max_size': 10000, 'c_thought': 1, 'pad_latent_to_max': True, 'uniform_prob': 0.0, 'train_path': 'data/gsm_train.json', 'val_path': 'data/gsm_valid.json', 'system_prompt': '', 'latent_token_id': None, 'bot_token_id': None, 'eot_token_id': None, 'eos_token_id': None, 'latent_token': '...', 'bot_token': 'Hmm', 'eot_token': 'Therefore', 'skip_stage_zero': True, 'eval_first_epoch': False, 'loss_nll_ratio_margin': False, 'trm_h_cycles': 3, 'trm_l_cycles': 6, 'trm_l_layers': 2, 'trm_num_heads': 4, 'trm_expansion': 2.0, 'trm_persistent_steering': True, 'layers_spacing_adapter': 5, 'layers_start_adapter': 0.3, 'layers_end_adapter': 0.95, 'target_modules_pattern': '.+\\.(o_proj).*$', 'use_trm_svft': True, 'adapter_r': 42, 'adapter_svft_mode': 'replace_mul', 'adapter_rotate_v': True, 'adapter_rotate_u': True, 'adapter_k_reflect': 4, '__type__': 'TRMSvft'}
+CLI args: scripts/run.py TRMSvft --target-modules-pattern=.+\.(o_proj).*$
+|    |   eval/acc |   eval/cot_em |   eval/ratios |   epoch |   stage |   train/minutes |   train/loss |   eval/loss |
+|---:|-----------:|--------------:|--------------:|--------:|--------:|----------------:|-------------:|------------:|
+|  0 |     0      |             0 |        0.3703 |       1 |       1 |          6.4264 |     0.496754 |      0.6148 |
+|  1 |     0      |             0 |        0.3827 |       2 |       1 |          6.4482 |     0.621947 |      0.6081 |
+|  2 |     0.0833 |             0 |        0.3457 |       3 |       2 |          6.5103 |     0.515568 |      0.5963 |
+|  3 |     0.0595 |             0 |        0.3716 |       4 |       2 |          6.4772 |     0.49501  |      0.5966 |
+|  4 |     0.0357 |             0 |        0.3239 |       5 |       2 |          6.5076 |     0.455591 |      0.5845 |
+
+# Results: trmsvft-qwen3-0.6b_20251104-212038
+{'pr
+ze_training': 12, 'gradient_accumulation_steps': 6, 'lr': 0.004, 'weight_decay': 1.0, 'grad_clip': 10.0, 'scheduler': 'linear', 'debug': False, 'seed': 42, 'reset_optimizer': False, 'loss_seq_vcr': False, 'collect_hs': False, 'max_size': 10000, 'c_thought': 1, 'pad_latent_to_max': True, 'uniform_prob': 0.0, 'train_path': 'data/gsm_train.json', 'val_path': 'data/gsm_valid.json', 'system_prompt': '', 'latent_token_id': None, 'bot_token_id': None, 'eot_token_id': None, 'eos_token_id': None, 'latent_token': '...', 'bot_token': 'Hmm', 'eot_token': 'Therefore', 'skip_stage_zero': True, 'eval_first_epoch': False, 'loss_nll_ratio_margin': False, 'trm_h_cycles': 3, 'trm_l_cycles': 6, 'trm_l_layers': 2, 'trm_num_heads': 4, 'trm_expansion': 2.0, 'trm_persistent_steering': True, 'layers_spacing_adapter': 2, 'layers_start_adapter': 0.3, 'layers_end_adapter': 0.95, 'target_modules_pattern': None, 'use_trm_svft': True, 'adapter_r': 42, 'adapter_svft_mode': 'replace_add', 'adapter_rotate_v': True, 'adapter_rotate_u': True, 'adapter_k_reflect': 4, '__type__': 'TRMSvft'}
+CLI args: scripts/run.py TRMSvft --layers_spacing_adapter=2 --adapter-svft-mode=replace_add
+|    |   eval/acc |   eval/cot_em |   eval/ratios |   epoch |   stage |   train/minutes |   train/loss |   eval/loss |
+|---:|-----------:|--------------:|--------------:|--------:|--------:|----------------:|-------------:|------------:|
+|  0 |     0      |             0 |        0.9028 |       1 |       1 |         11.6368 |     0.686384 |      1.2372 |
+|  1 |     0.0714 |             0 |        0.3361 |       2 |       1 |          9.7508 |     0.643914 |      0.5956 |
+|  2 |     0.0595 |             0 |        0.3377 |       3 |       2 |          9.1658 |     0.326664 |      0.5905 |
+|  3 |     0.0714 |             0 |        0.2966 |       4 |       2 |          8.9529 |     0.66887  |      0.5904 |
+|  4 |     0.0714 |             0 |        0.268  |       5 |       2 |          8.4993 |     0.395591 |      0.5888 |
+
+
+# Results: trmsvft-qwen3-0.6b_20251104-220920
+{'project': 'coconut', 'save_path': 'outputs/', 'name': 'trmsvft-qwen3-0.6b', 'model_id': 'suayptalha/Qwen3-0.6B-Math-Expert', 'only_eval': False, 'load_model_path': '', 'resume_epochs': 1, 'use_position_ids': True, 'bf
+lse, 'seed': 42, 'reset_optimizer': False, 'loss_seq_vcr': False, 'collect_hs': False, 'max_size': 10000, 'c_thought': 1, 'pad_latent_to_max': True, 'uniform_prob': 0.0, 'train_path': 'data/gsm_train.json', 'val_path': 'data/gsm_valid.json', 'system_prompt': '', 'latent_token_id': None, 'bot_token_id': None, 'eot_token_id': None, 'eos_token_id': None, 'latent_token': '...', 'bot_token': 'Hmm', 'eot_token': 'Therefore', 'skip_stage_zero': True, 'eval_first_epoch': False, 'loss_nll_ratio_margin': False, 'trm_h_cycles': 3, 'trm_l_cycles': 6, 'trm_l_layers': 2, 'trm_num_heads': 4, 'trm_expansion': 2.0, 'trm_persistent_steering': True, 'layers_spacing_adapter': 2, 'layers_start_adapter': 0.3, 'layers_end_adapter': 0.95, 'target_modules_pattern': '.+\\.(gate_proj).*$', 'use_trm_svft': True, 'adapter_r': 512, 'adapter_svft_mode': 'replace_mul', 'adapter_rotate_v': True, 'adapter_rotate_u': True, 'adapter_k_reflect': 4, '__type__': 'TRMSvft'}
+CLI args: scripts/run.py TRMSvft --target-modules-pattern=.+\.(gate_proj).*$ --layers_spacing_adapter=2 --adapter_r=512
+|    |   eval/acc |   eval/cot_em |   eval/ratios |   epoch |   stage |   train/minutes |   train/loss |   eval/loss |
+|---:|-----------:|--------------:|--------------:|--------:|--------:|----------------:|-------------:|------------:|
+|  0 |     0.0119 |             0 |        0.2916 |       1 |       1 |          4.9937 |     0.308587 |      0.5999 |
+|  1 |     0      |             0 |        0.3155 |       2 |       1 |          4.9868 |     0.614846 |      0.595  |
+|  2 |     0.0595 |             0 |        0.3264 |       3 |       2 |          4.9793 |     0.614368 |      0.5953 |
+|  3 |     0.1071 |             0 |        0.3158 |       4 |       2 |          5.0266 |     0.627715 |      0.5793 |
+|  4 |     0.0595 |             0 |        0.284  |       5 |       2 |          5.0042 |     0.490256 |      0.5718 |
+
+# Results: trmsvft-qwen3-0.6b_20251104-223452
+{'project': 'coconut', 'save_path': 'outputs/', 'name': 'trmsvft-qwen3-0.6b', 'model_id': 'suayptalha/Qwen3-0.6B-Math-Expert', 'only_eval': False, 'load_model_path': '', 'resume_epochs': 1, 'use_position_ids': True, 'bf16': True, 'bf16_weight': False, 'opt_8b': False, 'load_in_4bit': False, 'load_in_8bit': False, 'cot_epochs': 0, 'epochs_per_stage': 3, 'max_latent_stage': 3, 'num_epochs': 6, 'batch_size_training': 12, 'gradient_accumulation_steps': 6, 'lr': 0.004, 'weight_decay': 1.0, 'grad_clip': 10.0, 'scheduler': 'linear', 'debug': False, 'seed': 42, 'reset_optimizer': False, 'loss_seq_vcr': False, 'collect_hs': False, 'max_size': 10000, 'c_thought': 1, 'pad_latent_to_max': True, 'uniform_prob': 0.0, 'train_path': 'data/gsm_train.json', 'val_path': 'data/gsm_valid.json', 'system_prompt': '', 'latent_token_id': None, 'bot_token_id': None, 'eot_token_id': None, 'eos_token_id': None, 'latent_token': '...', 'bot_token': 'Hmm', 'eot_token': 'Therefore', 'skip_stage_zero': True, 'eval_first_epoch': False, 'loss_nll_ratio_margin': False, 'trm_h_cycles': 0, 'trm_l_cycles': 0, 'trm_l_layers': 2, 'trm_num_heads': 1, 'trm_expansion': 1.0, 'trm_persistent_steering': True, 'layers_spacing_adapter': 5, 'layers_start_adapter': 0.3, 'layers_end_adapter': 0.95, 'target_modules_pattern': None, 'use_trm_svft': True, 'adapter_r': 42, 'adapter_svft_mode': 'replace_mul', 'adapter_rotate_v': True, 'adapter_rotate_u': True, 'adapter_k_reflect': 4, '__type__': 'TRMSvft'}
+CLI args: scripts/run.py TRMSvft --trm_h_cycles=0 --trm_l_cycles=0 --trm_num_heads=1 --trm_expansion=1
+
+CLI args: scripts/run.py TRMSvft --trm_h_cycles=0 --trm_l_cycles=0 --trm_num_heads=1 --trm_expansion=1
+|    |   eval/acc |   eval/cot_em |   eval/ratios |   epoch |   stage |   train/minutes |   train/loss |   eval/loss |
+|---:|-----------:|--------------:|--------------:|--------:|--------:|----------------:|-------------:|------------:|
+|  0 |          0 |             0 |        0.4343 |       1 |       1 |          8.117  |     0.433082 |      0.6505 |
+|  1 |          0 |             0 |        0.4344 |       2 |       1 |          8.096  |     0.8796   |      0.6272 |
+|  2 |          0 |             0 |        0.3258 |       3 |       2 |          8.0981 |     0.256855 |      0.5764 |
+|  3 |          0 |             0 |        0.2937 |       4 |       2 |          8.0847 |     0.45644  |      0.5715 |
+|  4 |          0 |             0 |        0.2489 |       5 |       2 |          7.9944 |     0.604648 |      0.5677 |
+
+
+# Results: trmsvft-qwen3-0.6b_20251104-231555
+{'project': 'coconut', 'save_path': 'outputs/', 'name': 'trmsvft-qwen3-0.6b', 'model_id': 'suayptalha/Qwen3-0.6B-Math-Expert', 'only_eval': False, 'load_model_path': '', 'resume_epochs': 1, 'use_position_ids': True, 'bf16': True, 'bf16_weight': False, 'opt_8b': False, 'load_in_4bit': False, 'load_in_8bit': False, 'cot_epochs': 0, 'epochs_per_stage': 3, 'max_latent_stage': 3, 'num_epochs': 6, 'batch_size_training': 12, 'gradient_accumulation_steps': 1, 'lr': 0.1, 'weight_decay': 1.0, 'grad_clip': 10.0, 'scheduler': 'cosine', 'debug': False, 'seed': 42, 'reset_optimizer': False, 'loss_seq_vcr': False, 'collect_hs': False, 'max_size': 1000, 'c_thought': 1, 'pad_latent_to_max': True, 'uniform_prob': 0.0, 'train_path': 'data/gsm_train.json', 'val_path': 'data/gsm_valid.json', 'system_prompt': '', 'latent_token_id': None, 'bot_token_id': None, 'eot_token_id': None, 'eos_token_id': None, 'latent_token': '...', 'bot_token': 'Hmm', 'eot_token': 'Therefore', 'skip_stage_zero': True, 'eval_first_epoch': False, 'loss_nll_ratio_margin': False, 'trm_h_cycles': 3, 'trm_l_cycles': 6, 'trm_l_layers': 2, 'trm_num_heads': 4, 'trm_expansion': 2.0, 'trm_persistent_steering': True, 'layers_spacing_adapter': 15, 'layers_start_adapter': 0.3, 'layers_end_adapter': 0.95, 'target_modules_pattern': '.+\\.(gate_proj|down_proj).*$', 'use_trm_svft': True, 'adapter_r': 128, 'adapter_svft_mode': 'replace_mul', 'adapter_rotate_v': True, 'adapter_rotate_u': True, 'adapter_k_reflect': 4, '__type__': 'TRMSvft'}
+CLI args: scripts/run.py TRMSvft --lr=1e-1 --gradient-accumulation-steps=1 --weight_decay=1 --num_epochs=6 --max_size=1000 --adapter_r=128 --scheduler=cosine --target-modules-pattern=.+\.(gate_proj|down_proj).*$ --layers-spacing-adapter=15
+|    |   eval/acc |   eval/cot_em |   eval/ratios |   epoch |   stage |   train/minutes |   train/loss |   eval/loss |
+|---:|-----------:|--------------:|--------------:|--------:|--------:|----------------:|-------------:|------------:|
+|  0 |          0 |             0 |        1.1004 |       1 |       1 |          1.8041 |     3.61153  |      3.415  |
+|  1 |          0 |             0 |        1.129  |       2 |       1 |          1.6202 |     2.15039  |      2.3268 |
+|  2 |          0 |             0 |        0.8676 |       3 |       2 |          1.6858 |     0.659321 |      0.7531 |
+|  3 |          0 |             0 |        8.3376 |       4 |       2 |          1.4323 |     2.8845   |      9.307  |
+|  4 |          0 |             0 |        1.7231 |       5 |       2 |          1.53   |     3.60956  |      4.8217 |
+
+
+CLI args: scripts/run.py TRMSvft --bot_token=Wait --eot_token=Ans --latent_token=... --lr=1e-2 --weight_decay=.1 --num_epochs=2
+|    |   eval/acc |   eval/cot_em |   eval/ratios |   epoch |   stage |   train/minutes |   train/loss |   eval/loss |
+|---:|-----------:|--------------:|--------------:|--------:|--------:|----------------:|-------------:|------------:|
+|  0 |          0 |             0 |        0.4113 |       1 |       1 |          17.129 |     0.625889 |      0.6414 |
+
+CLI args: scripts/run.py TRMSvft --adapter-svft-mode=adapter_mult
+|    |   eval/acc |   eval/cot_em |   eval/ratios |   epoch |   stage |   train/minutes |   train/loss |   eval/loss |
+|---:|-----------:|--------------:|--------------:|--------:|--------:|----------------:|-------------:|------------:|
+|  0 |     0      |             0 |        0.8266 |       1 |       1 |         23.5513 |     0.768045 |      0.7814 |
+|  1 |     0      |             0 |        0.8541 |       2 |       1 |         23.4348 |     0.673448 |      0.8107 |
+|  2 |     0      |             0 |        0.7609 |       3 |       2 |         23.5518 |     0.993382 |      0.7651 |
+|  3 |     0.0119 |             0 |        0.6786 |       4 |       2 |         23.4265 |     0.935587 |      0.7421 |
+|  4 |     0      |             0 |        0.7231 |       5 |       2 |         23.5568 |     0.560766 |      0.7345 |
+
+CLI args: scripts/run.py TRMSvft --adapter-svft-mode=replace_mul
+|    |   eval/acc |   eval/cot_em |   eval/ratios |   epoch |   stage |   train/minutes |   train/loss |   eval/loss |
+|---:|-----------:|--------------:|--------------:|--------:|--------:|----------------:|-------------:|------------:|
+|  0 |     0      |             0 |        0.4531 |       1 |       1 |         23.0116 |     0.605982 |      0.6526 |
+|  1 |     0      |             0 |        0.2975 |       2 |       1 |         17.6136 |     0.486571 |      0.6035 |
+|  2 |     0.0238 |             0 |        0.3977 |       3 |       2 |         18.0784 |     0.711317 |      0.6068 |
+|  3 |     0.0833 |             0 |        0.2906 |       4 |       2 |         16.9541 |     0.61193  |      0.5952 |
+|  4 |     0.0714 |             0 |        0.2792 |       5 |       2 |         16.7307 |     0.479911 |      0.5775 |
+
+
+CLI args: scripts/run.py TRMSvft
+|    |   eval/acc |   eval/cot_em |   eval/ratios |   epoch |   stage |   train/minutes |   train/loss |   eval/loss |
+|---:|-----------:|--------------:|--------------:|--------:|--------:|----------------:|-------------:|------------:|
+|  0 |     0      |             0 |        0.4531 |       1 |       1 |         22.8634 |     0.605982 |      0.6526 |
+|  1 |     0      |             0 |        0.2975 |       2 |       1 |         17.4603 |     0.486571 |      0.6035 |
+|  2 |     0.0238 |             0 |        0.3977 |       3 |       2 |         18.0434 |     0.711317 |      0.6068 |
+|  3 |     0.0833 |             0 |        0.2906 |       4 |       2 |         16.8934 |     0.61193  |      0.5952 |
+|  4 |     0.0714 |             0 |        0.2792 |       5 |       2 |         16.695  |     0.479911 |      0.5775 |
+wandb: 
