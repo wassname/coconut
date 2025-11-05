@@ -15,7 +15,7 @@ from peft.tuners.lora.model import LoraModel
 from peft.tuners.lora.config import LoraConfig
 from peft.tuners._buffer_dict import BufferDict
 
-from .trm_adapter import L_net, trm_recursion
+from .trm_adapter import L_net, trm_seq
 
 
 
@@ -154,11 +154,11 @@ class TRMLoraLayer(LoraLayer):
         else:
             context = context_hs
 
-        zLs, zHs = trm_recursion(
+        zLs, zHs = trm_seq(
             l_net=self.lora_l_nets[adapter_name],
             zL=zL,
             zH=zH,
-            context=context,
+            x=context,
             l_cycles=trm_config.l_cycles,
             h_cycles=h_cycles,
         )

@@ -15,7 +15,7 @@ from peft.tuners.hra.config import HRAConfig
 from peft.tuners._buffer_dict import BufferDict
 from peft.utils import PeftType
 
-from .trm_adapter import L_net, trm_recursion
+from .trm_adapter import L_net, trm_seq
 
 @dataclass
 class TRMHraAConfig(HRAConfig):
@@ -147,11 +147,11 @@ class TRMHraLayer(HRALayer):
         else:
             context = context_hs
 
-        zLs, zHs = trm_recursion(
+        zLs, zHs = trm_seq(
             l_net=self.l_nets[adapter_name],
             zL=zL,
             zH=zH,
-            context=context,
+            x=context,
             l_cycles=hra_config.l_cycles,
             h_cycles=h_cycles,
         )

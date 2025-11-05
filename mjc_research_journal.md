@@ -2999,113 +2999,129 @@ not "inside" S
 
 it also looks like we could just use PiSSA init from peft for many benefits https://github.com/huggingface/peft/blob/main/src/peft/tuners/lora/layer.py#L327
 
+
+# 2025-11-03 05:28:28
+
+task https://github.com/huggingface/peft/blob/main/src/peft/tuners/hra/layer.py
+make our coconut/trmlora/recursive_svft.py
+more like docs/ref_svft2_temp.py
+but unlike ref_svft2_temp we do not need reversible transforms parameterized by alpha we instead need to run TRM recursive latent state refinement in the low rank singular vector space
+
+for this reason we can use parameter effecient householder rotations to rotate the U and V if enabled
+
+one thing I wonder about is... zH it going to go through output head and do 1) multiply S, 2) rotate U, 3) rotate V. Should we use more R for each, seperate heads with seperate inits, or something else. zH is recursivly refined by TRM for these purposes so should we refine seperate regions of zH? We give it context, should we also give it context for U and V? idk
+
+another thing I wonder about, if we rotate V we change the basis for which thr TRM recursions operate... a drift in basis might ber ok as it it's how networks usually learn?
+
+note we need outputheads as zH needs to be in a stable range [-1, 1] or so for the recursions to work well, while output interventiosn like zH_s, zH_rot_u, zH_rot_v might need to be larger ranges
+
+
+note we are replacing the base layer out put not adding to it, with out `x @ V @ diag(S_eff) @ U.T + W_res.T @ x`
+
 # 2025-11-05 05:51:53
 
 ResultsResults
 
-# Results: trmsvft-qwen3-0.6b_20251104-201503
-{'project': 'coconut', 'save_path': 'outputs/', 'name': 'trmsvft-qwen3-0.6b', 'model_id': 'suayptalha/Qwen3-0.6B-Math-Expert', 'only_eval': False, 'load_model_path': '', 'resume_epochs': 1, 'use_position_ids': True, 'bf16': True, 'bf16_weight': False, 'opt_8b': False, 'load_in_4bit': False, 'load_in_8bit': False, 'cot_epochs': 0, 'epochs_per_stage': 3, 'max_latent_stage': 3, 'num_epochs': 6, 'batch_size_training': 12, 'gradient_accumulation_steps': 6, 'lr': 0.004, 'weight_decay': 1.0, 'grad_clip': 10.0, 'scheduler': 'linear', 'debug': False, 'seed': 42, 'reset_optimizer': False, 'loss_seq_vcr': False, 'collect_hs': False, 'max_size': 10000, 'c_thought': 1, 'pad_latent_to_max': True, 'uniform_prob': 0.0, 'train_path': 'data/gsm_train.json', 'val_path': 'data/gsm_valid.json', 'system_prompt': '', 'latent_token_id': None, 'bot_token_id': None, 'eot_token_id': None, 'eos_token_id': None, 'latent_token': '...', 'bot_token': 'Hmm', 'eot_token': 'Therefore', 'skip_stage_zero': True, 'eval_first_epoch': False, 'loss_nll_ratio_margin': False, 'trm_h_cycles': 3, 'trm_l_cycles': 6, 'trm_l_layers': 2, 'trm_num_heads': 4, 'trm_expansion': 2.0, 'trm_persistent_steering': True, 'layers_spacing_adapter': 5, 'layers_start_adapter': 0.3, 'layers_end_adapter': 0.95, 'target_modules_pattern': '.+\\.(gate_proj).*$', 'use_trm_svft': True, 'adapter_r': 42, 'adapter_svft_mode': 'replace_mul', 'adapter_rotate_v': True, 'adapter_rotate_u': True, 'adapter_k_reflect': 4, '__type__': 'TRMSvft'}
-CLI args: scripts/run.py TRMSvft --target-modules-pattern=.+\.(gate_proj).*$
-|    |   eval/acc |   eval/cot_em |   eval/ratios |   epoch |   stage |   train/minutes |   train/loss |   eval/loss |
-|---:|-----------:|--------------:|--------------:|--------:|--------:|----------------:|-------------:|------------:|
-|  0 |     0      |             0 |        0.3861 |       1 |       1 |          6.4956 |     0.442916 |      0.6157 |
-|  1 |     0      |             0 |        0.344  |       2 |       1 |          6.3521 |     0.576805 |      0.5966 |
-|  2 |     0.0476 |             0 |        0.3251 |       3 |       2 |          6.3638 |     0.626636 |      0.5946 |
-|  3 |     0.0476 |             0 |        0.3467 |       4 |       2 |          6.3805 |     0.514364 |      0.5981 |
-|  4 |     0.0476 |             0 |        0.2936 |       5 |       2 |          6.39   |     0.63252  |      0.5846 |
+fixing major bugs one is
 
-# Results: trmsvft-qwen3-0.6b_20251104-204740
-{'project': 'coconut', 'save_path': 'outputs/', 'name': 'trmsvft-qwen3-0.6b', 'model_id': 'suayptalha/Qwen3-0.6B-Math-Expert', 'only_eval': False, 'load_model_path': '', 'resume_epochs': 1, 'use_position_ids': True, 'bf16': True, 'bf16_weight': False, 'opt_8b': False, 'load_in_4bit': False, 'load_in_8bit': False, 'cot_epochs': 0, 'epochs_per_stage': 3, 'max_latent_stage': 3, 'num_epochs': 6, 'batch_size_training': 12, 'gradient_accumulation_steps': 6, 'lr': 0.004, 'weight_decay': 1.0, 'grad_clip': 10.0, 'scheduler': 'linear', 'debug': False, 'seed': 42, 'reset_optimizer': False, 'loss_seq_vcr': False, 'collect_hs': False, 'max_size': 10000, 'c_thought': 1, 'pad_latent_to_max': True, 'uniform_prob': 0.0, 'train_path': 'data/gsm_train.json', 'val_path': 'data/gsm_valid.json', 'system_prompt': '', 'latent_token_id': None, 'bot_token_id': None, 'eot_token_id': None, 'eos_token_id': None, 'latent_token': '...', 'bot_token': 'Hmm', 'eot_token': 'Therefore', 'skip_stage_zero': True, 'eval_first_epoch': False, 'loss_nll_ratio_margin': False, 'trm_h_cycles': 3, 'trm_l_cycles': 6, 'trm_l_layers': 2, 'trm_num_heads': 4, 'trm_expansion': 2.0, 'trm_persistent_steering': True, 'layers_spacing_adapter': 5, 'layers_start_adapter': 0.3, 'layers_end_adapter': 0.95, 'target_modules_pattern': '.+\\.(o_proj).*$', 'use_trm_svft': True, 'adapter_r': 42, 'adapter_svft_mode': 'replace_mul', 'adapter_rotate_v': True, 'adapter_rotate_u': True, 'adapter_k_reflect': 4, '__type__': 'TRMSvft'}
-CLI args: scripts/run.py TRMSvft --target-modules-pattern=.+\.(o_proj).*$
-|    |   eval/acc |   eval/cot_em |   eval/ratios |   epoch |   stage |   train/minutes |   train/loss |   eval/loss |
-|---:|-----------:|--------------:|--------------:|--------:|--------:|----------------:|-------------:|------------:|
-|  0 |     0      |             0 |        0.3703 |       1 |       1 |          6.4264 |     0.496754 |      0.6148 |
-|  1 |     0      |             0 |        0.3827 |       2 |       1 |          6.4482 |     0.621947 |      0.6081 |
-|  2 |     0.0833 |             0 |        0.3457 |       3 |       2 |          6.5103 |     0.515568 |      0.5963 |
-|  3 |     0.0595 |             0 |        0.3716 |       4 |       2 |          6.4772 |     0.49501  |      0.5966 |
-|  4 |     0.0357 |             0 |        0.3239 |       5 |       2 |          6.5076 |     0.455591 |      0.5845 |
-
-# Results: trmsvft-qwen3-0.6b_20251104-212038
-{'pr
-ze_training': 12, 'gradient_accumulation_steps': 6, 'lr': 0.004, 'weight_decay': 1.0, 'grad_clip': 10.0, 'scheduler': 'linear', 'debug': False, 'seed': 42, 'reset_optimizer': False, 'loss_seq_vcr': False, 'collect_hs': False, 'max_size': 10000, 'c_thought': 1, 'pad_latent_to_max': True, 'uniform_prob': 0.0, 'train_path': 'data/gsm_train.json', 'val_path': 'data/gsm_valid.json', 'system_prompt': '', 'latent_token_id': None, 'bot_token_id': None, 'eot_token_id': None, 'eos_token_id': None, 'latent_token': '...', 'bot_token': 'Hmm', 'eot_token': 'Therefore', 'skip_stage_zero': True, 'eval_first_epoch': False, 'loss_nll_ratio_margin': False, 'trm_h_cycles': 3, 'trm_l_cycles': 6, 'trm_l_layers': 2, 'trm_num_heads': 4, 'trm_expansion': 2.0, 'trm_persistent_steering': True, 'layers_spacing_adapter': 2, 'layers_start_adapter': 0.3, 'layers_end_adapter': 0.95, 'target_modules_pattern': None, 'use_trm_svft': True, 'adapter_r': 42, 'adapter_svft_mode': 'replace_add', 'adapter_rotate_v': True, 'adapter_rotate_u': True, 'adapter_k_reflect': 4, '__type__': 'TRMSvft'}
-CLI args: scripts/run.py TRMSvft --layers_spacing_adapter=2 --adapter-svft-mode=replace_add
-|    |   eval/acc |   eval/cot_em |   eval/ratios |   epoch |   stage |   train/minutes |   train/loss |   eval/loss |
-|---:|-----------:|--------------:|--------------:|--------:|--------:|----------------:|-------------:|------------:|
-|  0 |     0      |             0 |        0.9028 |       1 |       1 |         11.6368 |     0.686384 |      1.2372 |
-|  1 |     0.0714 |             0 |        0.3361 |       2 |       1 |          9.7508 |     0.643914 |      0.5956 |
-|  2 |     0.0595 |             0 |        0.3377 |       3 |       2 |          9.1658 |     0.326664 |      0.5905 |
-|  3 |     0.0714 |             0 |        0.2966 |       4 |       2 |          8.9529 |     0.66887  |      0.5904 |
-|  4 |     0.0714 |             0 |        0.268  |       5 |       2 |          8.4993 |     0.395591 |      0.5888 |
+- right now I'm assuming that I'm doing one token at a time. But I'm not anymore. I'm doing full sequences. I want to recurse on the parts that have latent tokens... or should I do all?
+- right now I'm only doing it if the last token has latents, that works during gen but not train
+- I can trivially just do all tokens in a sequence that have a latent in the sequence. Although I need to make sure I keep the sequence dimension the whole way through
+- Right now I'm already got a latent mask for batches and tokens. I was masking the batches that didn't have latents at all. but generally they all do or none do! It might be better to mask the tokens that have it? Note that I wanted to save compute by not doing the trm on tokens that don't have latents... but it is looking complex, the normal way of doig this is an attention mask over a casual sequence... but how can my trm not do some tokens do others? Or should I just do the first? Or all. hmm
 
 
-# Results: trmsvft-qwen3-0.6b_20251104-220920
-{'project': 'coconut', 'save_path': 'outputs/', 'name': 'trmsvft-qwen3-0.6b', 'model_id': 'suayptalha/Qwen3-0.6B-Math-Expert', 'only_eval': False, 'load_model_path': '', 'resume_epochs': 1, 'use_position_ids': True, 'bf
-lse, 'seed': 42, 'reset_optimizer': False, 'loss_seq_vcr': False, 'collect_hs': False, 'max_size': 10000, 'c_thought': 1, 'pad_latent_to_max': True, 'uniform_prob': 0.0, 'train_path': 'data/gsm_train.json', 'val_path': 'data/gsm_valid.json', 'system_prompt': '', 'latent_token_id': None, 'bot_token_id': None, 'eot_token_id': None, 'eos_token_id': None, 'latent_token': '...', 'bot_token': 'Hmm', 'eot_token': 'Therefore', 'skip_stage_zero': True, 'eval_first_epoch': False, 'loss_nll_ratio_margin': False, 'trm_h_cycles': 3, 'trm_l_cycles': 6, 'trm_l_layers': 2, 'trm_num_heads': 4, 'trm_expansion': 2.0, 'trm_persistent_steering': True, 'layers_spacing_adapter': 2, 'layers_start_adapter': 0.3, 'layers_end_adapter': 0.95, 'target_modules_pattern': '.+\\.(gate_proj).*$', 'use_trm_svft': True, 'adapter_r': 512, 'adapter_svft_mode': 'replace_mul', 'adapter_rotate_v': True, 'adapter_rotate_u': True, 'adapter_k_reflect': 4, '__type__': 'TRMSvft'}
-CLI args: scripts/run.py TRMSvft --target-modules-pattern=.+\.(gate_proj).*$ --layers_spacing_adapter=2 --adapter_r=512
-|    |   eval/acc |   eval/cot_em |   eval/ratios |   epoch |   stage |   train/minutes |   train/loss |   eval/loss |
-|---:|-----------:|--------------:|--------------:|--------:|--------:|----------------:|-------------:|------------:|
-|  0 |     0.0119 |             0 |        0.2916 |       1 |       1 |          4.9937 |     0.308587 |      0.5999 |
-|  1 |     0      |             0 |        0.3155 |       2 |       1 |          4.9868 |     0.614846 |      0.595  |
-|  2 |     0.0595 |             0 |        0.3264 |       3 |       2 |          4.9793 |     0.614368 |      0.5953 |
-|  3 |     0.1071 |             0 |        0.3158 |       4 |       2 |          5.0266 |     0.627715 |      0.5793 |
-|  4 |     0.0595 |             0 |        0.284  |       5 |       2 |          5.0042 |     0.490256 |      0.5718 |
+- [ ] first try all and look at the speed. it was taking 10min for 10k sampels per epoch
+- [ ] then try to see if we can limit recursion per sequence? e.g. lets say we have [[0, 0, 1, 0], [0, 1, 1, ]] where this is ]batch=2, seq=4]. 
 
-# Results: trmsvft-qwen3-0.6b_20251104-223452
-{'project': 'coconut', 'save_path': 'outputs/', 'name': 'trmsvft-qwen3-0.6b', 'model_id': 'suayptalha/Qwen3-0.6B-Math-Expert', 'only_eval': False, 'load_model_path': '', 'resume_epochs': 1, 'use_position_ids': True, 'bf16': True, 'bf16_weight': False, 'opt_8b': False, 'load_in_4bit': False, 'load_in_8bit': False, 'cot_epochs': 0, 'epochs_per_stage': 3, 'max_latent_stage': 3, 'num_epochs': 6, 'batch_size_training': 12, 'gradient_accumulation_steps': 6, 'lr': 0.004, 'weight_decay': 1.0, 'grad_clip': 10.0, 'scheduler': 'linear', 'debug': False, 'seed': 42, 'reset_optimizer': False, 'loss_seq_vcr': False, 'collect_hs': False, 'max_size': 10000, 'c_thought': 1, 'pad_latent_to_max': True, 'uniform_prob': 0.0, 'train_path': 'data/gsm_train.json', 'val_path': 'data/gsm_valid.json', 'system_prompt': '', 'latent_token_id': None, 'bot_token_id': None, 'eot_token_id': None, 'eos_token_id': None, 'latent_token': '...', 'bot_token': 'Hmm', 'eot_token': 'Therefore', 'skip_stage_zero': True, 'eval_first_epoch': False, 'loss_nll_ratio_margin': False, 'trm_h_cycles': 0, 'trm_l_cycles': 0, 'trm_l_layers': 2, 'trm_num_heads': 1, 'trm_expansion': 1.0, 'trm_persistent_steering': True, 'layers_spacing_adapter': 5, 'layers_start_adapter': 0.3, 'layers_end_adapter': 0.95, 'target_modules_pattern': None, 'use_trm_svft': True, 'adapter_r': 42, 'adapter_svft_mode': 'replace_mul', 'adapter_rotate_v': True, 'adapter_rotate_u': True, 'adapter_k_reflect': 4, '__type__': 'TRMSvft'}
-CLI args: scripts/run.py TRMSvft --trm_h_cycles=0 --trm_l_cycles=0 --trm_num_heads=1 --trm_expansion=1
+oh wait in trm
 
-CLI args: scripts/run.py TRMSvft --trm_h_cycles=0 --trm_l_cycles=0 --trm_num_heads=1 --trm_expansion=1
-|    |   eval/acc |   eval/cot_em |   eval/ratios |   epoch |   stage |   train/minutes |   train/loss |   eval/loss |
-|---:|-----------:|--------------:|--------------:|--------:|--------:|----------------:|-------------:|------------:|
-|  0 |          0 |             0 |        0.4343 |       1 |       1 |          8.117  |     0.433082 |      0.6505 |
-|  1 |          0 |             0 |        0.4344 |       2 |       1 |          8.096  |     0.8796   |      0.6272 |
-|  2 |          0 |             0 |        0.3258 |       3 |       2 |          8.0981 |     0.256855 |      0.5764 |
-|  3 |          0 |             0 |        0.2937 |       4 |       2 |          8.0847 |     0.45644  |      0.5715 |
-|  4 |          0 |             0 |        0.2489 |       5 |       2 |          7.9944 |     0.604648 |      0.5677 |
+so we could pass in a mask, and only do the unmasked ones
 
+```py
+latent_mask = ... [b, s]
+# Fold sequence into batch for L_net processing
+b, s, r = context.shape
+zLs = repeat(zL, 'b r -> (b s) 1 r', s=s)
+zHs = repeat(zH, 'b r -> (b s) 1 r', s=s)
+x = rearrange(context, 'b s r -> (b s) 1 r')
 
-# Results: trmsvft-qwen3-0.6b_20251104-231555
-{'project': 'coconut', 'save_path': 'outputs/', 'name': 'trmsvft-qwen3-0.6b', 'model_id': 'suayptalha/Qwen3-0.6B-Math-Expert', 'only_eval': False, 'load_model_path': '', 'resume_epochs': 1, 'use_position_ids': True, 'bf16': True, 'bf16_weight': False, 'opt_8b': False, 'load_in_4bit': False, 'load_in_8bit': False, 'cot_epochs': 0, 'epochs_per_stage': 3, 'max_latent_stage': 3, 'num_epochs': 6, 'batch_size_training': 12, 'gradient_accumulation_steps': 1, 'lr': 0.1, 'weight_decay': 1.0, 'grad_clip': 10.0, 'scheduler': 'cosine', 'debug': False, 'seed': 42, 'reset_optimizer': False, 'loss_seq_vcr': False, 'collect_hs': False, 'max_size': 1000, 'c_thought': 1, 'pad_latent_to_max': True, 'uniform_prob': 0.0, 'train_path': 'data/gsm_train.json', 'val_path': 'data/gsm_valid.json', 'system_prompt': '', 'latent_token_id': None, 'bot_token_id': None, 'eot_token_id': None, 'eos_token_id': None, 'latent_token': '...', 'bot_token': 'Hmm', 'eot_token': 'Therefore', 'skip_stage_zero': True, 'eval_first_epoch': False, 'loss_nll_ratio_margin': False, 'trm_h_cycles': 3, 'trm_l_cycles': 6, 'trm_l_layers': 2, 'trm_num_heads': 4, 'trm_expansion': 2.0, 'trm_persistent_steering': True, 'layers_spacing_adapter': 15, 'layers_start_adapter': 0.3, 'layers_end_adapter': 0.95, 'target_modules_pattern': '.+\\.(gate_proj|down_proj).*$', 'use_trm_svft': True, 'adapter_r': 128, 'adapter_svft_mode': 'replace_mul', 'adapter_rotate_v': True, 'adapter_rotate_u': True, 'adapter_k_reflect': 4, '__type__': 'TRMSvft'}
-CLI args: scripts/run.py TRMSvft --lr=1e-1 --gradient-accumulation-steps=1 --weight_decay=1 --num_epochs=6 --max_size=1000 --adapter_r=128 --scheduler=cosine --target-modules-pattern=.+\.(gate_proj|down_proj).*$ --layers-spacing-adapter=15
-|    |   eval/acc |   eval/cot_em |   eval/ratios |   epoch |   stage |   train/minutes |   train/loss |   eval/loss |
-|---:|-----------:|--------------:|--------------:|--------:|--------:|----------------:|-------------:|------------:|
-|  0 |          0 |             0 |        1.1004 |       1 |       1 |          1.8041 |     3.61153  |      3.415  |
-|  1 |          0 |             0 |        1.129  |       2 |       1 |          1.6202 |     2.15039  |      2.3268 |
-|  2 |          0 |             0 |        0.8676 |       3 |       2 |          1.6858 |     0.659321 |      0.7531 |
-|  3 |          0 |             0 |        8.3376 |       4 |       2 |          1.4323 |     2.8845   |      9.307  |
-|  4 |          0 |             0 |        1.7231 |       5 |       2 |          1.53   |     3.60956  |      4.8217 |
-
-
-CLI args: scripts/run.py TRMSvft --bot_token=Wait --eot_token=Ans --latent_token=... --lr=1e-2 --weight_decay=.1 --num_epochs=2
-|    |   eval/acc |   eval/cot_em |   eval/ratios |   epoch |   stage |   train/minutes |   train/loss |   eval/loss |
-|---:|-----------:|--------------:|--------------:|--------:|--------:|----------------:|-------------:|------------:|
-|  0 |          0 |             0 |        0.4113 |       1 |       1 |          17.129 |     0.625889 |      0.6414 |
-
-CLI args: scripts/run.py TRMSvft --adapter-svft-mode=adapter_mult
-|    |   eval/acc |   eval/cot_em |   eval/ratios |   epoch |   stage |   train/minutes |   train/loss |   eval/loss |
-|---:|-----------:|--------------:|--------------:|--------:|--------:|----------------:|-------------:|------------:|
-|  0 |     0      |             0 |        0.8266 |       1 |       1 |         23.5513 |     0.768045 |      0.7814 |
-|  1 |     0      |             0 |        0.8541 |       2 |       1 |         23.4348 |     0.673448 |      0.8107 |
-|  2 |     0      |             0 |        0.7609 |       3 |       2 |         23.5518 |     0.993382 |      0.7651 |
-|  3 |     0.0119 |             0 |        0.6786 |       4 |       2 |         23.4265 |     0.935587 |      0.7421 |
-|  4 |     0      |             0 |        0.7231 |       5 |       2 |         23.5568 |     0.560766 |      0.7345 |
-
-CLI args: scripts/run.py TRMSvft --adapter-svft-mode=replace_mul
-|    |   eval/acc |   eval/cot_em |   eval/ratios |   epoch |   stage |   train/minutes |   train/loss |   eval/loss |
-|---:|-----------:|--------------:|--------------:|--------:|--------:|----------------:|-------------:|------------:|
-|  0 |     0      |             0 |        0.4531 |       1 |       1 |         23.0116 |     0.605982 |      0.6526 |
-|  1 |     0      |             0 |        0.2975 |       2 |       1 |         17.6136 |     0.486571 |      0.6035 |
-|  2 |     0.0238 |             0 |        0.3977 |       3 |       2 |         18.0784 |     0.711317 |      0.6068 |
-|  3 |     0.0833 |             0 |        0.2906 |       4 |       2 |         16.9541 |     0.61193  |      0.5952 |
-|  4 |     0.0714 |             0 |        0.2792 |       5 |       2 |         16.7307 |     0.479911 |      0.5775 |
+n_latent = latent_mask.sum().item()
+n_shallow = (~latent_mask).sum().item()
+if n_latent == 0:
+    # No latents - shallow only
+    zLs, zHs = self.trm(adapter, zL, zH, x_v, h_cycles=1)
+elif n_shallow == 0:
+    # All latents - deep only
+    zLs, zHs = self.trm(adapter, zL, zH, x_v)
+else:
+    # Mixed batch - process separately
+    zLs_deep_part, zH_deep_part = self.trm(adapter, zL[latent_mask], zH[latent_mask], x_v[latent_mask])
+    zLs_shallow_part, zH_shallow_part = self.trm(adapter, zL[~latent_mask], zH[~latent_mask], x_v[~latent_mask], h_cycles=1)
+    def rebuild_z(z_part, z_full_template, latent_mask):
+        """Rebuild full z from latent-only z_latent using scatter (differentiable)."""
+        z_full = torch.zeros_like(z_full_template)
+        indices = latent_mask.nonzero(as_tuple=False).squeeze(-1)  # [n_latent, 1]
+        z_full[indices] = z_part
+        # z_full[indices[:, 0], :] = z_part
+        return z_full
+    zLs_deep = rebuild_z(zLs_deep_part, zL, latent_mask)
+    zHs_deep = rebuild_z(zH_deep_part, zH, latent_mask)
+    zLs_shallow = rebuild_z(zLs_shallow_part, zL, ~latent_mask)
+    zHs_shallow = rebuild_z(zH_shallow_part, zH, ~latent_mask)
+    # Blend
+    zHs = torch.where(latent_mask.unsqueeze(-1), zHs_deep, zHs_shallow)
+    zLs = torch.where(latent_mask.unsqueeze(-1), zLs_deep, zLs_shallow)
+```
 
 
-CLI args: scripts/run.py TRMSvft
-|    |   eval/acc |   eval/cot_em |   eval/ratios |   epoch |   stage |   train/minutes |   train/loss |   eval/loss |
-|---:|-----------:|--------------:|--------------:|--------:|--------:|----------------:|-------------:|------------:|
-|  0 |     0      |             0 |        0.4531 |       1 |       1 |         22.8634 |     0.605982 |      0.6526 |
-|  1 |     0      |             0 |        0.2975 |       2 |       1 |         17.4603 |     0.486571 |      0.6035 |
-|  2 |     0.0238 |             0 |        0.3977 |       3 |       2 |         18.0434 |     0.711317 |      0.6068 |
-|  3 |     0.0833 |             0 |        0.2906 |       4 |       2 |         16.8934 |     0.61193  |      0.5952 |
-|  4 |     0.0714 |             0 |        0.2792 |       5 |       2 |         16.695  |     0.479911 |      0.5775 |
-wandb: 
+wait with all tokens being recursive, it's 20minutes... compared to 50 minutes previously... so it's faster?
+
+but with h_cycles=1 it's 18 minutes
+but it's not recursive as we just do one step for all, and sure it's linked, because attention lets layers look back, but it's not recursive refinement
+
+ideally we would tak [b s r] and do per token recursion along s? how slow would that be? and then if we masked it would it be faster?
+
+we have zH... but a more natural recursive things is the kv_cache or the hidden states. Maybe we should just say we refine the hidden states? or better x@V@sqrt(S) ?
+
+But the hidden state is dependant on the input tokens, so we can't just refine it without redoing the forward pass. It does make sense to refine the weights through U and S and V.
+But it doesn't make sense to freshly compute it from autoregressive hidden states it should be recursive, hmm
+```py
+for i in range(s):
+    if latent_mask[:, i].any():
+        mask = latent_mask[:, i]
+        # do recursion on token i
+        # FIXME this is in place update, not compatible with backprop? need to do assign?
+        zHs[:, i, :], zLs[:, i, :] = self.trm(..., zH[mask, i, :], zL[mask, i, :], x_v[mask, i, :])
+
+        # I guess I need to concat or where or scatter or assign?
+        zHs_deep, zLs_shallow = self.trm(..., zH[mask, i, :], zL[mask, i, :], x_v[mask, i, :])
+
+        zHs = torch.where(latent_mask.unsqueeze(-1), zHs_deep, zHs_shallow)
+    else:
+        # skip
+```
+
+```py
+zH_out = []
+zL_out = []
+
+for i in range(s):
+    mask_i = latent_mask[:, i]  # [b]
+    if mask_i.any():
+        zH_deep, zL_deep = self.trm(adapter, zH[mask_i, i], zL[mask_i, i], x_v[mask_i, i])
+        # Expand zH_deep back to batch size
+        zH_shallow = zH[:, i, :]  # [b, r]
+        mask_expanded = mask_i.unsqueeze(-1)  # [b, 1]
+        zH_i = torch.where(mask_expanded, zH_deep, zH_shallow)
+        zL_i = torch.where(mask_expanded, zL_deep, zL[:, i, :])
+    else:
+        # No latents at position i - use shallow/original
+        zH_i = zH[:, i, :]
+        zL_i = zL[:, i, :]
+    
+    zH_out.append(zH_i)
+    zL_out.append(zL_i)
+
+zH_out = torch.stack(zH_out, dim=1)  # [b, s, r]
+zL_out = torch.stack(zL_out, dim=1)  # [b, s, r]
+```

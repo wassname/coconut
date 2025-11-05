@@ -83,14 +83,63 @@ class L_net(nn.Module):
         return hidden_states
 
 
-def trm_recursion(
+def trm_seq(
     l_net: L_net,
     zL: Float[Tensor, 'b r'],
     zH: Float[Tensor, 'b r'], 
-    context: Float[Tensor, 'b s r'],
+    x: Float[Tensor, 'b s r'],
+    latent_mask: Bool[Tensor, 'b s'],
     l_cycles: int,
     h_cycles: int,
 ) -> tuple[Float[Tensor, 'b s r'], Float[Tensor, 'b s r']]:
+    """Sequence-level TRM refinement.
+        
+    """
+    # We inject x into the latent states, if it was unnormalised it might be destabilizing and the model would have to learn to ignore it which it can't do easily since it's directly added
+    x = rms_norm(x)
+
+    if h_cycles < 1:
+        return zL, zH
+    
+    b, s, r = x.shape
+
+    # Here we recurse along the sequence of tokens, only where the latent mask is set
+    zH_out = []
+    zL_out = []
+
+    for i in range(s):
+        mask_i = latent_mask[:, i]  # [b]
+        if mask_i.any():
+            # Process subset with latents: zH[mask_i] is [n_latent, r]
+            zH_deep, zL_deep = trm_inner(
+                l_net=l_net,
+                zH=zH[mask_i, None], zL=zL[mask_i, None], x=x[mask_i, i:i+1, :],  # [n_latent, 1, r]
+                l_cycles=l_cycles, h_cycles=h_cycles
+            )
+            # Scatter results back into full batch (gradient-safe, creates new tensor)
+            indices = mask_i.nonzero(as_tuple=False).squeeze(-1)  # [n_latent]
+            idx_expanded = indices.unsqueeze(-1).expand(-1, r).to(zH.device)  # [n_latent, r]
+            zH = zH.scatter(0, idx_expanded, zH_deep.squeeze(1))  # [b, r] <- [n_latent, r]
+            zL = zL.scatter(0, idx_expanded, zL_deep.squeeze(1))
+
+        zH_out.append(zH)
+        zL_out.append(zL)
+
+    zL = torch.stack(zL_out, dim=1)  # [b, s, r]
+    zH = torch.stack(zH_out, dim=1)  # [b, s, r]
+
+    return zL, zH
+
+
+
+def trm_inner(
+    l_net: L_net,
+    zL: Float[Tensor, 'bs 1 r'],
+    zH: Float[Tensor, 'bs 1 r'], 
+    x: Float[Tensor, 'bs s r'],
+    l_cycles: int,
+    h_cycles: int,
+) -> tuple[Float[Tensor, 'bs 1 r'], Float[Tensor, 'bs 1 r']]:
     """
     Tiny Recursion Module (TRM) core logic.
     
@@ -109,20 +158,6 @@ def trm_recursion(
     Returns:
         (zL_refined, zH_refined) both [b, s, r]
     """
-    if h_cycles < 1:
-        return context, context  # no recursion
-    
-    
-    # Fold sequence into batch for L_net processing
-    b, s, r = context.shape
-    zLs = repeat(zL, 'b r -> (b s) 1 r', s=s)
-    zHs = repeat(zH, 'b r -> (b s) 1 r', s=s)
-    x = rearrange(context, 'b s r -> (b s) 1 r')
-
-    # Normalize context to mean≈0, std=1 to match TRM's initialized state (trunc_normal with std=1)
-    # context_flat = rms_norm(context_flat, variance_epsilon=1e-5)
-    eps = 1e-5
-    x = (x - x.mean(dim=-1, keepdim=True)) / (x.std(dim=-1, keepdim=True) + eps)
 
     def latent_recursion(x, zH, zL, n=1):
         for _ in range(n):  # latent reasoning with context
@@ -133,13 +168,9 @@ def trm_recursion(
     # Early H cycles detached: forms leaf nodes but gradients still flow via base_hidden trunk and also via `context`
     with torch.no_grad():
         for _ in range(max(0, h_cycles - 1)):
-            zHs, zLs = latent_recursion(x, zHs, zLs, n=l_cycles)
+            zH, zL = latent_recursion(x, zH, zL, n=l_cycles)
     
     # Final cycle with grad
-    zHs, zLs = latent_recursion(x, zHs, zLs, n=l_cycles)
+    zH, zL = latent_recursion(x, zH, zL, n=l_cycles)
 
-    # Unfold batch back to (b, s, r)
-    zLs = rearrange(zLs, '(b s) 1 r -> b s r', b=b, s=s)
-    zHs = rearrange(zHs, '(b s) 1 r -> b s r', b=b, s=s)
-
-    return zLs, zHs
+    return zL, zH

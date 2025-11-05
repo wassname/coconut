@@ -96,8 +96,8 @@ class TRMConfig(BaseConfig):
     weight_decay: float = 1. # 1 and 0.1 in TRM paper. 0.01 in COCONUT paper. 
     
     max_size: int = 10_000
-    batch_size_training: int = 12
-    gradient_accumulation_steps: int = 6 # 768 // 14 # paper had effective batch size of 768
+    batch_size_training: int = 8
+    gradient_accumulation_steps: int = 3 # 768 // 14 # paper had effective batch size of 768
 
     eval_first_epoch: bool = False
     loss_nll_ratio_margin: bool = False
@@ -110,7 +110,7 @@ class TRMConfig(BaseConfig):
 
     trm_persistent_steering: bool = True  # persistent steering vector across recursions
 
-    layers_spacing_adapter: int = 5  # number of spaced out layers to apply adapter to, larger number means all
+    layers_spacing_adapter: int = 2  # number of spaced out layers to apply adapter to, larger number means all
     layers_start_adapter: float = 0.3  # start layer fraction to apply adapter
     layers_end_adapter: float = 0.95  # end layer fraction to apply adapter
 
@@ -169,9 +169,9 @@ class TRMSvft(TRMConfig):
     name: str = "trmsvft-qwen3-0.6b"
     use_trm_svft: bool = True
 
-    adapter_r: int = 128  # Top-r SVD rank (also number of Householder vectors for rotation)
-    adapter_svft_mode: Literal["replace_add", "replace_mul", "adapter_add", "adapter_mult", "adapter_add2"] = "replace_mul"
-    adapter_rotate_v: bool = False  # Enable V rotation (HRA-style with r Householder reflections)
+    adapter_r: int = 64  # Top-r SVD rank (also number of Householder vectors for rotation)
+    adapter_svft_mode: Literal["add", "mult"] = "mult"
+    adapter_rotate_v: bool = True  # Enable V rotation (HRA-style with r Householder reflections)
     adapter_rotate_u: bool = True  # Enable U rotation (HRA-style with r Householder reflections)
 
 @dataclass

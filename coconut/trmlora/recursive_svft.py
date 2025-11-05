@@ -14,27 +14,18 @@ Hybrid SVD merging: Approximate full SVD cheaply. Principal (top-principal_rank 
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 from torch import Tensor
 from typing import Optional, Dict, Any, Literal
 from dataclasses import dataclass, field
 from jaxtyping import Float
-from einops import repeat
 from peft.tuners.tuners_utils import BaseTunerLayer, BaseTuner
 from peft.config import PeftConfig
 from peft.tuners._buffer_dict import BufferDict
-from peft.utils import PeftType
-from peft.utils.other import get_pattern_key
+from peft.utils import TRANSFORMERS_MODELS_TO_LORA_TARGET_MODULES_MAPPING
 import bitsandbytes as bnb
 from bitsandbytes.nn import Params4bit, Int8Params
 
-from peft.utils import (
-    TRANSFORMERS_MODELS_TO_LORA_TARGET_MODULES_MAPPING,
-)
-import bitsandbytes as bnb
-from bitsandbytes.nn import Params4bit, Int8Params
-
-from .trm_adapter import L_net, trm_recursion
+from .trm_adapter import L_net, trm_seq
 
 
 @dataclass
@@ -56,10 +47,10 @@ class TRMSvftAConfig(PeftConfig):
         default=True,
         metadata={"help": "Enable V rotation via TRM-learned Householder reflections"}
     )
-    svft_mode: Literal["replace_add", "replace_mul", "adapter_add", "adapter_mult", "adapter_add2"] = field(
-        default="adapter_add",
+    svft_mode: Literal["add", "mult"] = field(
+        default="mult",
         metadata={
-            "help": "SVFT mode: replace_add (S+delta), replace_mul (S*(1+delta)), adapter_add (tanh(delta)*S), adapter_mult (softplus(delta)*S), adapter_add2 (delta*S)"
+            "help": "SVFT mode: 'add' (S + exp(log_sd)), 'mult' (S * exp(log_sd))"
         }
     )
     
@@ -203,7 +194,9 @@ class TRMSvftLayer(BaseTunerLayer):
         self.svft_actual_r[adapter_name] = r  # Store actual r used
         
         # Initialize TRM components
-        k = r
+        # Split zH into 3r dimensions: [S_region, U_region, V_region]
+        # Each region is independently refined by TRM
+        k = r# * (1 + int(svft_config.rotate_u) + int(svft_config.rotate_v))  # Total dimension
         self.svft_l_nets[adapter_name] = L_net(
             k,
             svft_config.l_layers,
@@ -219,8 +212,10 @@ class TRMSvftLayer(BaseTunerLayer):
         self.svft_zL_init[adapter_name] = nn.Parameter(zL, requires_grad=True)
         self.svft_zH_init[adapter_name] = nn.Parameter(zH, requires_grad=True)
 
-        # Initialize output heads (HRA-style: r Householder vectors)
-        self.svft_output_head_s[adapter_name] = nn.Linear(k, k, bias=False)
+        # Why do we need output heads? zH is recursively refined and needs stability, but the interventions on S/U/V need dynamic range. Output heads allow the model to translate between these spaces instead of struggling to do both.
+        # Initialize output heads
+
+        self.svft_output_head_s[adapter_name] = nn.Linear(k, k, bias=True)
         nn.init.trunc_normal_(self.svft_output_head_s[adapter_name].weight, std=0.02)
         
         if svft_config.rotate_v:
@@ -233,17 +228,18 @@ class TRMSvftLayer(BaseTunerLayer):
             self.svft_output_head_rot_u[adapter_name] = nn.Linear(k, k, bias=False)
             nn.init.trunc_normal_(self.svft_output_head_rot_u[adapter_name].weight, std=0.02)
 
-    def trm(self, adapter_name: str, zL, zH, context_hs, h_cycles=None):
+    def trm(self, adapter_name: str, zL, zH, context_hs, latent_mask, h_cycles=None):
         """Wrapper around trm_recursion with adapter-specific config."""
         svft_config = self.svft_configs[adapter_name]
         if h_cycles is None:
             h_cycles = svft_config.h_cycles
         
-        return trm_recursion(
+        return trm_seq(
             l_net=self.svft_l_nets[adapter_name],
             zL=zL,
             zH=zH,
-            context=context_hs,
+            x=context_hs,
+            latent_mask=latent_mask,
             l_cycles=svft_config.l_cycles,
             h_cycles=h_cycles,
         )
@@ -322,42 +318,12 @@ class TRMSvftLayer(BaseTunerLayer):
         
         # Project to singular value space (using frozen V initially)
         x_v = x @ V  # [b, s, d_in] @ [d_in, r] -> [b, s, r]
+
+        latent_mask = recursion_cache['latent_mask']
         
-        # TRM processes singular value representation
-        pos = x.shape[1] - 1  # Current position (last token)
-        latent_mask = recursion_cache['latent_mask'][:, pos]  # [b]
+        zLs, zHs = self.trm(adapter, zL, zH, x_v, latent_mask=latent_mask)
 
-        n_latent = latent_mask.sum().item()
-        n_shallow = (~latent_mask).sum().item()
-
-        if n_latent == 0:
-            # No latents - shallow only
-            zLs, zHs = self.trm(adapter, zL, zH, x_v, h_cycles=1)
-        elif n_shallow == 0:
-            # All latents - deep only
-            zLs, zHs = self.trm(adapter, zL, zH, x_v)
-        else:
-            # Mixed batch - process separately
-            zLs_deep_part, zH_deep_part = self.trm(adapter, zL[latent_mask], zH[latent_mask], x_v[latent_mask])
-            zLs_shallow_part, zH_shallow_part = self.trm(adapter, zL[~latent_mask], zH[~latent_mask], x_v[~latent_mask], h_cycles=1)
-
-            def rebuild_z(z_part, z_full, latent_mask):
-                """Rebuild full z from latent-only z_latent using scatter (differentiable)."""
-                z_full = torch.zeros_like(z_part)
-                indices = latent_mask.nonzero(as_tuple=False)  # [n_latent, 1]
-                z_full[indices[:, 0], :] = z_part
-                return z_full
-
-            zLs_deep = rebuild_z(zLs_deep_part, zL, latent_mask)
-            zHs_deep = rebuild_z(zH_deep_part, zH, latent_mask)
-            zLs_shallow = rebuild_z(zLs_shallow_part, zL, ~latent_mask)
-            zHs_shallow = rebuild_z(zH_shallow_part, zH, ~latent_mask)
-
-            # Blend
-            zHs = torch.where(latent_mask.unsqueeze(-1), zHs_deep, zHs_shallow)
-            zLs = torch.where(latent_mask.unsqueeze(-1), zLs_deep, zLs_shallow)
-        
-        # Update cache for next layer
+        # Save last one for next step
         recursion_cache['zL'] = zLs[:, -1, :]  # [b, r]
         recursion_cache['zH'] = zHs[:, -1, :]  # [b, r]
         
@@ -373,27 +339,21 @@ class TRMSvftLayer(BaseTunerLayer):
             # Reproject with rotated basis
             x_v = torch.einsum('bsd,bsdr->bsr', x, V_rot)  # [b, s, d_in] @ [b, s, d_in, r] -> [b, s, r]
         
-        # Apply S scaling
+        # Apply S scaling (zH_s as log_sd for positive scaling)
         S_expanded = S.unsqueeze(0).unsqueeze(0)  # [1, 1, r]
         mode = svft_config.svft_mode
         
-        if mode == "adapter_add":
-            s_eff = torch.tanh(zH_s) * S_expanded
-        elif mode == "adapter_add2":
-            s_eff = zH_s * S_expanded
-        elif mode == "adapter_mult":
-            sd = F.softplus(zH_s)
-            s_eff = sd * S_expanded
-        elif mode == "replace_add":
-            sd = F.softplus(zH_s)
-            s_eff = S_expanded + sd
-        elif mode == "replace_mul":
-            sd = F.softplus(zH_s)
-            s_eff = S_expanded * (1.0 + sd)
+        log_sd = zH_s  # Interpret TRM output as log-space for positivity
+        if mode == "mult":
+            # Multiplicative: S_eff = S * exp(log_sd)
+            s_eff = S_expanded * torch.exp(log_sd)
+        elif mode == "add":
+            # Additive: S_eff = S + exp(log_sd)
+            s_eff = S_expanded + torch.exp(log_sd)
         else:
             raise ValueError(f"Unknown svft_mode: {mode}")
         
-        # Soft clamp for stability
+        # Soft clamp for stability (prevent explosion)
         def soft_clamp(x, n=10.0):
             return n * torch.tanh(x / n)
         max_magnitude = 10.0 * S_expanded + 1
@@ -434,40 +394,22 @@ class TRMSvftLayer(BaseTunerLayer):
             if not self.active_adapters:
                 return self.base_layer(x, *args, **kwargs).to(previous_dtype)
 
-            # Check mode from first active adapter
-            adapter = self.active_adapters[0]
-            mode = self.svft_configs[adapter].svft_mode if adapter in self.svft_configs else "replace_add"
-            
-            if mode.startswith("replace_"):
-                # Replacement mode - compute x @ (U @ S_eff @ V.T).T directly
-                # This replaces the base layer output entirely (like original SVFT)
-                result = None
-                for adapter in self.active_adapters:
-                    if adapter not in self.svft_u:
-                        continue
+            # SVFT replaces base layer output with modified SVD reconstruction
+            # Output: x @ V @ diag(S_eff) @ U.T + x @ W_res.T
+            result = None
+            for adapter in self.active_adapters:
+                if adapter not in self.svft_u:
+                    continue
 
-                    h = self.get_delta(x, adapter)
-                    
-                    if result is None:
-                        result = h
-                    else:
-                        result += h  # Multiple adapters (unlikely)
+                h = self.get_delta(x, adapter)
                 
                 if result is None:
-                    result = self.base_layer(x, *args, **kwargs)
-            else:
-                # Adapter mode - add delta to base layer output
-                base_out = self.base_layer(x, *args, **kwargs)
-                add_out = torch.zeros_like(base_out)
-
-                for adapter in self.active_adapters:
-                    if adapter not in self.svft_u:
-                        continue
-
-                    h = self.get_delta(x, adapter)
-                    add_out += h
-
-                result = base_out + add_out.to(base_out.dtype)
+                    result = h
+                else:
+                    result += h  # Multiple adapters (unlikely)
+            
+            if result is None:
+                result = self.base_layer(x, *args, **kwargs)
 
         result = result.to(previous_dtype)
         return result
