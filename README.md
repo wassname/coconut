@@ -98,6 +98,8 @@ Properties worth knowing:
 Everything from here down is rough working notes and leftovers from older
 branches. Parts may not apply to the TRM-SVFT branch above.
 
+Full experiment log: [mjc_research_journal.md](mjc_research_journal.md).
+
 ## Branch map
 
 | branch | what it is | did it work? |
