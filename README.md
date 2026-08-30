@@ -3,12 +3,22 @@
 Train an LLM to reason without words. Instead of generating chain-of-thought
 tokens, the model thinks in continuous vectors inside its own layers.
 
-This repo: a frozen `Qwen3-0.6B-Math-Expert` gets small adapters on its linear
-layers. Inside each adapter sits a tiny recurrent module (the Tiny Recursive
-Model pattern): two latent states `zL`/`zH` are refined over several
-weight-shared cycles, and the result modifies the frozen layer's output.
-Only the adapters train; the loss is answer-token NLL on GSM8k, with latent
-"thought" tokens masked out.
+Two papers motivate this:
+
+- [COCONUT](https://arxiv.org/abs/2412.06769) showed a language model can
+  reason in a *continuous latent space* — feeding its own hidden state back in
+  as the next "token" — instead of reasoning out loud in chain-of-thought text.
+- [TRM](https://arxiv.org/abs/2510.04871) (Tiny Recursive Model) showed a tiny
+  network can beat much bigger ones on hard puzzles by *recursively refining
+  its answer*: run the same small block many times over a scratchpad state and
+  an answer state, instead of one big forward pass.
+
+This repo combines the two ideas. Take a small frozen math model
+(`Qwen3-0.6B-Math-Expert`). Give some of its layers a small add-on module that,
+at each token, thinks for a few recursive steps TRM-style and then nudges what
+that layer outputs. The base model never changes — only the add-ons learn,
+trained on grade-school math word problems (GSM8k), graded only on the final
+answer.
 
 ## Did it work?
 
