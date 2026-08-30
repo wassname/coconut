@@ -24,21 +24,19 @@ answer.
 
 Partially. It learned math a bit better than chance, then overfit.
 
-On the GSM-mini harness (84-question greedy eval subset of GSM8k train,
-`outputs/*/terminal.log`, `eval/acc` lines):
+Peak accuracy on a small GSM8k subset (84 questions, greedy eval):
 
 | model | eval/acc (peak) |
 |---|---|
-| base model, untrained adapter (epoch −1) | 0.00 (0/84) |
+| base model, no training | 0.00 (0/84) |
 | TRM-SVFT, canonical run `trmsvft-qwen3-0.6b_20251105-185222`, epoch 15 | **0.095** (8/84) |
 | same run, epochs 16–28 | collapses to 0.01–0.04 as train loss → 3e-5 |
 
-So: **0% → ~10% peak on GSM-mini, then it memorizes the 10k train set.**
-`eval/loss` kept dropping (1.18 → 0.06) even as accuracy collapsed — loss and
-accuracy tell different stories, classic overfit. An earlier hybrid variant
-(TRMLoRA + coconut curriculum, `trmsvft-qwen3-0.6b_20251031-090744`) peaked at
-0.205 on the same-style eval, but that run mixed in other changes, so treat it
-as a hint, not a result.
+So: **0% → ~10% peak, then it memorizes the train set.** Loss kept falling
+while accuracy collapsed, classic overfit. Details in
+[mjc_research_journal.md](mjc_research_journal.md) and `outputs/*/terminal.log`.
+An earlier hybrid run peaked at 0.205 on a similar eval, but it mixed other
+changes so treat it as a hint, not a result.
 
 ## How it works (pseudocode)
 
@@ -85,11 +83,10 @@ cache.zL, cache.zH ← last_token(zL, zH)   # persists across autoregressive ste
 
 Properties worth knowing:
 
-- `zL`/`zH` live in the adapter rank (64–128), not Qwen's 2560-dim residual stream.
+- `zL`/`zH` live in the adapter rank (64–128), not the 2560-dim residual stream.
 - One shared `L_net` is reused across all cycles and all adapted layers.
-- The output modifies real frozen-Qwen layers; there is no prediction-only
-  side channel the base model can ignore.
-- Loss is answer-token NLL; latent tokens are masked.
+- The adapter modifies the frozen layer's output directly, not a side channel.
+- Trained only on answer tokens.
 
 ---
 
@@ -104,9 +101,8 @@ Full experiment log: [mjc_research_journal.md](mjc_research_journal.md).
 
 | branch | what it is | did it work? |
 |---|---|---|
-| `main` | TRM-SVFT recursive steering adapters (this) | partially: 0% → ~10% peak on GSM-mini, then overfits |
-| [`seq`](../../tree/seq) | first committed plain replication of the COCONUT paper (latent-token CoT) | replication target, see its journal |
-| [`seq-ocr`](../../tree/seq-ocr) | uncommitted WIP hacking coconut into an OCR proof-of-concept | unknown / unfinished |
+| `master` | TRM-SVFT recursive steering adapters (this) | partially: 0% → ~10% peak, then overfits |
+| [`try_seq_vcr`](../../tree/try_seq_vcr) | latent-token COCONUT variant (the "seq-vcr" branch) | did not work (per notes) |
 | [`wip-trm-seq`](../../tree/wip-trm-seq) | newest WIP: recursion over the whole sequence instead of per-token | self-labeled "wrong track" in its own commit message; kept for reference |
 
 ## Run
