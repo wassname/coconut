@@ -16,7 +16,7 @@ Two papers motivate this:
 This repo combines the two ideas. Take a small frozen math model
 (`Qwen3-0.6B-Math-Expert`). Give some of its layers a small add-on module that,
 at each token, thinks for a few recursive steps TRM-style and then nudges what
-that layer outputs. The base model never changes — only the add-ons learn,
+that layer outputs. The base model never changes. Only the add-ons learn,
 trained on grade-school math word problems (GSM8k), graded only on the final
 answer.
 
